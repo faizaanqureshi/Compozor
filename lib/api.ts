@@ -9,11 +9,37 @@ export class ApiError extends Error {
   }
 }
 
+// Clerk's browser SDK attaches itself to `window.Clerk`; this is the
+// documented way to grab a session token outside of a React hook, which
+// we need since these functions are called directly from useEffect rather
+// than through a component.
+async function getAuthToken(): Promise<string | null> {
+  if (typeof window === "undefined") return null;
+  const clerk = (
+    window as unknown as {
+      Clerk?: { session?: { getToken: () => Promise<string | null> } };
+    }
+  ).Clerk;
+  if (!clerk?.session) return null;
+  return clerk.session.getToken();
+}
+
 async function request<T>(
   path: string,
   init?: RequestInit
 ): Promise<T> {
-  const res = await fetch(`${API_BASE_URL}${path}`, init);
+  const token = await getAuthToken();
+  const headers = new Headers(init?.headers);
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+
+  const res = await fetch(`${API_BASE_URL}${path}`, { ...init, headers });
+
+  if (res.status === 401) {
+    if (typeof window !== "undefined") {
+      window.location.href = "/sign-in";
+    }
+    throw new ApiError(401, "Not authenticated");
+  }
   if (!res.ok) {
     let message = `${res.status} ${res.statusText}`;
     try {
@@ -41,12 +67,24 @@ function json(method: string, body: unknown): RequestInit {
 export type ClientStatus = "active" | "inactive" | "pending";
 export type ChecklistItemStatus = "missing" | "received" | "wrong";
 export type EmailDirection = "inbound" | "outbound";
-export type EmailStatus = "draft" | "sent" | "needs_human_attention";
+export type EmailStatus = "received" | "draft" | "sent" | "needs_human_attention";
 export type InboxConnectionStatus = "active" | "needs_reauth";
+export type AutomationLevel =
+  | "no_automation"
+  | "medium_automation"
+  | "high_automation";
+export type InboundEmailCategory =
+  | "potential_new_client"
+  | "spam"
+  | "automated"
+  | "other";
+export type InboundEmailReviewStatus = "needs_review" | "dismissed";
 
 export interface Organization {
   id: number;
   name: string;
+  automation_level: AutomationLevel;
+  reminder_interval_days: number | null;
 }
 
 export interface Client {
@@ -54,8 +92,9 @@ export interface Client {
   organization_id: number;
   name: string;
   email: string;
-  tax_year: number;
   status: ClientStatus;
+  last_reminder_sent_at: string | null;
+  created_at: string;
 }
 
 export interface ChecklistItem {
@@ -82,16 +121,20 @@ export interface ClientDetail extends Client {
   checklist_items: ChecklistItem[];
 }
 
+export interface DocumentOut {
+  id: number;
+  client_id: number;
+  checklist_item_id: number | null;
+  s3_path: string;
+  classified_type: string | null;
+  year: number | null;
+  extracted_metadata: unknown;
+  received_at: string;
+  download_url: string | null;
+}
+
 export interface DocumentUploadResult {
-  document: {
-    id: number;
-    client_id: number;
-    checklist_item_id: number | null;
-    s3_path: string;
-    classified_type: string;
-    extracted_metadata: unknown;
-    received_at: string;
-  };
+  document: DocumentOut;
   checklist_item_id: number | null;
   checklist_item_status: ChecklistItemStatus | null;
   draft_email_created: boolean;
@@ -101,16 +144,54 @@ export interface EmailReplyResult {
   has_attachment: boolean;
   has_question: boolean;
   document_results: DocumentUploadResult[];
-  escalation_email_log_id: number | null;
+  reply_email_log_id: number | null;
+  needs_human_attention: boolean;
+  needs_clarification: boolean;
 }
 
 export interface EmailLogEntry {
   id: number;
   client_id: number;
   direction: EmailDirection;
-  status: EmailStatus;
-  content: string;
   thread_id: string | null;
+  status: EmailStatus;
+  subject: string | null;
+  content: string;
+  from_email: string | null;
+  to_email: string | null;
+  escalation_reason: string | null;
+  is_clarifying_question: boolean;
+  autosend_confidence: number | null;
+  autosend_threshold: number | null;
+  automation_level_at_decision: AutomationLevel | null;
+  autosent: boolean;
+  autosend_error: string | null;
+  created_at: string;
+}
+
+export interface EmailThread {
+  thread_key: string;
+  messages: EmailLogEntry[];
+}
+
+export interface ClientMemoryNote {
+  id: number;
+  client_id: number;
+  note: string;
+  source_email_log_id: number | null;
+  created_at: string;
+}
+
+export interface UnmatchedInboundEmail {
+  id: number;
+  organization_id: number;
+  from_email: string;
+  subject: string | null;
+  content: string;
+  category: InboundEmailCategory;
+  ai_reason: string;
+  ai_confidence: number;
+  review_status: InboundEmailReviewStatus;
   created_at: string;
 }
 
@@ -122,25 +203,31 @@ export interface InboxConnection {
 }
 
 // ---------- Organizations ----------
+//
+// One Clerk user = one org. The backend derives "your" org from the
+// session token, auto-provisioning it on first authenticated call — there
+// is no org list/picker/id anymore.
 
-export const listOrganizations = () => request<Organization[]>("/organizations");
+export const getMyOrganization = () => request<Organization>("/organizations/me");
 
-export const createOrganization = (name: string) =>
-  request<Organization>("/organizations", json("POST", { name }));
+export const updateMyOrganization = (input: {
+  automation_level?: AutomationLevel;
+  reminder_interval_days?: number | null;
+}) => request<Organization>("/organizations/me", json("PATCH", input));
+
+export const deleteMyOrganization = () =>
+  request<void>("/organizations/me", { method: "DELETE" });
 
 // ---------- Clients ----------
 
-export const listClients = (organizationId: number) =>
-  request<Client[]>(`/clients?organization_id=${organizationId}`);
+export const listClients = () => request<Client[]>("/clients");
 
 export const getClient = (clientId: number) =>
   request<ClientDetail>(`/clients/${clientId}`);
 
 export const createClient = (input: {
-  organization_id: number;
   name: string;
   email: string;
-  tax_year: number;
   status?: ClientStatus;
 }) => request<Client>("/clients", json("POST", input));
 
@@ -175,6 +262,9 @@ export const uploadDocument = (clientId: number, file: File) => {
   });
 };
 
+export const listClientDocuments = (clientId: number) =>
+  request<DocumentOut[]>(`/clients/${clientId}/documents`);
+
 // ---------- Email replies ----------
 
 export const submitEmailReply = (
@@ -202,15 +292,11 @@ export const sendChecklistReminder = (clientId: number) =>
 
 // ---------- Email log ----------
 
-export const listEmailLog = (
-  organizationId: number,
-  status?: EmailStatus
-) => {
-  const params = new URLSearchParams({
-    organization_id: String(organizationId),
-  });
+export const listEmailLog = (status?: EmailStatus) => {
+  const params = new URLSearchParams();
   if (status) params.set("status", status);
-  return request<EmailLogEntry[]>(`/email-log?${params.toString()}`);
+  const qs = params.toString();
+  return request<EmailLogEntry[]>(`/email-log${qs ? `?${qs}` : ""}`);
 };
 
 export const sendEmailLogEntry = (clientId: number, emailLogId: number) =>
@@ -219,17 +305,41 @@ export const sendEmailLogEntry = (clientId: number, emailLogId: number) =>
     { method: "POST" }
   );
 
+export const listEmailThreads = (clientId: number) =>
+  request<EmailThread[]>(`/clients/${clientId}/email-threads`);
+
+// ---------- Client memory notes ----------
+
+export const listClientMemoryNotes = (clientId: number) =>
+  request<ClientMemoryNote[]>(`/clients/${clientId}/memory-notes`);
+
+// ---------- Unmatched inbound emails ----------
+
+export const listUnmatchedInboundEmails = (filters?: {
+  review_status?: InboundEmailReviewStatus;
+  category?: InboundEmailCategory;
+}) => {
+  const params = new URLSearchParams();
+  if (filters?.review_status) params.set("review_status", filters.review_status);
+  if (filters?.category) params.set("category", filters.category);
+  const qs = params.toString();
+  return request<UnmatchedInboundEmail[]>(
+    `/unmatched-inbound-emails${qs ? `?${qs}` : ""}`
+  );
+};
+
+export const dismissUnmatchedInboundEmail = (id: number) =>
+  request<UnmatchedInboundEmail>(`/unmatched-inbound-emails/${id}/dismiss`, {
+    method: "POST",
+  });
+
 // ---------- Gmail / inbox connections ----------
 
-export const getGmailConnectUrl = (organizationId: number) =>
-  request<{ authorization_url: string }>(
-    `/organizations/${organizationId}/gmail/connect`
-  );
+export const getGmailConnectUrl = () =>
+  request<{ authorization_url: string }>("/organizations/me/gmail/connect");
 
-export const listInboxConnections = (organizationId: number) =>
-  request<InboxConnection[]>(
-    `/inbox-connections?organization_id=${organizationId}`
-  );
+export const listInboxConnections = () =>
+  request<InboxConnection[]>("/inbox-connections");
 
 export const deleteInboxConnection = (connectionId: number) =>
   request<void>(`/inbox-connections/${connectionId}`, { method: "DELETE" });

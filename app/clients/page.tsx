@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useOrg } from "@/lib/org-context";
 import {
   ApiError,
   Client,
@@ -12,23 +11,21 @@ import {
 } from "@/lib/api";
 
 export default function ClientsPage() {
-  const org = useOrg();
   const [clients, setClients] = useState<Client[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [taxYear, setTaxYear] = useState(new Date().getFullYear());
   const [status, setStatus] = useState<ClientStatus>("pending");
   const [submitting, setSubmitting] = useState(false);
 
   const refresh = () => {
-    listClients(org.id)
+    listClients()
       .then(setClients)
       .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
   };
 
-  useEffect(refresh, [org.id]);
+  useEffect(refresh, []);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,10 +33,8 @@ export default function ClientsPage() {
     setError(null);
     try {
       await createClient({
-        organization_id: org.id,
         name,
         email,
-        tax_year: taxYear,
         status,
       });
       setName("");
@@ -63,7 +58,6 @@ export default function ClientsPage() {
           <tr className="text-left border-b border-zinc-300">
             <th className="py-2 pr-4">Name</th>
             <th className="py-2 pr-4">Email</th>
-            <th className="py-2 pr-4">Tax year</th>
             <th className="py-2 pr-4">Status</th>
           </tr>
         </thead>
@@ -76,13 +70,12 @@ export default function ClientsPage() {
                 </Link>
               </td>
               <td className="py-2 pr-4">{c.email}</td>
-              <td className="py-2 pr-4">{c.tax_year}</td>
               <td className="py-2 pr-4">{c.status}</td>
             </tr>
           ))}
           {clients?.length === 0 && (
             <tr>
-              <td colSpan={4} className="py-4 text-zinc-500">
+              <td colSpan={3} className="py-4 text-zinc-500">
                 No clients yet.
               </td>
             </tr>
@@ -107,14 +100,6 @@ export default function ClientsPage() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             className="border border-zinc-300 rounded px-2 py-1"
-          />
-          <input
-            required
-            type="number"
-            placeholder="Tax year"
-            value={taxYear}
-            onChange={(e) => setTaxYear(Number(e.target.value))}
-            className="border border-zinc-300 rounded px-2 py-1 w-28"
           />
           <select
             value={status}

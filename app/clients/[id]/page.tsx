@@ -5,11 +5,17 @@ import {
   ApiError,
   ChecklistSummary,
   ClientDetail,
+  ClientMemoryNote,
+  DocumentOut,
   DocumentUploadResult,
   EmailReplyResult,
+  EmailThread,
   createChecklistItem,
   getClient,
   listChecklistItems,
+  listClientDocuments,
+  listClientMemoryNotes,
+  listEmailThreads,
   sendChecklistReminder,
   submitEmailReply,
   uploadDocument,
@@ -25,6 +31,11 @@ export default function ClientDetailPage({
 
   const [client, setClient] = useState<ClientDetail | null>(null);
   const [checklist, setChecklist] = useState<ChecklistSummary | null>(null);
+  const [threads, setThreads] = useState<EmailThread[] | null>(null);
+  const [documents, setDocuments] = useState<DocumentOut[] | null>(null);
+  const [memoryNotes, setMemoryNotes] = useState<ClientMemoryNote[] | null>(
+    null
+  );
   const [error, setError] = useState<string | null>(null);
 
   const refresh = () => {
@@ -33,6 +44,15 @@ export default function ClientDetailPage({
       .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
     listChecklistItems(clientId)
       .then(setChecklist)
+      .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
+    listEmailThreads(clientId)
+      .then(setThreads)
+      .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
+    listClientDocuments(clientId)
+      .then(setDocuments)
+      .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
+    listClientMemoryNotes(clientId)
+      .then(setMemoryNotes)
       .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
   };
 
@@ -46,7 +66,13 @@ export default function ClientDetailPage({
       <div>
         <h1 className="text-xl font-semibold">{client.name}</h1>
         <p className="text-zinc-600 text-sm">
-          {client.email} · tax year {client.tax_year} · {client.status}
+          {client.email} · {client.status}
+        </p>
+        <p className="text-zinc-500 text-xs mt-1">
+          Last reminder sent:{" "}
+          {client.last_reminder_sent_at
+            ? new Date(client.last_reminder_sent_at).toLocaleString()
+            : "never"}
         </p>
       </div>
 
@@ -55,6 +81,7 @@ export default function ClientDetailPage({
       <ChecklistSection
         clientId={clientId}
         checklist={checklist}
+        documents={documents}
         onChange={refresh}
       />
 
@@ -62,18 +89,96 @@ export default function ClientDetailPage({
 
       <DocumentUploadSection clientId={clientId} onUploaded={refresh} />
 
+      <DocumentsSection documents={documents} />
+
       <EmailReplySection clientId={clientId} onSubmitted={refresh} />
+
+      <ThreadsSection threads={threads} />
+
+      <MemoryNotesSection notes={memoryNotes} />
     </div>
+  );
+}
+
+function ThreadsSection({ threads }: { threads: EmailThread[] | null }) {
+  const [expandedThread, setExpandedThread] = useState<string | null>(null);
+
+  return (
+    <section className="flex flex-col gap-3">
+      <h2 className="font-medium">Email threads</h2>
+      <div className="flex flex-col gap-2">
+        {threads?.map((thread) => {
+          const latest = thread.messages[thread.messages.length - 1];
+          const isOpen = expandedThread === thread.thread_key;
+          return (
+            <div
+              key={thread.thread_key}
+              className="border border-zinc-200 rounded"
+            >
+              <button
+                onClick={() =>
+                  setExpandedThread(isOpen ? null : thread.thread_key)
+                }
+                className="w-full text-left px-3 py-2 flex items-center justify-between"
+              >
+                <span className="text-sm font-medium">
+                  {latest?.subject || "(no subject)"}
+                </span>
+                <span className="text-xs text-zinc-500">
+                  {thread.messages.length} message
+                  {thread.messages.length === 1 ? "" : "s"}
+                </span>
+              </button>
+              {isOpen && (
+                <div className="border-t border-zinc-200 flex flex-col divide-y divide-zinc-100">
+                  {thread.messages.map((m) => (
+                    <div key={m.id} className="px-3 py-2 text-sm">
+                      <div className="flex items-center justify-between text-xs text-zinc-500 mb-1">
+                        <span className="flex items-center gap-1.5">
+                          {m.direction} · {m.status}
+                          {m.is_clarifying_question && (
+                            <span
+                              title="Clarifying question — awaiting a resolving reply"
+                              className="rounded-full bg-blue-100 text-blue-700 w-4 h-4 inline-flex items-center justify-center text-[10px] font-semibold"
+                            >
+                              ?
+                            </span>
+                          )}
+                        </span>
+                        <span>{new Date(m.created_at).toLocaleString()}</span>
+                      </div>
+                      <p className="whitespace-pre-wrap text-zinc-700">
+                        {m.content}
+                      </p>
+                      {m.escalation_reason && (
+                        <p className="text-amber-600 text-xs mt-1">
+                          {m.escalation_reason}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {threads?.length === 0 && (
+          <p className="text-zinc-500 text-sm">No email threads yet.</p>
+        )}
+      </div>
+    </section>
   );
 }
 
 function ChecklistSection({
   clientId,
   checklist,
+  documents,
   onChange,
 }: {
   clientId: number;
   checklist: ChecklistSummary | null;
+  documents: DocumentOut[] | null;
   onChange: () => void;
 }) {
   const [docTypeNeeded, setDocTypeNeeded] = useState("");
@@ -116,20 +221,44 @@ function ChecklistSection({
             <th className="py-2 pr-4">Status</th>
             <th className="py-2 pr-4">Wrong attempts</th>
             <th className="py-2 pr-4">Last wrong type</th>
+            <th className="py-2 pr-4">Document</th>
           </tr>
         </thead>
         <tbody>
-          {checklist?.items.map((item) => (
-            <tr key={item.id} className="border-b border-zinc-100">
-              <td className="py-2 pr-4">{item.doc_type_needed}</td>
-              <td className="py-2 pr-4">{item.status}</td>
-              <td className="py-2 pr-4">{item.wrong_attempt_count}</td>
-              <td className="py-2 pr-4">{item.last_wrong_doc_type ?? "—"}</td>
-            </tr>
-          ))}
+          {checklist?.items.map((item) => {
+            const matched = documents
+              ?.filter((d) => d.checklist_item_id === item.id)
+              .sort((a, b) => b.received_at.localeCompare(a.received_at))[0];
+            return (
+              <tr key={item.id} className="border-b border-zinc-100">
+                <td className="py-2 pr-4">{item.doc_type_needed}</td>
+                <td className="py-2 pr-4">{item.status}</td>
+                <td className="py-2 pr-4">{item.wrong_attempt_count}</td>
+                <td className="py-2 pr-4">{item.last_wrong_doc_type ?? "—"}</td>
+                <td className="py-2 pr-4">
+                  {matched ? (
+                    matched.download_url ? (
+                      <a
+                        href={matched.download_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="underline"
+                      >
+                        View
+                      </a>
+                    ) : (
+                      <span className="text-zinc-400">uploaded</span>
+                    )
+                  ) : (
+                    "—"
+                  )}
+                </td>
+              </tr>
+            );
+          })}
           {checklist?.items.length === 0 && (
             <tr>
-              <td colSpan={4} className="py-4 text-zinc-500">
+              <td colSpan={5} className="py-4 text-zinc-500">
                 No checklist items yet.
               </td>
             </tr>
@@ -240,7 +369,7 @@ function DocumentUploadSection({
       <form onSubmit={onSubmit} className="flex gap-3 items-center">
         <input
           type="file"
-          accept="application/pdf"
+          accept="application/pdf,image/jpeg,image/png,image/gif,image/webp"
           onChange={(e) => setFile(e.target.files?.[0] ?? null)}
         />
         <button
@@ -254,9 +383,22 @@ function DocumentUploadSection({
       {error && <p className="text-red-600 text-sm">{error}</p>}
       {result && (
         <div className="text-sm bg-zinc-50 border border-zinc-200 rounded p-3">
-          <p>Classified as: {result.document.classified_type}</p>
+          <p>Classified as: {result.document.classified_type ?? "unknown"}</p>
+          <p>Year: {result.document.year ?? "unknown"}</p>
           <p>Checklist status: {result.checklist_item_status ?? "unmatched"}</p>
           <p>Draft email created: {result.draft_email_created ? "yes" : "no"}</p>
+          {result.document.download_url && (
+            <p>
+              <a
+                href={result.document.download_url}
+                target="_blank"
+                rel="noreferrer"
+                className="underline"
+              >
+                View uploaded document
+              </a>
+            </p>
+          )}
         </div>
       )}
     </section>
@@ -323,8 +465,13 @@ function EmailReplySection({
         <div className="text-sm bg-zinc-50 border border-zinc-200 rounded p-3">
           <p>Has attachment: {result.has_attachment ? "yes" : "no"}</p>
           <p>Has question: {result.has_question ? "yes" : "no"}</p>
+          <p>Reply email log id: {result.reply_email_log_id ?? "none"}</p>
           <p>
-            Escalation email log id: {result.escalation_email_log_id ?? "none"}
+            Needs human attention:{" "}
+            {result.needs_human_attention ? "yes" : "no"}
+          </p>
+          <p>
+            Needs clarification: {result.needs_clarification ? "yes" : "no"}
           </p>
           {result.document_results.length > 0 && (
             <p>
@@ -336,6 +483,84 @@ function EmailReplySection({
           )}
         </div>
       )}
+    </section>
+  );
+}
+
+function DocumentsSection({ documents }: { documents: DocumentOut[] | null }) {
+  return (
+    <section className="flex flex-col gap-3">
+      <h2 className="font-medium">Documents</h2>
+      <table className="w-full text-sm border-collapse">
+        <thead>
+          <tr className="text-left border-b border-zinc-300">
+            <th className="py-2 pr-4">Type</th>
+            <th className="py-2 pr-4">Year</th>
+            <th className="py-2 pr-4">Received</th>
+            <th className="py-2 pr-4"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {documents?.map((doc) => (
+            <tr key={doc.id} className="border-b border-zinc-100">
+              <td className="py-2 pr-4">{doc.classified_type ?? "unknown"}</td>
+              <td className="py-2 pr-4">{doc.year ?? "—"}</td>
+              <td className="py-2 pr-4">
+                {new Date(doc.received_at).toLocaleString()}
+              </td>
+              <td className="py-2 pr-4">
+                {doc.download_url ? (
+                  <a
+                    href={doc.download_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="underline"
+                  >
+                    View
+                  </a>
+                ) : (
+                  <span className="text-zinc-400">unavailable</span>
+                )}
+              </td>
+            </tr>
+          ))}
+          {documents?.length === 0 && (
+            <tr>
+              <td colSpan={4} className="py-4 text-zinc-500">
+                No documents uploaded yet.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </section>
+  );
+}
+
+function MemoryNotesSection({ notes }: { notes: ClientMemoryNote[] | null }) {
+  return (
+    <section className="flex flex-col gap-3">
+      <h2 className="font-medium">What we know about this client</h2>
+      <p className="text-sm text-zinc-600">
+        Durable facts the AI has extracted from this client&apos;s emails,
+        used to inform future Q&amp;A answers.
+      </p>
+      <div className="flex flex-col gap-2">
+        {notes?.map((note) => (
+          <div
+            key={note.id}
+            className="border border-zinc-200 rounded px-3 py-2 text-sm"
+          >
+            <p className="text-zinc-700">{note.note}</p>
+            <p className="text-xs text-zinc-500 mt-1">
+              {new Date(note.created_at).toLocaleString()}
+            </p>
+          </div>
+        ))}
+        {notes?.length === 0 && (
+          <p className="text-zinc-500 text-sm">No memory notes yet.</p>
+        )}
+      </div>
     </section>
   );
 }
