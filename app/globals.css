@@ -1,5 +1,166 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
-body {
-  font-family: Arial, Helvetica, sans-serif;
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+    --font-heading: var(--font-sans);
+    --font-sans: var(--font-sans);
+    --color-sidebar-ring: var(--sidebar-ring);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar: var(--sidebar);
+    --color-chart-5: var(--chart-5);
+    --color-chart-4: var(--chart-4);
+    --color-chart-3: var(--chart-3);
+    --color-chart-2: var(--chart-2);
+    --color-chart-1: var(--chart-1);
+    --color-ring: var(--ring);
+    --color-input: var(--input);
+    --color-border: var(--border);
+    --color-destructive: var(--destructive);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-accent: var(--accent);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-muted: var(--muted);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-secondary: var(--secondary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-primary: var(--primary);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-popover: var(--popover);
+    --color-card-foreground: var(--card-foreground);
+    --color-card: var(--card);
+    --color-foreground: var(--foreground);
+    --color-background: var(--background);
+    --radius-sm: calc(var(--radius) * 0.6);
+    --radius-md: calc(var(--radius) * 0.8);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) * 1.4);
+    --radius-2xl: calc(var(--radius) * 1.8);
+    --radius-3xl: calc(var(--radius) * 2.2);
+    --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+    /* Evergreen 002400 / Black Forest 273B09 / Olive Leaf 58641D / Palm Leaf 7B904B / Lavender DBD2E0 */
+    --background: oklch(0.9834 0.0028 308.43);
+    --foreground: oklch(0.2256 0.0768 142.50);
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.2256 0.0768 142.50);
+    --popover: oklch(1 0 0);
+    --popover-foreground: oklch(0.2256 0.0768 142.50);
+    --primary: oklch(0.2256 0.0768 142.50);
+    --primary-foreground: oklch(0.9668 0.0057 308.40);
+    --secondary: oklch(0.8751 0.0213 313.82);
+    --secondary-foreground: oklch(0.3238 0.0770 129.23);
+    --muted: oklch(0.9411 0.0086 308.36);
+    --muted-foreground: oklch(0.4779 0.0951 118.42);
+    --accent: oklch(0.6205 0.0976 123.15);
+    --accent-foreground: oklch(0.2273 0.0460 135.84);
+    --destructive: oklch(0.5013 0.1783 28.70);
+    --border: oklch(0.9082 0.0149 312.24);
+    --input: oklch(0.9082 0.0149 312.24);
+    --ring: oklch(0.4779 0.0951 118.42);
+    --chart-1: oklch(0.2256 0.0768 142.50);
+    --chart-2: oklch(0.3238 0.0770 129.23);
+    --chart-3: oklch(0.4779 0.0951 118.42);
+    --chart-4: oklch(0.6205 0.0976 123.15);
+    --chart-5: oklch(0.8751 0.0213 313.82);
+    --radius: 0.625rem;
+    --sidebar: oklch(0.2214 0.0489 137.41);
+    --sidebar-foreground: oklch(0.9668 0.0057 308.40);
+    --sidebar-primary: oklch(0.6205 0.0976 123.15);
+    --sidebar-primary-foreground: oklch(0.2273 0.0460 135.84);
+    --sidebar-accent: oklch(0.3238 0.0770 129.23);
+    --sidebar-accent-foreground: oklch(0.9668 0.0057 308.40);
+    --sidebar-border: oklch(1 0 0 / 10%);
+    --sidebar-ring: oklch(0.6205 0.0976 123.15);
+}
+
+.dark {
+    --background: oklch(0.1870 0.0271 138.10);
+    --foreground: oklch(0.9397 0.0127 306.02);
+    --card: oklch(0.2285 0.0472 132.00);
+    --card-foreground: oklch(0.9397 0.0127 306.02);
+    --popover: oklch(0.2285 0.0472 132.00);
+    --popover-foreground: oklch(0.9397 0.0127 306.02);
+    --primary: oklch(0.6205 0.0976 123.15);
+    --primary-foreground: oklch(0.1870 0.0271 138.10);
+    --secondary: oklch(0.3238 0.0770 129.23);
+    --secondary-foreground: oklch(0.8751 0.0213 313.82);
+    --muted: oklch(0.2655 0.0479 130.90);
+    --muted-foreground: oklch(0.7143 0.0661 122.74);
+    --accent: oklch(0.4779 0.0951 118.42);
+    --accent-foreground: oklch(0.9668 0.0057 308.40);
+    --destructive: oklch(0.6374 0.1829 26.71);
+    --border: oklch(0.3018 0.0459 131.09);
+    --input: oklch(0.3018 0.0459 131.09);
+    --ring: oklch(0.6205 0.0976 123.15);
+    --chart-1: oklch(0.2256 0.0768 142.50);
+    --chart-2: oklch(0.3238 0.0770 129.23);
+    --chart-3: oklch(0.4779 0.0951 118.42);
+    --chart-4: oklch(0.6205 0.0976 123.15);
+    --chart-5: oklch(0.8751 0.0213 313.82);
+    --sidebar: oklch(0.1490 0.0212 136.65);
+    --sidebar-foreground: oklch(0.9397 0.0127 306.02);
+    --sidebar-primary: oklch(0.8751 0.0213 313.82);
+    --sidebar-primary-foreground: oklch(0.2273 0.0460 135.84);
+    --sidebar-accent: oklch(0.2655 0.0479 130.90);
+    --sidebar-accent-foreground: oklch(0.9397 0.0127 306.02);
+    --sidebar-border: oklch(1 0 0 / 10%);
+    --sidebar-ring: oklch(0.6205 0.0976 123.15);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+    }
+  body {
+    @apply bg-background text-foreground;
+    }
+  html {
+    @apply font-sans;
+    }
+}
+
+@keyframes aurora-drift-a {
+  0%, 100% { transform: translate3d(-4%, -6%, 0) scale(1); }
+  50% { transform: translate3d(5%, 4%, 0) scale(1.12); }
+}
+
+@keyframes aurora-drift-b {
+  0%, 100% { transform: translate3d(6%, 3%, 0) scale(1.08); }
+  50% { transform: translate3d(-5%, -5%, 0) scale(0.96); }
+}
+
+@keyframes aurora-drift-c {
+  0%, 100% { transform: translate3d(-2%, 5%, 0) scale(1); }
+  50% { transform: translate3d(4%, -6%, 0) scale(1.1); }
+}
+
+@keyframes blur-in {
+  from {
+    opacity: 0;
+    filter: blur(18px);
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateY(0);
+  }
+}
+
+.animate-blur-in {
+  animation: blur-in 2.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.bg-grain {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }

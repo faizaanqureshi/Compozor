@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Check } from "lucide-react";
 import {
   ApiError,
   AutomationLevel,
@@ -12,6 +13,9 @@ import {
   listInboxConnections,
   updateMyOrganization,
 } from "@/lib/api";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 const automationOptions: { value: AutomationLevel; label: string; description: string }[] = [
   {
@@ -31,36 +35,232 @@ const automationOptions: { value: AutomationLevel; label: string; description: s
   },
 ];
 
-function AutomationAndReminderSection() {
-  const [current, setCurrent] = useState<Organization | null>(null);
+function SectionCard({
+  title,
+  subtitle,
+  children,
+}: {
+  title: string;
+  subtitle?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="flex flex-col gap-5 rounded-2xl border border-border/60 p-6">
+      <div className="flex flex-col gap-2">
+        <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+          {title}
+        </h2>
+        {subtitle && <div className="text-sm text-muted-foreground">{subtitle}</div>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function AutomationSection({
+  current,
+  error,
+  savingAutomation,
+  onChangeAutomation,
+}: {
+  current: Organization | null;
+  error: string | null;
+  savingAutomation: boolean;
+  onChangeAutomation: (level: AutomationLevel) => void;
+}) {
+  return (
+    <SectionCard
+      title="Automation level"
+      subtitle="Controls whether AI-drafted emails (checklist reminders, document-received acknowledgments, wrong-document follow-ups, answered/clarifying client questions) send themselves automatically."
+    >
+      {error && <p className="text-sm text-destructive">{error}</p>}
+      <div className="flex flex-col gap-2.5">
+        {automationOptions.map((opt) => {
+          const selected = current?.automation_level === opt.value;
+          return (
+            <label
+              key={opt.value}
+              className={cn(
+                "flex cursor-pointer flex-col gap-0.5 rounded-lg border px-4 py-3 transition-colors",
+                selected
+                  ? "border-foreground/70 bg-muted/60"
+                  : "border-border/60 hover:bg-muted/30"
+              )}
+            >
+              <input
+                type="radio"
+                name="automation_level"
+                className="sr-only"
+                checked={selected}
+                disabled={savingAutomation || !current}
+                onChange={() => onChangeAutomation(opt.value)}
+              />
+              <span className="flex items-center gap-2 text-sm font-medium">
+                {opt.label}
+                {selected && <Check className="size-3.5 text-foreground/70" />}
+              </span>
+              <span className="text-xs text-muted-foreground">{opt.description}</span>
+            </label>
+          );
+        })}
+      </div>
+    </SectionCard>
+  );
+}
+
+function ReminderSection({
+  current,
+  intervalInput,
+  setIntervalInput,
+  savingInterval,
+  onSaveInterval,
+}: {
+  current: Organization | null;
+  intervalInput: string;
+  setIntervalInput: (v: string) => void;
+  savingInterval: boolean;
+  onSaveInterval: (e: React.FormEvent) => void;
+}) {
+  return (
+    <SectionCard
+      title="Proactive reminders"
+      subtitle="When set, clients with outstanding checklist items who haven't been reminded in this many days get an automatic re-reminder. The first reminder to any client is always manual — this only re-nudges clients who've already been contacted at least once."
+    >
+      <form onSubmit={onSaveInterval} className="flex flex-col gap-2">
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-foreground/80">Remind after</span>
+          <Input
+            type="number"
+            min={1}
+            placeholder="7"
+            value={intervalInput}
+            onChange={(e) => setIntervalInput(e.target.value)}
+            className="w-20 text-center"
+          />
+          <span className="text-sm text-foreground/80">days</span>
+          <Button type="submit" disabled={savingInterval || !current}>
+            {savingInterval ? "Saving…" : "Save"}
+          </Button>
+        </div>
+        {current && (
+          <span className="text-xs text-muted-foreground">
+            Currently:{" "}
+            {current.reminder_interval_days === null
+              ? "disabled"
+              : `every ${current.reminder_interval_days} day(s)`}{" "}
+            · leave blank to disable
+          </span>
+        )}
+      </form>
+    </SectionCard>
+  );
+}
+
+function GmailSection({
+  connections,
+  error,
+  connecting,
+  deletingId,
+  onConnect,
+  onDelete,
+}: {
+  connections: InboxConnection[] | null;
+  error: string | null;
+  connecting: boolean;
+  deletingId: number | null;
+  onConnect: () => void;
+  onDelete: (id: number) => void;
+}) {
+  const hasConnections = connections && connections.length > 0;
+
+  return (
+    <SectionCard title="Gmail connection">
+      {error && <p className="text-sm text-destructive">{error}</p>}
+
+      {hasConnections ? (
+        <div className="flex flex-col divide-y divide-border/50 rounded-lg border border-border/60">
+          {connections!.map((conn) => (
+            <div
+              key={conn.id}
+              className="flex items-center justify-between gap-4 px-4 py-3"
+            >
+              <div className="flex items-center gap-2.5">
+                <span className="text-sm font-medium">{conn.email_address}</span>
+                {conn.status === "needs_reauth" ? (
+                  <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-600 dark:text-amber-500">
+                    <span className="size-1.5 rounded-full bg-amber-500" />
+                    needs reauth
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 text-xs font-medium text-accent">
+                    <span className="size-1.5 rounded-full bg-accent" />
+                    connected
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={() => onDelete(conn.id)}
+                disabled={deletingId === conn.id}
+                className="text-xs font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline disabled:opacity-50"
+              >
+                {deletingId === conn.id ? "Removing…" : "Disconnect"}
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="flex flex-col items-start gap-3 rounded-lg border border-dashed border-border/60 px-4 py-6">
+          <p className="text-sm text-muted-foreground">No mailbox connected.</p>
+          <Button onClick={onConnect} disabled={connecting}>
+            {connecting ? "Redirecting…" : "Connect Gmail"}
+          </Button>
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
+export default function SettingsPage() {
+  const [org, setOrg] = useState<Organization | null>(null);
   const [intervalInput, setIntervalInput] = useState("");
   const [savingAutomation, setSavingAutomation] = useState(false);
   const [savingInterval, setSavingInterval] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [orgError, setOrgError] = useState<string | null>(null);
+
+  const [connections, setConnections] = useState<InboxConnection[] | null>(
+    null
+  );
+  const [gmailError, setGmailError] = useState<string | null>(null);
+  const [connecting, setConnecting] = useState(false);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
 
   useEffect(() => {
     getMyOrganization()
       .then((o) => {
-        setCurrent(o);
+        setOrg(o);
         setIntervalInput(
-          o.reminder_interval_days === null
-            ? ""
-            : String(o.reminder_interval_days)
+          o.reminder_interval_days === null ? "" : String(o.reminder_interval_days)
         );
       })
-      .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
+      .catch((e) => setOrgError(e instanceof ApiError ? e.message : String(e)));
   }, []);
+
+  const refreshConnections = () => {
+    listInboxConnections()
+      .then(setConnections)
+      .catch((e) => setGmailError(e instanceof ApiError ? e.message : String(e)));
+  };
+
+  useEffect(refreshConnections, []);
 
   const onChangeAutomation = async (level: AutomationLevel) => {
     setSavingAutomation(true);
-    setError(null);
+    setOrgError(null);
     try {
-      const updated = await updateMyOrganization({
-        automation_level: level,
-      });
-      setCurrent(updated);
+      const updated = await updateMyOrganization({ automation_level: level });
+      setOrg(updated);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : String(e));
+      setOrgError(e instanceof ApiError ? e.message : String(e));
     } finally {
       setSavingAutomation(false);
     }
@@ -69,125 +269,26 @@ function AutomationAndReminderSection() {
   const onSaveInterval = async (e: React.FormEvent) => {
     e.preventDefault();
     setSavingInterval(true);
-    setError(null);
+    setOrgError(null);
     try {
       const days = intervalInput.trim() === "" ? null : Number(intervalInput);
-      const updated = await updateMyOrganization({
-        reminder_interval_days: days,
-      });
-      setCurrent(updated);
+      const updated = await updateMyOrganization({ reminder_interval_days: days });
+      setOrg(updated);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : String(e));
+      setOrgError(e instanceof ApiError ? e.message : String(e));
     } finally {
       setSavingInterval(false);
     }
   };
 
-  return (
-    <>
-      <section className="flex flex-col gap-3">
-        <h2 className="font-medium">Automation level</h2>
-        <p className="text-sm text-zinc-600">
-          Controls whether AI-drafted emails (checklist reminders,
-          document-received acknowledgments, wrong-document follow-ups,
-          answered/clarifying client questions) send themselves
-          automatically.
-        </p>
-        {error && <p className="text-red-600 text-sm">{error}</p>}
-        <div className="flex flex-col gap-2">
-          {automationOptions.map((opt) => (
-            <label
-              key={opt.value}
-              className={
-                "flex items-start gap-3 rounded border px-3 py-2 cursor-pointer " +
-                (current?.automation_level === opt.value
-                  ? "border-black bg-zinc-50"
-                  : "border-zinc-300")
-              }
-            >
-              <input
-                type="radio"
-                name="automation_level"
-                className="mt-1"
-                checked={current?.automation_level === opt.value}
-                disabled={savingAutomation || !current}
-                onChange={() => onChangeAutomation(opt.value)}
-              />
-              <span>
-                <span className="block font-medium text-sm">{opt.label}</span>
-                <span className="block text-xs text-zinc-600">
-                  {opt.description}
-                </span>
-              </span>
-            </label>
-          ))}
-        </div>
-      </section>
-
-      <section className="flex flex-col gap-3">
-        <h2 className="font-medium">Proactive reminders</h2>
-        <p className="text-sm text-zinc-600">
-          When set, clients with outstanding checklist items who haven&apos;t
-          been reminded in this many days get an automatic re-reminder. The
-          first reminder to any client is always manual — this only
-          re-nudges clients who&apos;ve already been contacted at least once.
-          Leave blank to disable.
-        </p>
-        <form onSubmit={onSaveInterval} className="flex items-center gap-3">
-          <input
-            type="number"
-            min={1}
-            placeholder="disabled"
-            value={intervalInput}
-            onChange={(e) => setIntervalInput(e.target.value)}
-            className="border border-zinc-300 rounded px-2 py-1 w-32"
-          />
-          <span className="text-sm text-zinc-600">days</span>
-          <button
-            type="submit"
-            disabled={savingInterval || !current}
-            className="rounded bg-black text-white px-4 py-1.5 disabled:opacity-50"
-          >
-            {savingInterval ? "Saving…" : "Save"}
-          </button>
-          {current && (
-            <span className="text-xs text-zinc-500">
-              Currently:{" "}
-              {current.reminder_interval_days === null
-                ? "disabled"
-                : `every ${current.reminder_interval_days} day(s)`}
-            </span>
-          )}
-        </form>
-      </section>
-    </>
-  );
-}
-
-export default function SettingsPage() {
-  const [connections, setConnections] = useState<InboxConnection[] | null>(
-    null
-  );
-  const [error, setError] = useState<string | null>(null);
-  const [connecting, setConnecting] = useState(false);
-  const [deletingId, setDeletingId] = useState<number | null>(null);
-
-  const refresh = () => {
-    listInboxConnections()
-      .then(setConnections)
-      .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
-  };
-
-  useEffect(refresh, []);
-
   const onConnect = async () => {
     setConnecting(true);
-    setError(null);
+    setGmailError(null);
     try {
       const { authorization_url } = await getGmailConnectUrl();
       window.location.href = authorization_url;
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : String(e));
+      setGmailError(e instanceof ApiError ? e.message : String(e));
       setConnecting(false);
     }
   };
@@ -196,72 +297,50 @@ export default function SettingsPage() {
     setDeletingId(id);
     try {
       await deleteInboxConnection(id);
-      refresh();
+      refreshConnections();
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : String(e));
+      setGmailError(e instanceof ApiError ? e.message : String(e));
     } finally {
       setDeletingId(null);
     }
   };
 
   return (
-    <div className="flex flex-col gap-10 max-w-2xl">
-      <h1 className="text-xl font-semibold">Settings</h1>
+    <div className="flex w-full flex-col gap-12">
+      <div className="flex flex-col gap-2">
+        <h1 className="text-6xl font-thin tracking-tight [font-family:var(--font-denton)]">
+          Settings
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          Configure automation, reminders, and mailbox connections for your organization.
+        </p>
+      </div>
 
-      <AutomationAndReminderSection />
+      <div className="flex w-full flex-col gap-6">
+        <AutomationSection
+          current={org}
+          error={orgError}
+          savingAutomation={savingAutomation}
+          onChangeAutomation={onChangeAutomation}
+        />
 
-      <section className="flex flex-col gap-3">
-        <h2 className="font-medium">Gmail connection</h2>
-        {error && <p className="text-red-600 text-sm">{error}</p>}
+        <ReminderSection
+          current={org}
+          intervalInput={intervalInput}
+          setIntervalInput={setIntervalInput}
+          savingInterval={savingInterval}
+          onSaveInterval={onSaveInterval}
+        />
 
-        <table className="w-full text-sm border-collapse">
-          <thead>
-            <tr className="text-left border-b border-zinc-300">
-              <th className="py-2 pr-4">Email</th>
-              <th className="py-2 pr-4">Status</th>
-              <th className="py-2 pr-4"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {connections?.map((conn) => (
-              <tr key={conn.id} className="border-b border-zinc-100">
-                <td className="py-2 pr-4">{conn.email_address}</td>
-                <td className="py-2 pr-4">
-                  {conn.status === "needs_reauth" ? (
-                    <span className="text-amber-600">needs reauth</span>
-                  ) : (
-                    conn.status
-                  )}
-                </td>
-                <td className="py-2 pr-4">
-                  <button
-                    onClick={() => onDelete(conn.id)}
-                    disabled={deletingId === conn.id}
-                    className="rounded border border-zinc-300 px-3 py-1 disabled:opacity-50"
-                  >
-                    {deletingId === conn.id ? "Removing…" : "Disconnect"}
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {connections?.length === 0 && (
-              <tr>
-                <td colSpan={3} className="py-4 text-zinc-500">
-                  No mailbox connected.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-
-        <button
-          onClick={onConnect}
-          disabled={connecting}
-          className="self-start rounded bg-black text-white px-4 py-1.5 disabled:opacity-50"
-        >
-          {connecting ? "Redirecting…" : "Connect Gmail"}
-        </button>
-      </section>
+        <GmailSection
+          connections={connections}
+          error={gmailError}
+          connecting={connecting}
+          deletingId={deletingId}
+          onConnect={onConnect}
+          onDelete={onDelete}
+        />
+      </div>
     </div>
   );
 }

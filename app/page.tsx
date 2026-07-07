@@ -1,5 +1,17 @@
-import { redirect } from "next/navigation";
+import { LandingNav } from "@/components/landing-nav";
+import { LandingHero } from "@/components/landing-hero";
+import { LandingProof } from "@/components/landing-proof";
+import { AuroraBackground } from "@/components/aurora-background";
 
 export default function Home() {
-  redirect("/email-log");
+  return (
+    <div className="-m-8 overflow-x-hidden md:-m-10">
+      <div className="relative isolate min-h-screen overflow-hidden">
+        <AuroraBackground />
+        <LandingNav />
+        <LandingHero />
+      </div>
+      <LandingProof />
+    </div>
+  );
 }

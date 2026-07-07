@@ -12,15 +12,23 @@ export class ApiError extends Error {
 // Clerk's browser SDK attaches itself to `window.Clerk`; this is the
 // documented way to grab a session token outside of a React hook, which
 // we need since these functions are called directly from useEffect rather
-// than through a component.
+// than through a component. On a hard refresh `window.Clerk` may exist but
+// still be re-validating the session, so we must await `load()` before
+// reading `session` — otherwise a signed-in user briefly looks signed-out.
 async function getAuthToken(): Promise<string | null> {
   if (typeof window === "undefined") return null;
   const clerk = (
     window as unknown as {
-      Clerk?: { session?: { getToken: () => Promise<string | null> } };
+      Clerk?: {
+        loaded?: boolean;
+        load?: () => Promise<void>;
+        session?: { getToken: () => Promise<string | null> };
+      };
     }
   ).Clerk;
-  if (!clerk?.session) return null;
+  if (!clerk) return null;
+  if (!clerk.loaded && clerk.load) await clerk.load();
+  if (!clerk.session) return null;
   return clerk.session.getToken();
 }
 
@@ -36,7 +44,10 @@ async function request<T>(
 
   if (res.status === 401) {
     if (typeof window !== "undefined") {
-      window.location.href = "/sign-in";
+      const redirect = encodeURIComponent(
+        window.location.pathname + window.location.search
+      );
+      window.location.href = `/sign-in?redirect_url=${redirect}`;
     }
     throw new ApiError(401, "Not authenticated");
   }
@@ -185,9 +196,10 @@ export interface ClientMemoryNote {
 export interface UnmatchedInboundEmail {
   id: number;
   organization_id: number;
+  inbox_connection_id: number;
   from_email: string;
   subject: string | null;
-  content: string;
+  body_text: string;
   category: InboundEmailCategory;
   ai_reason: string;
   ai_confidence: number;
@@ -332,6 +344,21 @@ export const dismissUnmatchedInboundEmail = (id: number) =>
   request<UnmatchedInboundEmail>(`/unmatched-inbound-emails/${id}/dismiss`, {
     method: "POST",
   });
+
+export const linkUnmatchedInboundEmail = (id: number, clientId: number) =>
+  request<UnmatchedInboundEmail>(
+    `/unmatched-inbound-emails/${id}/link`,
+    json("POST", { client_id: clientId })
+  );
+
+export const createClientFromUnmatchedInboundEmail = (
+  id: number,
+  input: { name: string; status?: ClientStatus; email?: string }
+) =>
+  request<Client>(
+    `/unmatched-inbound-emails/${id}/create-client`,
+    json("POST", input)
+  );
 
 // ---------- Gmail / inbox connections ----------
 
