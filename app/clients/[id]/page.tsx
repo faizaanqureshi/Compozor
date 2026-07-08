@@ -2,11 +2,13 @@
 
 import { use, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   ChevronDown,
   MoreHorizontal,
   Plus,
+  Trash2,
   UploadCloud,
   X,
 } from "lucide-react";
@@ -20,7 +22,9 @@ import {
   DocumentOut,
   DocumentUploadResult,
   EmailThread,
+  ToolTrajectoryStep,
   createChecklistItem,
+  deleteClient,
   getClient,
   listChecklistItems,
   listClientDocuments,
@@ -115,6 +119,7 @@ export default function ClientDetailPage({
     null
   );
   const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
 
   const refresh = () => {
     getClient(clientId)
@@ -141,13 +146,22 @@ export default function ClientDetailPage({
   return (
     <div className="flex w-full flex-col gap-8">
       <div>
-        <Link
-          href="/clients"
-          className="-ml-3 mt-2 mb-4 inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-        >
-          <ArrowLeft className="size-4" />
-          Clients
-        </Link>
+        <div className="flex items-center justify-between">
+          <Link
+            href="/clients"
+            className="-ml-3 mt-2 mb-4 inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <ArrowLeft className="size-4" />
+            Clients
+          </Link>
+          {client !== null && (
+            <DeleteClientButton
+              clientId={clientId}
+              clientName={client.name}
+              onDeleted={() => router.push("/clients")}
+            />
+          )}
+        </div>
         {client === null ? (
           <div className="flex flex-col gap-3">
             <Skeleton className="h-14 w-72" />
@@ -197,6 +211,72 @@ export default function ClientDetailPage({
 
       <MemoryNotesCard notes={memoryNotes} />
     </div>
+  );
+}
+
+function DeleteClientButton({
+  clientId,
+  clientName,
+  onDeleted,
+}: {
+  clientId: number;
+  clientName: string;
+  onDeleted: () => void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const onDelete = async () => {
+    setDeleting(true);
+    setError(null);
+    try {
+      await deleteClient(clientId);
+      onDeleted();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e));
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="mt-2 mb-4 text-muted-foreground hover:text-destructive"
+        onClick={() => setConfirming(true)}
+      >
+        <Trash2 className="size-4" />
+        Delete client
+      </Button>
+
+      <Dialog open={confirming} onOpenChange={(open) => !deleting && setConfirming(open)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete {clientName}?</DialogTitle>
+            <DialogDescription>
+              This permanently deletes this client along with all of their
+              checklist items, uploaded documents, email logs, and memory
+              notes. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setConfirming(false)}
+              disabled={deleting}
+            >
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={onDelete} disabled={deleting}>
+              {deleting ? "Deleting…" : "Delete client"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -575,6 +655,87 @@ function CommunicationCard({
   );
 }
 
+const TOOL_LABELS: Record<string, string> = {
+  list_client_documents: "Looked up documents on file",
+  read_document: "Read a document",
+  get_full_conversation_history: "Pulled full conversation history",
+};
+
+function humanizeToolName(tool: string): string {
+  return (
+    TOOL_LABELS[tool] ??
+    tool.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase())
+  );
+}
+
+function isToolFailure(step: ToolTrajectoryStep): boolean {
+  return /^(Unknown tool|Tool call '.*' failed)/.test(step.result);
+}
+
+function summarizeToolStep(step: ToolTrajectoryStep): string {
+  if (isToolFailure(step)) return step.result;
+
+  if (step.tool === "list_client_documents") {
+    const count = (step.result.match(/^- id=/gm) ?? []).length;
+    return `Looked up documents on file (${count} found)`;
+  }
+
+  if (step.tool === "read_document") {
+    const match = step.result.match(/^Loaded document \d+ \((.+)\) - attached below\.$/);
+    const description = match?.[1] ?? step.result;
+    return `Read "${description}"`;
+  }
+
+  if (step.tool === "get_full_conversation_history") {
+    return "Pulled full conversation history";
+  }
+
+  const trimmed = step.result.length > 140 ? `${step.result.slice(0, 140)}…` : step.result;
+  return `${humanizeToolName(step.tool)} — ${trimmed}`;
+}
+
+function AgentActivityDisclosure({
+  trajectory,
+}: {
+  trajectory: ToolTrajectoryStep[];
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="mt-2">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <ChevronDown
+          className={cn("size-3 transition-transform", open && "rotate-180")}
+        />
+        {open ? "Hide agent activity" : "Show agent activity"}
+      </button>
+      {open && (
+        <ul className="mt-1.5 flex flex-col gap-1 rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-xs">
+          {trajectory.map((step) => {
+            const failed = isToolFailure(step);
+            return (
+              <li
+                key={step.round}
+                className={cn(
+                  "flex items-start gap-1.5",
+                  failed ? "text-destructive" : "text-foreground/80"
+                )}
+              >
+                <span className="shrink-0">{failed ? "✗" : "✓"}</span>
+                <span>{summarizeToolStep(step)}</span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function ThreadsList({ threads }: { threads: EmailThread[] | null }) {
   const [expandedThread, setExpandedThread] = useState<string | null>(null);
 
@@ -643,6 +804,9 @@ function ThreadsList({ threads }: { threads: EmailThread[] | null }) {
                       <p className="mt-1 text-xs text-amber-600 dark:text-amber-500">
                         {m.escalation_reason}
                       </p>
+                    )}
+                    {m.tool_trajectory && m.tool_trajectory.length > 0 && (
+                      <AgentActivityDisclosure trajectory={m.tool_trajectory} />
                     )}
                   </div>
                 ))}

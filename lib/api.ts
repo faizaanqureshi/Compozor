@@ -164,6 +164,13 @@ export interface EmailReplyResult {
   needs_clarification: boolean;
 }
 
+export interface ToolTrajectoryStep {
+  round: number;
+  tool: string;
+  arguments: Record<string, unknown>;
+  result: string;
+}
+
 export interface EmailLogEntry {
   id: number;
   client_id: number;
@@ -181,6 +188,7 @@ export interface EmailLogEntry {
   automation_level_at_decision: AutomationLevel | null;
   autosent: boolean;
   autosend_error: string | null;
+  tool_trajectory: ToolTrajectoryStep[] | null;
   created_at: string;
 }
 
@@ -247,6 +255,9 @@ export const createClient = (input: {
   email: string;
   status?: ClientStatus;
 }) => request<Client>("/clients", json("POST", input));
+
+export const deleteClient = (clientId: number) =>
+  request<void>(`/clients/${clientId}`, { method: "DELETE" });
 
 // ---------- Checklist items ----------
 
