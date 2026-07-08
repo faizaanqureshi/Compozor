@@ -16,7 +16,7 @@ export function LandingHero() {
             For accounting & tax firms
           </span>
         </div>
-        <h1 className="text-4xl leading-[1.1] font-thin tracking-tight text-balance sm:text-6xl sm:leading-[1.05] md:text-6xl lg:text-7xl [font-family:var(--font-denton)]">
+        <h1 className="text-5xl leading-[1.05] font-thin tracking-tight text-balance sm:text-6xl md:text-6xl lg:text-7xl [font-family:var(--font-denton)]">
           Stop chasing clients.
           <br />
           We send the follow‑up.
