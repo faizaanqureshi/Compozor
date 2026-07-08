@@ -6,9 +6,9 @@ import { LandingDemo } from "@/components/landing-demo";
 
 export function LandingHero() {
   return (
-    <section className="animate-blur-in mx-auto flex min-h-screen w-full max-w-7xl flex-col items-center justify-center gap-20 px-6 pt-32 pb-16 md:flex-row md:items-center md:gap-24">
-      <div className="flex max-w-2xl flex-col gap-7">
-        <div className="flex items-center gap-2">
+    <section className="animate-blur-in mx-auto flex min-h-screen w-full max-w-7xl flex-col items-center justify-center gap-12 px-4 pt-28 pb-12 sm:gap-16 sm:px-6 sm:pt-32 sm:pb-16 md:flex-row md:gap-20 lg:gap-24">
+      <div className="flex max-w-2xl flex-col gap-5 sm:gap-7">
+        <div className="flex flex-wrap items-center gap-2">
           <Badge variant="outline" className="uppercase tracking-wide text-muted-foreground">
             Automated intake
           </Badge>
@@ -16,12 +16,12 @@ export function LandingHero() {
             For accounting & tax firms
           </span>
         </div>
-        <h1 className="text-6xl leading-[1.05] font-thin tracking-tight text-balance sm:text-7xl [font-family:var(--font-denton)]">
+        <h1 className="text-4xl leading-[1.1] font-thin tracking-tight text-balance sm:text-6xl sm:leading-[1.05] md:text-6xl lg:text-7xl [font-family:var(--font-denton)]">
           Stop chasing clients.
           <br />
           We send the follow‑up.
         </h1>
-        <p className="text-lg text-muted-foreground text-pretty">
+        <p className="text-base text-muted-foreground text-pretty sm:text-lg">
           We watch the inbox, match every email to the right client, and
           file the attachments the moment they land — no more digging
           through folders.

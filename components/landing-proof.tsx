@@ -22,8 +22,8 @@ const builtFor = [
 
 export function LandingProof() {
   return (
-    <section className="mx-auto flex w-full max-w-4xl flex-col gap-16 px-6 py-24">
-      <div className="flex flex-col items-center gap-4 border-t border-border pt-16 text-center">
+    <section className="mx-auto flex w-full max-w-4xl flex-col gap-8 px-4 py-8 sm:gap-12 sm:px-6 sm:py-16 md:gap-16 md:py-24">
+      <div className="flex flex-col items-center gap-4 border-t border-border pt-8 text-center sm:pt-12 md:pt-16">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <ShieldCheckIcon className="size-4 text-accent" />
           Built by engineers who've shipped compliance systems for SBA banks

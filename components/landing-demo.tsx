@@ -75,22 +75,26 @@ function InboxCard({
   return (
     <div className="rounded-xl border border-sidebar-foreground/10 bg-sidebar-foreground/[0.03] p-4">
       <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 items-center gap-3">
           <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-sidebar-foreground/10 text-xs font-medium text-sidebar-foreground/70">
             {initials}
           </div>
-          <div className="flex flex-col">
-            <span className="text-sm font-medium text-sidebar-foreground">
+          <div className="flex min-w-0 flex-col">
+            <span className="truncate text-sm font-medium text-sidebar-foreground">
               {name}
             </span>
-            <span className="text-xs text-sidebar-foreground/45">{email}</span>
+            <span className="truncate text-xs text-sidebar-foreground/45">
+              {email}
+            </span>
           </div>
         </div>
-        <span className="text-xs text-sidebar-foreground/35">{timestamp}</span>
+        <span className="shrink-0 text-xs text-sidebar-foreground/35">
+          {timestamp}
+        </span>
       </div>
       <div className="mt-3 flex items-center gap-1.5 text-sm text-sidebar-foreground/70">
-        <SubjectIcon className="size-3.5 text-sidebar-foreground/40" />
-        {subject}
+        <SubjectIcon className="size-3.5 shrink-0 text-sidebar-foreground/40" />
+        <span className="truncate">{subject}</span>
       </div>
       <Reveal show={badgeShown} className="mt-3">
         <span
@@ -179,15 +183,15 @@ function DocumentDemo({ running }: { running: boolean }) {
           <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-sidebar-foreground/10 text-sidebar-foreground/70">
             <FileTextIcon className="size-4" />
           </div>
-          <div className="flex flex-1 flex-col">
-            <span className="text-sm font-medium text-sidebar-foreground">
+          <div className="flex min-w-0 flex-1 flex-col">
+            <span className="truncate text-sm font-medium text-sidebar-foreground">
               Bank_Statement_Jan.pdf
             </span>
-            <span className="font-mono text-xs text-sidebar-foreground/40">
+            <span className="truncate font-mono text-xs text-sidebar-foreground/40">
               Clients / Acme Co. / 2026 / Jan
             </span>
           </div>
-          <span className="inline-flex items-center gap-1 text-xs font-medium text-accent">
+          <span className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-accent">
             <CheckIcon className="size-3.5" />
             Filed
           </span>
@@ -337,25 +341,29 @@ export function LandingDemo() {
   return (
     <div className="dark w-full max-w-xl overflow-hidden rounded-2xl border border-sidebar-border bg-sidebar text-sidebar-foreground shadow-2xl">
       <Tabs value={mode} onValueChange={(value) => setMode(value as TabValue)}>
-        <div className="flex items-center justify-between border-b border-sidebar-foreground/10 px-5 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-sidebar-foreground/10 px-3 py-2.5 sm:px-5 sm:py-3">
           <div className="flex items-center gap-1.5">
             <span className="size-1.5 rounded-full bg-sidebar-foreground/20" />
             <span className="size-1.5 rounded-full bg-sidebar-foreground/20" />
             <span className="size-1.5 rounded-full bg-sidebar-foreground/20" />
-            <span className="ml-2.5 font-mono text-xs text-sidebar-foreground/35">
+            <span className="ml-2.5 hidden font-mono text-xs text-sidebar-foreground/35 sm:inline">
               app.yourfirm.com
             </span>
           </div>
-          <TabsList variant="line" className="h-7 gap-3">
+          <TabsList variant="line" className="h-7 gap-2 sm:gap-3">
             {tabs.map(({ value, label }) => (
-              <TabsTrigger key={value} value={value} className="px-1 text-xs">
+              <TabsTrigger
+                key={value}
+                value={value}
+                className="px-1 text-[11px] sm:text-xs"
+              >
                 {label}
               </TabsTrigger>
             ))}
           </TabsList>
         </div>
 
-        <div className="p-6">
+        <div className="p-4 sm:p-6">
           {tabs.map(({ value, Component }) => (
             <TabsContent key={value} value={value}>
               <Component running={mode === value} />
