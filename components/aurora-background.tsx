@@ -1,6 +1,9 @@
+import { GridPattern } from "@/components/ui/grid-pattern";
+
 export function AuroraBackground() {
   return (
     <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden" aria-hidden>
+      <GridPattern width={48} height={48} />
       <div
         className="motion-safe:animate-[aurora-drift-a_28s_ease-in-out_infinite] absolute top-[-15%] left-[-10%] size-[38rem] rounded-full bg-secondary/40 blur-3xl"
       />
