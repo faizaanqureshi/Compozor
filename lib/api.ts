@@ -128,6 +128,10 @@ export interface ChecklistSummary {
   items: ChecklistItem[];
 }
 
+export interface ClientWithChecklistSummary extends Client {
+  checklist_summary: ChecklistSummary;
+}
+
 export interface ClientDetail extends Client {
   checklist_items: ChecklistItem[];
 }
@@ -232,7 +236,8 @@ export const deleteMyOrganization = () =>
 
 // ---------- Clients ----------
 
-export const listClients = () => request<Client[]>("/clients");
+export const listClients = () =>
+  request<ClientWithChecklistSummary[]>("/clients");
 
 export const getClient = (clientId: number) =>
   request<ClientDetail>(`/clients/${clientId}`);
@@ -261,6 +266,27 @@ export const createChecklistItem = (
   request<ChecklistItem>(
     `/clients/${clientId}/checklist-items`,
     json("POST", input)
+  );
+
+export const updateChecklistItem = (
+  clientId: number,
+  itemId: number,
+  input: { status: ChecklistItemStatus }
+) =>
+  request<ChecklistItem>(
+    `/clients/${clientId}/checklist-items/${itemId}`,
+    json("PATCH", input)
+  );
+
+export const waiveChecklistItem = (clientId: number, itemId: number) =>
+  request<void>(`/clients/${clientId}/checklist-items/${itemId}`, {
+    method: "DELETE",
+  });
+
+export const sendChecklistItemReminder = (clientId: number, itemId: number) =>
+  request<EmailLogEntry>(
+    `/clients/${clientId}/checklist-items/${itemId}/remind`,
+    { method: "POST" }
   );
 
 // ---------- Documents ----------

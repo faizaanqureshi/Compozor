@@ -17,9 +17,9 @@ import {
   ChecklistSummary,
   Client,
   ClientStatus,
+  ClientWithChecklistSummary,
   EmailLogEntry,
   createClient,
-  listChecklistItems,
   listClients,
   listEmailLog,
   sendChecklistReminder,
@@ -28,6 +28,7 @@ import { cn, formatRelativeTime } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
   DialogContent,
@@ -38,13 +39,14 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
-type WorkflowTone = "positive" | "warning" | "attention" | "neutral";
+type WorkflowTone = "positive" | "warning" | "review" | "attention" | "neutral";
 type SortKey = "name" | "email" | "documents" | "activity" | "status";
 type Sort = { key: SortKey; direction: "asc" | "desc" };
 
 const toneClasses: Record<WorkflowTone, string> = {
   positive: "bg-accent",
   warning: "bg-amber-500",
+  review: "bg-sky-500",
   attention: "bg-destructive",
   neutral: "bg-muted-foreground/40",
 };
@@ -81,7 +83,7 @@ function deriveWorkflowStatus(
 ): { label: string; tone: WorkflowTone } {
   if (client.status === "inactive") return { label: "Inactive", tone: "neutral" };
   if (summary && summary.total > 0) {
-    if (summary.wrong > 0) return { label: "Under review", tone: "attention" };
+    if (summary.wrong > 0) return { label: "Under review", tone: "review" };
     if (summary.missing > 0) return { label: "Awaiting docs", tone: "warning" };
     return { label: "Complete", tone: "positive" };
   }
@@ -92,9 +94,8 @@ function deriveWorkflowStatus(
 
 export default function ClientsPage() {
   const router = useRouter();
-  const [clients, setClients] = useState<Client[] | null>(null);
-  const [checklists, setChecklists] = useState<Record<number, ChecklistSummary>>({});
-  const [emailLog, setEmailLog] = useState<EmailLogEntry[]>([]);
+  const [clients, setClients] = useState<ClientWithChecklistSummary[] | null>(null);
+  const [emailLog, setEmailLog] = useState<EmailLogEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -113,38 +114,12 @@ export default function ClientsPage() {
     listClients()
       .then(setClients)
       .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
+    listEmailLog()
+      .then(setEmailLog)
+      .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
   };
 
   useEffect(refresh, []);
-
-  useEffect(() => {
-    if (!clients || clients.length === 0) return;
-    let cancelled = false;
-
-    Promise.all(
-      clients.map((c) =>
-        listChecklistItems(c.id)
-          .then((summary) => [c.id, summary] as const)
-          .catch(() => null)
-      )
-    ).then((results) => {
-      if (cancelled) return;
-      const next: Record<number, ChecklistSummary> = {};
-      for (const r of results) if (r) next[r[0]] = r[1];
-      setChecklists(next);
-    });
-
-    listEmailLog()
-      .then((entries) => {
-        if (cancelled) return;
-        setEmailLog(entries);
-      })
-      .catch(() => {});
-
-    return () => {
-      cancelled = true;
-    };
-  }, [clients]);
 
   const clientsById = useMemo(() => {
     const map: Record<number, Client> = {};
@@ -154,7 +129,7 @@ export default function ClientsPage() {
 
   const lastActivity = useMemo(() => {
     const next: Record<number, string> = {};
-    for (const entry of emailLog) {
+    for (const entry of emailLog ?? []) {
       const existing = next[entry.client_id];
       if (!existing || entry.created_at > existing) {
         next[entry.client_id] = entry.created_at;
@@ -166,31 +141,47 @@ export default function ClientsPage() {
   const waiting = useMemo(() => {
     return (clients ?? [])
       .map((c) => {
-        const summary = checklists[c.id];
-        const items = (summary?.items ?? []).filter(
+        const items = c.checklist_summary.items.filter(
           (i) => i.status === "missing" || i.status === "wrong"
         );
         return { client: c, items };
       })
       .filter((w) => w.items.length > 0);
-  }, [clients, checklists]);
+  }, [clients]);
 
   const recentActivity = useMemo(() => {
-    const sorted = [...emailLog].sort((a, b) =>
+    const sorted = [...(emailLog ?? [])].sort((a, b) =>
       b.created_at.localeCompare(a.created_at)
     );
-    const groups: { entry: EmailLogEntry; label: string; count: number }[] = [];
+    const byClient = new Map<number, EmailLogEntry[]>();
     for (const entry of sorted) {
-      const { label } = describeActivity(entry);
-      const last = groups[groups.length - 1];
-      if (last && last.entry.client_id === entry.client_id && last.label === label) {
-        last.count += 1;
-      } else {
-        groups.push({ entry, label, count: 1 });
-      }
+      const list = byClient.get(entry.client_id);
+      if (list) list.push(entry);
+      else byClient.set(entry.client_id, [entry]);
     }
+    const groups = Array.from(byClient.entries()).map(([clientId, entries]) => {
+      const counts: { label: string; count: number }[] = [];
+      for (const entry of entries) {
+        const { label } = describeActivity(entry);
+        const existing = counts.find((c) => c.label === label);
+        if (existing) existing.count += 1;
+        else counts.push({ label, count: 1 });
+      }
+      return { clientId, entries, counts, latest: entries[0].created_at };
+    });
+    groups.sort((a, b) => b.latest.localeCompare(a.latest));
     return groups.slice(0, 6);
   }, [emailLog]);
+
+  const [expandedClients, setExpandedClients] = useState<Set<number>>(new Set());
+  const toggleExpanded = (clientId: number) => {
+    setExpandedClients((prev) => {
+      const next = new Set(prev);
+      if (next.has(clientId)) next.delete(clientId);
+      else next.add(clientId);
+      return next;
+    });
+  };
 
   const stats = useMemo(() => {
     const counts = { active: 0, pending: 0, inactive: 0 };
@@ -226,7 +217,7 @@ export default function ClientsPage() {
           return a.email.localeCompare(b.email) * dir;
         case "documents":
           return (
-            (outstandingCount(checklists[a.id]) - outstandingCount(checklists[b.id])) *
+            (outstandingCount(a.checklist_summary) - outstandingCount(b.checklist_summary)) *
             dir
           );
         case "activity":
@@ -235,13 +226,13 @@ export default function ClientsPage() {
           );
         case "status":
           return (
-            deriveWorkflowStatus(a, checklists[a.id]).label.localeCompare(
-              deriveWorkflowStatus(b, checklists[b.id]).label
+            deriveWorkflowStatus(a, a.checklist_summary).label.localeCompare(
+              deriveWorkflowStatus(b, b.checklist_summary).label
             ) * dir
           );
       }
     });
-  }, [clients, checklists, lastActivity, search, sort]);
+  }, [clients, lastActivity, search, sort]);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -261,6 +252,8 @@ export default function ClientsPage() {
     }
   };
 
+  const loading = clients === null || emailLog === null;
+
   const sendReminder = async (e: React.MouseEvent, clientId: number) => {
     e.preventDefault();
     e.stopPropagation();
@@ -278,19 +271,23 @@ export default function ClientsPage() {
   };
 
   return (
-    <div className="flex w-full flex-col gap-12">
+    <div className="flex w-full flex-col gap-8">
       <div className="flex items-end justify-between">
         <div className="flex flex-col gap-2">
           <h1 className="text-6xl font-thin tracking-tight [font-family:var(--font-denton)]">
             Clients
           </h1>
-          <p className="text-sm text-muted-foreground">
-            {waiting.length > 0
-              ? `Waiting on ${waiting.reduce((n, w) => n + w.items.length, 0)} document${
-                  waiting.reduce((n, w) => n + w.items.length, 0) === 1 ? "" : "s"
-                } from ${waiting.length} client${waiting.length === 1 ? "" : "s"}.`
-              : `${stats.active} active client${stats.active === 1 ? "" : "s"} · all caught up.`}
-          </p>
+          {loading ? (
+            <Skeleton className="h-4 w-56" />
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              {waiting.length > 0
+                ? `Waiting on ${waiting.reduce((n, w) => n + w.items.length, 0)} document${
+                    waiting.reduce((n, w) => n + w.items.length, 0) === 1 ? "" : "s"
+                  } from ${waiting.length} client${waiting.length === 1 ? "" : "s"}.`
+                : `${stats.active} active client${stats.active === 1 ? "" : "s"} · all caught up.`}
+            </p>
+          )}
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger render={<Button />}>
@@ -359,8 +356,13 @@ export default function ClientsPage() {
           <AlertTriangle className="size-3.5" />
           Waiting for action
         </div>
-        <div className="flex flex-col gap-2.5">
-          {waiting.map(({ client, items }) => {
+        <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
+          {loading &&
+            Array.from({ length: 2 }).map((_, i) => (
+              <Skeleton key={i} className="h-[4.75rem] w-full rounded-xl" />
+            ))}
+          {!loading &&
+            waiting.map(({ client, items }, i) => {
             const state = reminderState[client.id];
             return (
               <div
@@ -371,17 +373,18 @@ export default function ClientsPage() {
                 onKeyDown={(e) => {
                   if (e.key === "Enter") router.push(`/clients/${client.id}`);
                 }}
-                className="group/waiting flex cursor-pointer items-center justify-between gap-4 rounded-xl border border-amber-500/20 bg-amber-500/[0.04] px-4 py-3.5 transition-colors hover:bg-amber-500/[0.07]"
+                style={{ animationDelay: `${Math.min(i, 6) * 40}ms` }}
+                className="group/waiting flex cursor-pointer animate-blur-in-sm items-center justify-between gap-4 rounded-xl border border-amber-500/20 bg-amber-500/[0.04] px-4 py-3.5 transition-colors hover:bg-amber-500/[0.07]"
               >
                 <div className="flex flex-col gap-1.5">
-                  <span className="font-medium underline-offset-4 group-hover/waiting:underline">
+                  <span className="font-thin underline-offset-4 [font-family:var(--font-denton)] group-hover/waiting:underline">
                     {client.name}
                   </span>
                   <div className="flex flex-wrap items-center gap-1.5">
                     {items.slice(0, 3).map((i) => (
                       <span
                         key={i.id}
-                        className="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-400"
+                        className="rounded-full bg-amber-500/20 px-2 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-500/15 dark:text-amber-300"
                       >
                         {i.doc_type_needed}
                       </span>
@@ -411,7 +414,7 @@ export default function ClientsPage() {
               </div>
             );
           })}
-          {waiting.length === 0 && (
+          {!loading && waiting.length === 0 && (
             <p className="py-3 text-sm text-muted-foreground">
               Nothing outstanding — every client is caught up.
             </p>
@@ -424,19 +427,28 @@ export default function ClientsPage() {
           Recent activity
         </div>
         <div className="relative flex flex-col">
-          {recentActivity.length > 1 && (
+          {loading && (
+            <div className="flex flex-col gap-3 py-1">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Skeleton key={i} className="h-8 w-full" />
+              ))}
+            </div>
+          )}
+          {!loading && recentActivity.length > 1 && (
             <div className="absolute top-2 bottom-2 left-3.5 w-px bg-border/70" />
           )}
-          {recentActivity.map(({ entry, label, count }) => (
-            <ActivityRow
-              key={entry.id}
-              entry={entry}
-              label={label}
-              count={count}
-              clientName={clientsById[entry.client_id]?.name ?? "Unknown client"}
+          {!loading &&
+            recentActivity.map((group, i) => (
+            <ActivityGroupRow
+              key={group.clientId}
+              group={group}
+              expanded={expandedClients.has(group.clientId)}
+              onToggle={() => toggleExpanded(group.clientId)}
+              clientName={clientsById[group.clientId]?.name ?? "Unknown client"}
+              delayMs={60 + Math.min(i, 6) * 40}
             />
           ))}
-          {recentActivity.length === 0 && (
+          {!loading && recentActivity.length === 0 && (
             <p className="py-3 text-sm text-muted-foreground">No activity yet.</p>
           )}
         </div>
@@ -483,16 +495,29 @@ export default function ClientsPage() {
             </tr>
           </thead>
           <tbody>
-            {rows.map((c) => {
-              const summary = checklists[c.id];
+            {loading &&
+              Array.from({ length: 6 }).map((_, i) => (
+                <tr key={i}>
+                  <td colSpan={5} className="border-b border-border/50 py-3 pr-4">
+                    <Skeleton className="h-4 w-full" />
+                  </td>
+                </tr>
+              ))}
+            {!loading &&
+              rows.map((c, i) => {
+              const summary = c.checklist_summary;
               const activity = lastActivity[c.id];
               const workflow = deriveWorkflowStatus(c, summary);
               return (
-                <tr key={c.id} className="group/row">
+                <tr
+                  key={c.id}
+                  className="group/row animate-blur-in-sm"
+                  style={{ animationDelay: `${120 + Math.min(i, 10) * 25}ms` }}
+                >
                   <td className="border-b border-border/50 py-3 pr-4">
                     <Link
                       href={`/clients/${c.id}`}
-                      className="font-medium underline-offset-4 group-hover/row:underline"
+                      className="font-thin underline-offset-4 [font-family:var(--font-denton)] group-hover/row:underline"
                     >
                       {c.name}
                     </Link>
@@ -519,7 +544,7 @@ export default function ClientsPage() {
                 </tr>
               );
             })}
-            {rows.length === 0 && (
+            {!loading && rows.length === 0 && (
               <tr>
                 <td colSpan={5} className="py-8 text-center text-muted-foreground">
                   {clients?.length === 0 ? "No clients yet." : "No clients match your search."}
@@ -533,43 +558,96 @@ export default function ClientsPage() {
   );
 }
 
-function ActivityRow({
-  entry,
-  label,
-  count,
+function ActivityGroupRow({
+  group,
+  expanded,
+  onToggle,
   clientName,
+  delayMs = 0,
 }: {
-  entry: EmailLogEntry;
-  label: string;
-  count: number;
+  group: {
+    clientId: number;
+    entries: EmailLogEntry[];
+    counts: { label: string; count: number }[];
+    latest: string;
+  };
+  expanded: boolean;
+  onToggle: () => void;
   clientName: string;
+  delayMs?: number;
 }) {
-  const { Icon, iconTone } = describeActivity(entry);
+  const latestEntry = group.entries[0];
+  const { Icon, iconTone } = describeActivity(latestEntry);
+  const hasMultiple = group.entries.length > 1;
+  const summary = group.counts
+    .map(({ label, count }) => (count > 1 ? `${count}× ${label}` : label))
+    .join(" · ");
 
   return (
-    <div className="relative flex items-center gap-3 py-2">
-      <span className="relative z-10 flex size-7 shrink-0 items-center justify-center rounded-full bg-background">
-        <span
-          className={cn(
-            "flex size-7 items-center justify-center rounded-full",
-            iconTone
-          )}
-        >
-          <Icon className="size-3.5" />
+    <div
+      className="relative flex flex-col animate-blur-in-sm"
+      style={{ animationDelay: `${delayMs}ms` }}
+    >
+      <div
+        role={hasMultiple ? "button" : undefined}
+        tabIndex={hasMultiple ? 0 : undefined}
+        onClick={hasMultiple ? onToggle : undefined}
+        onKeyDown={
+          hasMultiple
+            ? (e) => {
+                if (e.key === "Enter") onToggle();
+              }
+            : undefined
+        }
+        className={cn(
+          "relative flex items-center gap-3 py-2",
+          hasMultiple && "cursor-pointer"
+        )}
+      >
+        <span className="relative z-10 flex size-7 shrink-0 items-center justify-center rounded-full bg-background">
+          <span
+            className={cn(
+              "flex size-7 items-center justify-center rounded-full",
+              iconTone
+            )}
+          >
+            <Icon className="size-3.5" />
+          </span>
         </span>
-      </span>
-      <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
-        <span className="truncate text-sm">
-          <span className="font-medium">{clientName}</span>
-          <span className="text-foreground/60"> — {label}</span>
-          {count > 1 && (
-            <span className="text-foreground/60"> ({count}×)</span>
-          )}
-        </span>
-        <span className="shrink-0 text-xs text-foreground/55">
-          {formatRelativeTime(entry.created_at)}
-        </span>
+        <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
+          <span className="truncate text-sm">
+            <span className="font-medium">{clientName}</span>
+            <span className="text-foreground/60"> — {summary}</span>
+          </span>
+          <span className="flex shrink-0 items-center gap-1.5 text-xs text-foreground/55">
+            {formatRelativeTime(group.latest)}
+            {hasMultiple && (
+              <ChevronRight
+                className={cn(
+                  "size-3.5 text-foreground/40 transition-transform",
+                  expanded && "rotate-90"
+                )}
+              />
+            )}
+          </span>
+        </div>
       </div>
+      {hasMultiple && expanded && (
+        <div className="mb-1 ml-10 flex flex-col gap-1 border-l border-border/60 pl-4">
+          {group.entries.map((entry) => {
+            const { label } = describeActivity(entry);
+            return (
+              <div
+                key={entry.id}
+                className="flex items-center justify-between gap-3 py-1 text-xs text-foreground/60"
+              >
+                <span>{label}</span>
+                <span>{formatRelativeTime(entry.created_at)}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

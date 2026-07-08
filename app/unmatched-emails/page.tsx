@@ -27,6 +27,7 @@ import {
 import { cn, formatRelativeTime } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const reviewStatusOptions: { value: InboundEmailReviewStatus | "all"; label: string }[] = [
   { value: "needs_review", label: "Needs review" },
@@ -411,7 +412,35 @@ export default function UnmatchedEmailsPage() {
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
-      {emails?.length === 0 ? (
+      {emails === null ? (
+        <table className="w-full border-collapse text-sm">
+          <thead>
+            <tr className="border-b border-border text-left">
+              <th className="pt-1 pb-2.5 pr-4 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                Sender
+              </th>
+              <th className="pt-1 pb-2.5 pr-4 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                Subject
+              </th>
+              <th className="pt-1 pb-2.5 pr-4 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                AI category
+              </th>
+              <th className="pt-1 pb-2.5 pr-4 text-right text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                Received
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <tr key={i} className="border-b border-border/40">
+                <td colSpan={4} className="py-3 pr-4">
+                  <Skeleton className="h-4 w-full" />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : emails.length === 0 ? (
         <EmptyState />
       ) : (
         <table className="w-full border-collapse text-sm">
@@ -432,11 +461,14 @@ export default function UnmatchedEmailsPage() {
             </tr>
           </thead>
           <tbody>
-            {emails?.map((email) => {
+            {emails.map((email, i) => {
               const isOpen = expandedId === email.id;
               return (
                 <Fragment key={email.id}>
-                  <tr className="group/row border-b border-border/40">
+                  <tr
+                    className="group/row animate-blur-in-sm border-b border-border/40"
+                    style={{ animationDelay: `${Math.min(i, 10) * 25}ms` }}
+                  >
                     <td className="py-3 pr-4 align-top">
                       <button
                         type="button"

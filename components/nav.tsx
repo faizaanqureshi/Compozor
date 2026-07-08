@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -17,10 +18,8 @@ import {
   SignOutButton,
   SignUpButton,
   Show,
-  useAuth,
   useUser,
 } from "@clerk/nextjs";
-import { getMyOrganization, Organization } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
@@ -34,17 +33,8 @@ const links = [
 
 export function Nav() {
   const pathname = usePathname();
-  const { isSignedIn } = useAuth();
   const { user } = useUser();
-  const [org, setOrg] = useState<Organization | null>(null);
   const [collapsed, setCollapsed] = useState(false);
-
-  useEffect(() => {
-    if (!isSignedIn) return;
-    getMyOrganization()
-      .then(setOrg)
-      .catch(() => setOrg(null));
-  }, [isSignedIn]);
 
   if (
     pathname === "/" ||
@@ -62,9 +52,16 @@ export function Nav() {
     >
       <div className="flex items-center justify-between gap-2 px-1">
         {!collapsed && (
-          <span className="truncate font-heading text-base font-semibold tracking-tight">
-            {isSignedIn && org ? org.name : "Accounting SaaS"}
-          </span>
+          <Link href="/" className="shrink-0">
+            <Image
+              src="/compozor-logo.png"
+              alt="Compozor"
+              width={795}
+              height={214}
+              priority
+              className="h-7 w-auto"
+            />
+          </Link>
         )}
         <Button
           variant="ghost"
@@ -144,7 +141,7 @@ export function Nav() {
                 <span className="truncate text-sm font-medium text-sidebar-foreground/80">
                   {user?.fullName ?? "Account"}
                 </span>
-                <span className="truncate text-xs text-sidebar-foreground/45">
+                <span className="truncate text-xs text-sidebar-foreground/65">
                   {user?.primaryEmailAddress?.emailAddress}
                 </span>
               </div>

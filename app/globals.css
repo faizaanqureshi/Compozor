@@ -48,73 +48,75 @@
 }
 
 :root {
-    /* Evergreen 002400 / Black Forest 273B09 / Olive Leaf 58641D / Palm Leaf 7B904B / Lavender DBD2E0 */
-    --background: oklch(0.9834 0.0028 308.43);
-    --foreground: oklch(0.2256 0.0768 142.50);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.2256 0.0768 142.50);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.2256 0.0768 142.50);
-    --primary: oklch(0.2256 0.0768 142.50);
-    --primary-foreground: oklch(0.9668 0.0057 308.40);
-    --secondary: oklch(0.8751 0.0213 313.82);
-    --secondary-foreground: oklch(0.3238 0.0770 129.23);
-    --muted: oklch(0.9411 0.0086 308.36);
-    --muted-foreground: oklch(0.4779 0.0951 118.42);
-    --accent: oklch(0.6205 0.0976 123.15);
-    --accent-foreground: oklch(0.2273 0.0460 135.84);
-    --destructive: oklch(0.5013 0.1783 28.70);
-    --border: oklch(0.9082 0.0149 312.24);
-    --input: oklch(0.9082 0.0149 312.24);
-    --ring: oklch(0.4779 0.0951 118.42);
-    --chart-1: oklch(0.2256 0.0768 142.50);
-    --chart-2: oklch(0.3238 0.0770 129.23);
-    --chart-3: oklch(0.4779 0.0951 118.42);
-    --chart-4: oklch(0.6205 0.0976 123.15);
-    --chart-5: oklch(0.8751 0.0213 313.82);
+    /* Old-money palette anchored on the brand mark, #122023 (deep teal-charcoal),
+       paired with warm ivory/champagne neutrals and a brass-gold accent -
+       evergreen/navy + brass is the classic "old money" combination. */
+    --background: oklch(0.9593 0.0143 84.58); /* #F6F1E7 warm ivory */
+    --foreground: oklch(0.2322 0.0201 212.57); /* #122023 brand */
+    --card: oklch(0.9874 0.0107 95.16); /* #FDFBF3 warm white */
+    --card-foreground: oklch(0.2322 0.0201 212.57);
+    --popover: oklch(0.9874 0.0107 95.16);
+    --popover-foreground: oklch(0.2322 0.0201 212.57);
+    --primary: oklch(0.2322 0.0201 212.57); /* #122023 brand */
+    --primary-foreground: oklch(0.9593 0.0143 84.58);
+    --secondary: oklch(0.8947 0.0319 91.04); /* #E4DCC5 pale camel */
+    --secondary-foreground: oklch(0.3219 0.0233 77.80); /* #3A3226 dark brown */
+    --muted: oklch(0.9168 0.0239 88.24); /* #EAE3D2 soft sand */
+    --muted-foreground: oklch(0.5237 0.0219 93.85); /* #6E6A5C warm grey */
+    --accent: oklch(0.6290 0.1095 82.85); /* #A9822F brass gold */
+    --accent-foreground: oklch(0.1969 0.0216 75.83); /* #1B140A near-black brown */
+    --destructive: oklch(0.4033 0.1126 26.26); /* #7A2A26 oxblood */
+    --border: oklch(0.8830 0.0295 89.59); /* #E0D8C3 warm sand */
+    --input: oklch(0.8830 0.0295 89.59);
+    --ring: oklch(0.6290 0.1095 82.85); /* brass gold */
+    --chart-1: oklch(0.2322 0.0201 212.57); /* #122023 brand */
+    --chart-2: oklch(0.3854 0.0345 178.87); /* #2F4A44 forest teal */
+    --chart-3: oklch(0.5237 0.0219 93.85); /* #6E6A5C warm grey */
+    --chart-4: oklch(0.6290 0.1095 82.85); /* #A9822F brass gold */
+    --chart-5: oklch(0.8386 0.0533 89.04); /* #D8C9A3 champagne */
     --radius: 0.625rem;
-    --sidebar: oklch(0.2214 0.0489 137.41);
-    --sidebar-foreground: oklch(0.9668 0.0057 308.40);
-    --sidebar-primary: oklch(0.6205 0.0976 123.15);
-    --sidebar-primary-foreground: oklch(0.2273 0.0460 135.84);
-    --sidebar-accent: oklch(0.3238 0.0770 129.23);
-    --sidebar-accent-foreground: oklch(0.9668 0.0057 308.40);
+    --sidebar: oklch(0.2322 0.0201 212.57); /* #122023 brand */
+    --sidebar-foreground: oklch(0.9261 0.0226 87.15); /* #EDE6D6 warm ivory */
+    --sidebar-primary: oklch(0.7280 0.1380 89.73); /* #C9A227 brass gold */
+    --sidebar-primary-foreground: oklch(0.1969 0.0216 75.83);
+    --sidebar-accent: oklch(0.2765 0.0205 206.39); /* #1C2B2D */
+    --sidebar-accent-foreground: oklch(0.9261 0.0226 87.15);
     --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.6205 0.0976 123.15);
+    --sidebar-ring: oklch(0.7280 0.1380 89.73);
 }
 
 .dark {
-    --background: oklch(0.1870 0.0271 138.10);
-    --foreground: oklch(0.9397 0.0127 306.02);
-    --card: oklch(0.2285 0.0472 132.00);
-    --card-foreground: oklch(0.9397 0.0127 306.02);
-    --popover: oklch(0.2285 0.0472 132.00);
-    --popover-foreground: oklch(0.9397 0.0127 306.02);
-    --primary: oklch(0.6205 0.0976 123.15);
-    --primary-foreground: oklch(0.1870 0.0271 138.10);
-    --secondary: oklch(0.3238 0.0770 129.23);
-    --secondary-foreground: oklch(0.8751 0.0213 313.82);
-    --muted: oklch(0.2655 0.0479 130.90);
-    --muted-foreground: oklch(0.7143 0.0661 122.74);
-    --accent: oklch(0.4779 0.0951 118.42);
-    --accent-foreground: oklch(0.9668 0.0057 308.40);
-    --destructive: oklch(0.6374 0.1829 26.71);
-    --border: oklch(0.3018 0.0459 131.09);
-    --input: oklch(0.3018 0.0459 131.09);
-    --ring: oklch(0.6205 0.0976 123.15);
-    --chart-1: oklch(0.2256 0.0768 142.50);
-    --chart-2: oklch(0.3238 0.0770 129.23);
-    --chart-3: oklch(0.4779 0.0951 118.42);
-    --chart-4: oklch(0.6205 0.0976 123.15);
-    --chart-5: oklch(0.8751 0.0213 313.82);
-    --sidebar: oklch(0.1490 0.0212 136.65);
-    --sidebar-foreground: oklch(0.9397 0.0127 306.02);
-    --sidebar-primary: oklch(0.8751 0.0213 313.82);
-    --sidebar-primary-foreground: oklch(0.2273 0.0460 135.84);
-    --sidebar-accent: oklch(0.2655 0.0479 130.90);
-    --sidebar-accent-foreground: oklch(0.9397 0.0127 306.02);
+    --background: oklch(0.1967 0.0139 212.90); /* #0E1719 near-black teal */
+    --foreground: oklch(0.9261 0.0226 87.15); /* #EDE6D6 warm ivory */
+    --card: oklch(0.2569 0.0216 216.25); /* #17262A */
+    --card-foreground: oklch(0.9261 0.0226 87.15);
+    --popover: oklch(0.2569 0.0216 216.25);
+    --popover-foreground: oklch(0.9261 0.0226 87.15);
+    --primary: oklch(0.7280 0.1380 89.73); /* #C9A227 brass gold */
+    --primary-foreground: oklch(0.1969 0.0216 75.83); /* #1B140A */
+    --secondary: oklch(0.3006 0.0179 184.73); /* #24312F */
+    --secondary-foreground: oklch(0.8535 0.0370 87.80); /* #D9CEB4 */
+    --muted: oklch(0.2731 0.0169 183.73); /* #1E2A28 */
+    --muted-foreground: oklch(0.6689 0.0248 84.59); /* #9C9484 */
+    --accent: oklch(0.3500 0.0256 188.32); /* #2B3F3D muted teal */
+    --accent-foreground: oklch(0.9261 0.0226 87.15);
+    --destructive: oklch(0.5162 0.1288 27.24); /* #A5453D oxblood, brightened for dark bg */
+    --border: oklch(1 0 0 / 10%);
+    --input: oklch(1 0 0 / 12%);
+    --ring: oklch(0.7280 0.1380 89.73); /* brass gold */
+    --chart-1: oklch(0.9261 0.0226 87.15);
+    --chart-2: oklch(0.7280 0.1380 89.73);
+    --chart-3: oklch(0.8386 0.0533 89.04);
+    --chart-4: oklch(0.3854 0.0345 178.87);
+    --chart-5: oklch(0.6689 0.0248 84.59);
+    --sidebar: oklch(0.2322 0.0201 212.57); /* #122023 brand */
+    --sidebar-foreground: oklch(0.9261 0.0226 87.15);
+    --sidebar-primary: oklch(0.7280 0.1380 89.73); /* #C9A227 brass gold */
+    --sidebar-primary-foreground: oklch(0.1969 0.0216 75.83);
+    --sidebar-accent: oklch(0.2765 0.0205 206.39); /* #1C2B2D */
+    --sidebar-accent-foreground: oklch(0.9261 0.0226 87.15);
     --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.6205 0.0976 123.15);
+    --sidebar-ring: oklch(0.7280 0.1380 89.73);
 }
 
 @layer base {
@@ -159,6 +161,23 @@
 
 .animate-blur-in {
   animation: blur-in 2.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes blur-in-sm {
+  from {
+    opacity: 0;
+    filter: blur(16px);
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateY(0);
+  }
+}
+
+.animate-blur-in-sm {
+  animation: blur-in-sm 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .bg-grain {

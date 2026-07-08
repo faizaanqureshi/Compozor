@@ -1,16 +1,18 @@
 "use client";
 
-import { use, useEffect, useRef, useState } from "react";
+import { use, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
   ChevronDown,
+  MoreHorizontal,
   Plus,
   UploadCloud,
   X,
 } from "lucide-react";
 import {
   ApiError,
+  ChecklistItem,
   ChecklistItemStatus,
   ChecklistSummary,
   ClientDetail,
@@ -24,13 +26,31 @@ import {
   listClientDocuments,
   listClientMemoryNotes,
   listEmailThreads,
+  sendChecklistItemReminder,
   sendChecklistReminder,
+  updateChecklistItem,
   uploadDocument,
+  waiveChecklistItem,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 function SectionCard({
   title,
@@ -56,7 +76,7 @@ function SectionCard({
 
 const statusPillClasses: Record<ChecklistItemStatus, string> = {
   received: "bg-accent/15 text-accent",
-  missing: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
+  missing: "bg-amber-500/20 text-amber-900 dark:bg-amber-500/15 dark:text-amber-300",
   wrong: "bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-400",
 };
 
@@ -117,7 +137,6 @@ export default function ClientDetailPage({
   useEffect(refresh, [clientId]);
 
   if (error && !client) return <p className="text-sm text-destructive">{error}</p>;
-  if (!client) return <p className="text-sm text-muted-foreground">Loading…</p>;
 
   return (
     <div className="flex w-full flex-col gap-8">
@@ -129,20 +148,28 @@ export default function ClientDetailPage({
           <ArrowLeft className="size-4" />
           Clients
         </Link>
-        <div className="flex flex-col gap-2">
-          <h1 className="text-6xl font-thin tracking-tight [font-family:var(--font-denton)]">
-            {client.name}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            {client.email} · {client.status}
-          </p>
-          <p className="text-xs text-muted-foreground/70">
-            Last reminder sent:{" "}
-            {client.last_reminder_sent_at
-              ? new Date(client.last_reminder_sent_at).toLocaleString()
-              : "never"}
-          </p>
-        </div>
+        {client === null ? (
+          <div className="flex flex-col gap-3">
+            <Skeleton className="h-14 w-72" />
+            <Skeleton className="h-4 w-48" />
+            <Skeleton className="h-3 w-40" />
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2 animate-blur-in-sm">
+            <h1 className="text-6xl font-thin tracking-tight [font-family:var(--font-denton)]">
+              {client.name}
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              {client.email} · {client.status}
+            </p>
+            <p className="text-xs text-muted-foreground/70">
+              Last reminder sent:{" "}
+              {client.last_reminder_sent_at
+                ? new Date(client.last_reminder_sent_at).toLocaleString()
+                : "never"}
+            </p>
+          </div>
+        )}
       </div>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
@@ -155,6 +182,7 @@ export default function ClientDetailPage({
       />
 
       <CommunicationCard
+        clientId={clientId}
         client={client}
         threads={threads}
         onChange={refresh}
@@ -163,6 +191,7 @@ export default function ClientDetailPage({
       <DocumentVaultCard
         clientId={clientId}
         documents={documents}
+        checklist={checklist}
         onChange={refresh}
       />
 
@@ -218,7 +247,7 @@ function ChecklistCard({
           <div className="flex items-center gap-2">
             <span>{checklist.total} total</span>
             {actionRequired > 0 && (
-              <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-400">
+              <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-500/15 dark:text-amber-300">
                 {actionRequired} action required
               </span>
             )}
@@ -226,23 +255,36 @@ function ChecklistCard({
         )
       }
     >
-      <table className="w-full border-collapse text-sm">
+      {checklist === null ? (
+        <div className="flex flex-col gap-2">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="h-9 w-full" />
+          ))}
+        </div>
+      ) : (
+      <table
+        className="w-full border-collapse text-sm animate-blur-in-sm"
+        style={{ animationDelay: "60ms" }}
+      >
         <thead>
           <tr className="border-b border-border/60 text-left">
-            <th className="py-2 pr-4 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+            <th className="py-1.5 pr-4 text-xs font-medium tracking-wide text-muted-foreground uppercase">
               Doc type
             </th>
-            <th className="py-2 pr-4 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+            <th className="py-1.5 pr-4 text-xs font-medium tracking-wide text-muted-foreground uppercase">
               Status
             </th>
-            <th className="py-2 pr-4 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+            <th className="py-1.5 pr-4 text-xs font-medium tracking-wide text-muted-foreground uppercase">
               Wrong attempts
             </th>
-            <th className="py-2 pr-4 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+            <th className="py-1.5 pr-4 text-xs font-medium tracking-wide text-muted-foreground uppercase">
               Last wrong type
             </th>
-            <th className="py-2 pr-4 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+            <th className="py-1.5 pr-4 text-xs font-medium tracking-wide text-muted-foreground uppercase">
               Document
+            </th>
+            <th className="py-1.5 pr-0 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+              <span className="sr-only">Actions</span>
             </th>
           </tr>
         </thead>
@@ -253,17 +295,17 @@ function ChecklistCard({
               .sort((a, b) => b.received_at.localeCompare(a.received_at))[0];
             return (
               <tr key={item.id} className="border-b border-border/40">
-                <td className="py-3 pr-4 font-medium">{item.doc_type_needed}</td>
-                <td className="py-3 pr-4">
+                <td className="py-2 pr-4 font-medium">{item.doc_type_needed}</td>
+                <td className="py-2 pr-4">
                   <StatusPill status={item.status} />
                 </td>
-                <td className="py-3 pr-4 text-muted-foreground">
+                <td className="py-2 pr-4 text-muted-foreground">
                   {item.wrong_attempt_count}
                 </td>
-                <td className="py-3 pr-4 text-muted-foreground">
+                <td className="py-2 pr-4 text-muted-foreground">
                   {item.last_wrong_doc_type ?? "—"}
                 </td>
-                <td className="py-3 pr-4">
+                <td className="py-2 pr-4">
                   {matched ? (
                     matched.download_url ? (
                       <a
@@ -281,18 +323,26 @@ function ChecklistCard({
                     <span className="text-muted-foreground">—</span>
                   )}
                 </td>
+                <td className="py-2 pr-0 text-right">
+                  <ChecklistItemActions
+                    clientId={clientId}
+                    item={item}
+                    onChange={onChange}
+                  />
+                </td>
               </tr>
             );
           })}
           {checklist?.items.length === 0 && (
             <tr>
-              <td colSpan={5} className="py-4 text-muted-foreground">
+              <td colSpan={6} className="py-4 text-muted-foreground">
                 No checklist items yet.
               </td>
             </tr>
           )}
         </tbody>
       </table>
+      )}
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
@@ -341,12 +391,121 @@ function ChecklistCard({
   );
 }
 
+function ChecklistItemActions({
+  clientId,
+  item,
+  onChange,
+}: {
+  clientId: number;
+  item: ChecklistItem;
+  onChange: () => void;
+}) {
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [confirmingWaive, setConfirmingWaive] = useState(false);
+
+  const isOutstanding = item.status === "missing" || item.status === "wrong";
+
+  const onAccept = async () => {
+    setPending(true);
+    setError(null);
+    try {
+      await updateChecklistItem(clientId, item.id, { status: "received" });
+      onChange();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setPending(false);
+    }
+  };
+
+  const onRequestReupload = async () => {
+    setPending(true);
+    setError(null);
+    try {
+      await sendChecklistItemReminder(clientId, item.id);
+      onChange();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setPending(false);
+    }
+  };
+
+  const onWaive = async () => {
+    setPending(true);
+    setError(null);
+    try {
+      await waiveChecklistItem(clientId, item.id);
+      setConfirmingWaive(false);
+      onChange();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center justify-end gap-2">
+      {error && <p className="text-xs text-destructive">{error}</p>}
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <Button variant="ghost" size="icon-sm" disabled={pending} />
+          }
+        >
+          <MoreHorizontal />
+          <span className="sr-only">Row actions</span>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem disabled={item.status === "received"} onClick={onAccept}>
+            Accept anyway
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled={!isOutstanding} onClick={onRequestReupload}>
+            Request re-upload
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            variant="destructive"
+            onClick={() => setConfirmingWaive(true)}
+          >
+            Waive requirement
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <Dialog open={confirmingWaive} onOpenChange={setConfirmingWaive}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Waive requirement</DialogTitle>
+            <DialogDescription>
+              This removes “{item.doc_type_needed}” from this client’s
+              checklist. Any document already matched to it stays on file,
+              but the requirement itself can’t be recovered.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmingWaive(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={onWaive} disabled={pending}>
+              {pending ? "Waiving…" : "Waive requirement"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
 function CommunicationCard({
+  clientId,
   client,
   threads,
   onChange,
 }: {
-  client: ClientDetail;
+  clientId: number;
+  client: ClientDetail | null;
   threads: EmailThread[] | null;
   onChange: () => void;
 }) {
@@ -362,7 +521,7 @@ function CommunicationCard({
     setSending(true);
     setMessage(null);
     try {
-      await sendChecklistReminder(client.id);
+      await sendChecklistReminder(clientId);
       setMessage("Reminder sent — check the Email Log.");
       onChange();
     } catch (e) {
@@ -381,7 +540,13 @@ function CommunicationCard({
           </Button>
           {message && <p className="text-sm text-muted-foreground">{message}</p>}
         </div>
-        <p className="text-xs text-muted-foreground">
+        {client === null ? (
+          <Skeleton className="h-3 w-40" />
+        ) : (
+        <p
+          className="text-xs text-muted-foreground animate-blur-in-sm"
+          style={{ animationDelay: "120ms" }}
+        >
           Last sent:{" "}
           {client.last_reminder_sent_at
             ? new Date(client.last_reminder_sent_at).toLocaleString()
@@ -395,6 +560,7 @@ function CommunicationCard({
             </>
           )}
         </p>
+        )}
       </div>
 
       <Separator className="bg-border/60" />
@@ -412,8 +578,20 @@ function CommunicationCard({
 function ThreadsList({ threads }: { threads: EmailThread[] | null }) {
   const [expandedThread, setExpandedThread] = useState<string | null>(null);
 
+  if (threads === null) {
+    return (
+      <div className="flex flex-col gap-2">
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-10 w-full" />
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col divide-y divide-border/50 rounded-lg border border-border/60">
+    <div
+      className="flex flex-col divide-y divide-border/50 rounded-lg border border-border/60 animate-blur-in-sm"
+      style={{ animationDelay: "120ms" }}
+    >
       {threads?.map((thread) => {
         const latest = thread.messages[thread.messages.length - 1];
         const isOpen = expandedThread === thread.thread_key;
@@ -485,13 +663,14 @@ function ThreadsList({ threads }: { threads: EmailThread[] | null }) {
 function DocumentVaultCard({
   clientId,
   documents,
+  checklist,
   onChange,
 }: {
   clientId: number;
   documents: DocumentOut[] | null;
+  checklist: ChecklistSummary | null;
   onChange: () => void;
 }) {
-  const [file, setFile] = useState<File | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<DocumentUploadResult | null>(null);
@@ -505,7 +684,6 @@ function DocumentVaultCard({
     try {
       const res = await uploadDocument(clientId, f);
       setResult(res);
-      setFile(null);
       onChange();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : String(e));
@@ -514,9 +692,29 @@ function DocumentVaultCard({
     }
   };
 
+  const itemsById = useMemo(() => {
+    const map: Record<number, ChecklistItem> = {};
+    for (const item of checklist?.items ?? []) map[item.id] = item;
+    return map;
+  }, [checklist]);
+
+  const latestDocIdByItem = useMemo(() => {
+    const map: Record<number, { id: number; received_at: string }> = {};
+    for (const doc of documents ?? []) {
+      if (doc.checklist_item_id === null) continue;
+      const existing = map[doc.checklist_item_id];
+      if (!existing || doc.received_at > existing.received_at) {
+        map[doc.checklist_item_id] = { id: doc.id, received_at: doc.received_at };
+      }
+    }
+    return map;
+  }, [documents]);
+
   return (
     <SectionCard title="Document vault">
       <div
+        role="button"
+        tabIndex={0}
         onDragOver={(e) => {
           e.preventDefault();
           setDragOver(true);
@@ -526,9 +724,12 @@ function DocumentVaultCard({
           e.preventDefault();
           setDragOver(false);
           const dropped = e.dataTransfer.files?.[0];
-          if (dropped) setFile(dropped);
+          if (dropped) onUpload(dropped);
         }}
         onClick={() => fileInputRef.current?.click()}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") fileInputRef.current?.click();
+        }}
         className={cn(
           "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-6 py-10 text-center transition-colors",
           dragOver
@@ -541,12 +742,16 @@ function DocumentVaultCard({
           type="file"
           accept="application/pdf,image/jpeg,image/png,image/gif,image/webp"
           className="hidden"
-          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+          onChange={(e) => {
+            const picked = e.target.files?.[0];
+            if (picked) onUpload(picked);
+            e.target.value = "";
+          }}
         />
         <UploadCloud className="size-6 text-muted-foreground" />
         <p className="text-sm text-muted-foreground">
-          {file ? (
-            <span className="font-medium text-foreground">{file.name}</span>
+          {submitting ? (
+            "Uploading…"
           ) : (
             <>
               <span className="font-medium text-foreground">Click to upload</span>{" "}
@@ -554,21 +759,6 @@ function DocumentVaultCard({
             </>
           )}
         </p>
-      </div>
-
-      <div className="flex items-center gap-3">
-        <Button
-          variant="outline"
-          disabled={submitting || !file}
-          onClick={() => file && onUpload(file)}
-        >
-          {submitting ? "Uploading…" : "Upload"}
-        </Button>
-        {file && (
-          <Button variant="ghost" size="sm" onClick={() => setFile(null)}>
-            Clear
-          </Button>
-        )}
       </div>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
@@ -595,58 +785,92 @@ function DocumentVaultCard({
 
       <Separator className="bg-border/60" />
 
-      <table className="w-full border-collapse text-sm">
+      {documents === null ? (
+        <div className="flex flex-col gap-2">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <Skeleton key={i} className="h-9 w-full" />
+          ))}
+        </div>
+      ) : (
+      <table
+        className="w-full border-collapse text-sm animate-blur-in-sm"
+        style={{ animationDelay: "180ms" }}
+      >
         <thead>
           <tr className="border-b border-border/60 text-left">
-            <th className="py-2 pr-4 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+            <th className="py-1.5 pr-4 text-xs font-medium tracking-wide text-muted-foreground uppercase">
               Type
             </th>
-            <th className="py-2 pr-4 text-right text-xs font-medium tracking-wide text-muted-foreground uppercase">
+            <th className="py-1.5 pr-4 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+              Status
+            </th>
+            <th className="py-1.5 pr-4 text-right text-xs font-medium tracking-wide text-muted-foreground uppercase">
               Year
             </th>
-            <th className="py-2 pr-4 text-right text-xs font-medium tracking-wide text-muted-foreground uppercase">
+            <th className="py-1.5 pr-4 text-right text-xs font-medium tracking-wide text-muted-foreground uppercase">
               Received
             </th>
-            <th className="py-2 pr-4" />
+            <th className="py-1.5 pr-4" />
           </tr>
         </thead>
         <tbody>
-          {documents?.map((doc) => (
-            <tr key={doc.id} className="border-b border-border/40">
-              <td className="py-3 pr-4 font-medium">
-                {doc.classified_type ?? "unknown"}
-              </td>
-              <td className="py-3 pr-4 text-right text-muted-foreground">
-                {doc.year ?? "—"}
-              </td>
-              <td className="py-3 pr-4 text-right text-muted-foreground">
-                {new Date(doc.received_at).toLocaleString()}
-              </td>
-              <td className="py-3 pr-4">
-                {doc.download_url ? (
-                  <a
-                    href={doc.download_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="underline underline-offset-4"
-                  >
-                    View
-                  </a>
-                ) : (
-                  <span className="text-muted-foreground">unavailable</span>
-                )}
-              </td>
-            </tr>
-          ))}
+          {documents?.map((doc) => {
+            const item =
+              doc.checklist_item_id !== null
+                ? itemsById[doc.checklist_item_id]
+                : undefined;
+            const isLatestForItem =
+              doc.checklist_item_id !== null &&
+              latestDocIdByItem[doc.checklist_item_id]?.id === doc.id;
+            const rejected =
+              !!item && ((isLatestForItem && item.status === "wrong") || !isLatestForItem);
+            return (
+              <tr key={doc.id} className="border-b border-border/40">
+                <td className="py-2 pr-4 font-medium">
+                  {doc.classified_type ?? "unknown"}
+                </td>
+                <td className="py-2 pr-4">
+                  {rejected ? (
+                    <span className="inline-flex items-center rounded-full bg-red-100 px-2.5 py-1 text-xs font-medium text-red-800 dark:bg-red-950/40 dark:text-red-400">
+                      Rejected
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
+                </td>
+                <td className="py-2 pr-4 text-right text-muted-foreground">
+                  {doc.year ?? "—"}
+                </td>
+                <td className="py-2 pr-4 text-right text-muted-foreground">
+                  {new Date(doc.received_at).toLocaleString()}
+                </td>
+                <td className="py-2 pr-4">
+                  {doc.download_url ? (
+                    <a
+                      href={doc.download_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="underline underline-offset-4"
+                    >
+                      View
+                    </a>
+                  ) : (
+                    <span className="text-muted-foreground">unavailable</span>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
           {documents?.length === 0 && (
             <tr>
-              <td colSpan={4} className="py-4 text-muted-foreground">
+              <td colSpan={5} className="py-4 text-muted-foreground">
                 No documents uploaded yet.
               </td>
             </tr>
           )}
         </tbody>
       </table>
+      )}
     </SectionCard>
   );
 }
@@ -657,8 +881,17 @@ function MemoryNotesCard({ notes }: { notes: ClientMemoryNote[] | null }) {
       title="What we know about this client"
       subtitle="Durable facts the AI has extracted from this client's emails, used to inform future Q&A answers."
     >
-      <div className="flex flex-col gap-2">
-        {notes?.map((note) => (
+      {notes === null ? (
+        <div className="flex flex-col gap-2">
+          <Skeleton className="h-4 w-2/3" />
+          <Skeleton className="h-4 w-1/2" />
+        </div>
+      ) : (
+      <div
+        className="flex flex-col gap-2 animate-blur-in-sm"
+        style={{ animationDelay: "240ms" }}
+      >
+        {notes.map((note) => (
           <div
             key={note.id}
             className="rounded-lg border border-border/60 bg-muted/30 px-3.5 py-2.5 text-sm"
@@ -669,10 +902,11 @@ function MemoryNotesCard({ notes }: { notes: ClientMemoryNote[] | null }) {
             </p>
           </div>
         ))}
-        {notes?.length === 0 && (
+        {notes.length === 0 && (
           <p className="text-sm text-muted-foreground">No memory notes yet.</p>
         )}
       </div>
+      )}
     </SectionCard>
   );
 }
