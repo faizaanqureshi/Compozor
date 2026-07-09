@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import useSWR from "swr";
 import { Check } from "lucide-react";
 import { GmailIcon } from "@/components/icons/gmail";
+import { inboxConnectionsKey, organizationKey } from "@/lib/swr-keys";
 import {
   ApiError,
   AutomationLevel,
@@ -296,38 +298,45 @@ function GmailSection({
 }
 
 export default function SettingsPage() {
-  const [org, setOrg] = useState<Organization | null>(null);
+  const {
+    data: org,
+    error: orgFetchError,
+    mutate: mutateOrg,
+  } = useSWR(organizationKey(), getMyOrganization);
   const [savingAutomation, setSavingAutomation] = useState(false);
   const [savingInterval, setSavingInterval] = useState(false);
   const [orgError, setOrgError] = useState<string | null>(null);
 
-  const [connections, setConnections] = useState<InboxConnection[] | null>(
-    null
-  );
+  const {
+    data: connections,
+    error: connectionsFetchError,
+    mutate: mutateConnections,
+  } = useSWR(inboxConnectionsKey(), listInboxConnections);
   const [gmailError, setGmailError] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
-  useEffect(() => {
-    getMyOrganization()
-      .then(setOrg)
-      .catch((e) => setOrgError(e instanceof ApiError ? e.message : String(e)));
-  }, []);
-
-  const refreshConnections = () => {
-    listInboxConnections()
-      .then(setConnections)
-      .catch((e) => setGmailError(e instanceof ApiError ? e.message : String(e)));
-  };
-
-  useEffect(refreshConnections, []);
+  const orgErrorMessage =
+    orgError ??
+    (orgFetchError
+      ? orgFetchError instanceof ApiError
+        ? orgFetchError.message
+        : String(orgFetchError)
+      : null);
+  const gmailErrorMessage =
+    gmailError ??
+    (connectionsFetchError
+      ? connectionsFetchError instanceof ApiError
+        ? connectionsFetchError.message
+        : String(connectionsFetchError)
+      : null);
 
   const onChangeAutomation = async (level: AutomationLevel) => {
     setSavingAutomation(true);
     setOrgError(null);
     try {
       const updated = await updateMyOrganization({ automation_level: level });
-      setOrg(updated);
+      mutateOrg(updated, { revalidate: false });
     } catch (e) {
       setOrgError(e instanceof ApiError ? e.message : String(e));
     } finally {
@@ -340,7 +349,7 @@ export default function SettingsPage() {
     setOrgError(null);
     try {
       const updated = await updateMyOrganization({ reminder_interval_days: days });
-      setOrg(updated);
+      mutateOrg(updated, { revalidate: false });
     } catch (e) {
       setOrgError(e instanceof ApiError ? e.message : String(e));
     } finally {
@@ -364,7 +373,7 @@ export default function SettingsPage() {
     setDeletingId(id);
     try {
       await deleteInboxConnection(id);
-      refreshConnections();
+      mutateConnections();
     } catch (e) {
       setGmailError(e instanceof ApiError ? e.message : String(e));
     } finally {
@@ -385,23 +394,23 @@ export default function SettingsPage() {
 
       <div className="flex w-full flex-col gap-6">
         <AutomationSection
-          current={org}
-          error={orgError}
+          current={org ?? null}
+          error={orgErrorMessage}
           savingAutomation={savingAutomation}
           onChangeAutomation={onChangeAutomation}
         />
 
         <ReminderSection
           key={org?.id ?? "loading"}
-          current={org}
+          current={org ?? null}
           savingInterval={savingInterval}
-          error={orgError}
+          error={orgErrorMessage}
           onSaveInterval={onSaveInterval}
         />
 
         <GmailSection
-          connections={connections}
-          error={gmailError}
+          connections={connections ?? null}
+          error={gmailErrorMessage}
           connecting={connecting}
           deletingId={deletingId}
           onConnect={onConnect}

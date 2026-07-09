@@ -1,6 +1,8 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
+import useSWR from "swr";
+import { clientsKey, unmatchedEmailsKey } from "@/lib/swr-keys";
 import {
   Ban,
   Bot,
@@ -356,30 +358,30 @@ export default function UnmatchedEmailsPage() {
     "needs_review"
   );
   const [category, setCategory] = useState<InboundEmailCategory | "all">("all");
-  const [emails, setEmails] = useState<UnmatchedInboundEmail[] | null>(null);
-  const [clients, setClients] = useState<Client[]>([]);
-  const [error, setError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<number | null>(null);
 
-  const refresh = () => {
-    listUnmatchedInboundEmails({
-      review_status: reviewStatus === "all" ? undefined : reviewStatus,
-      category: category === "all" ? undefined : category,
-    })
-      .then(setEmails)
-      .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
+  const filters = {
+    review_status: reviewStatus === "all" ? undefined : reviewStatus,
+    category: category === "all" ? undefined : category,
   };
+  const {
+    data: emails,
+    error: emailsError,
+    isLoading: emailsLoading,
+    mutate: mutateEmails,
+  } = useSWR(unmatchedEmailsKey(filters), () => listUnmatchedInboundEmails(filters));
+  const { data: clientsData } = useSWR(clientsKey(), listClients);
+  const clients = clientsData ?? [];
+  const emailsList = emails ?? [];
+  const error = emailsError
+    ? emailsError instanceof ApiError
+      ? emailsError.message
+      : String(emailsError)
+    : null;
 
-  useEffect(refresh, [reviewStatus, category]);
-  useEffect(() => {
-    listClients()
-      .then(setClients)
-      .catch(() => {});
-  }, []);
-
-  const onResolved = (id: number) => {
+  const onResolved = () => {
     setExpandedId(null);
-    refresh();
+    mutateEmails();
   };
 
   return (
@@ -412,7 +414,7 @@ export default function UnmatchedEmailsPage() {
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
-      {emails === null ? (
+      {emailsLoading ? (
         <table className="w-full border-collapse text-sm">
           <thead>
             <tr className="border-b border-border text-left">
@@ -440,7 +442,7 @@ export default function UnmatchedEmailsPage() {
             ))}
           </tbody>
         </table>
-      ) : emails.length === 0 ? (
+      ) : emailsList.length === 0 ? (
         <EmptyState />
       ) : (
         <table className="w-full border-collapse text-sm">
@@ -461,7 +463,7 @@ export default function UnmatchedEmailsPage() {
             </tr>
           </thead>
           <tbody>
-            {emails.map((email, i) => {
+            {emailsList.map((email, i) => {
               const isOpen = expandedId === email.id;
               return (
                 <Fragment key={email.id}>
@@ -506,7 +508,7 @@ export default function UnmatchedEmailsPage() {
                           <TriageActions
                             email={email}
                             clients={clients}
-                            onResolved={() => onResolved(email.id)}
+                            onResolved={onResolved}
                           />
                         </div>
                       </td>

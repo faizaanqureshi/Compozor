@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import useSWR from "swr";
 import { AlertTriangle, ArrowDownLeft, ArrowUpRight, Paperclip, Sparkles } from "lucide-react";
+import { clientsKey, emailLogKey } from "@/lib/swr-keys";
 import {
   ApiError,
   Client,
@@ -66,33 +68,31 @@ type Thread = {
 
 export default function EmailLogPage() {
   const [status, setStatus] = useState<EmailStatus | "all">("all");
-  const [entries, setEntries] = useState<EmailLogEntry[] | null>(null);
-  const [clients, setClients] = useState<Client[]>([]);
-  const [error, setError] = useState<string | null>(null);
   const [sendingId, setSendingId] = useState<number | null>(null);
   const [rowError, setRowError] = useState<Record<number, string>>({});
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [bulkSending, setBulkSending] = useState(false);
 
-  const refresh = () => {
-    listEmailLog(status === "all" ? undefined : status)
-      .then(setEntries)
-      .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
-  };
-
-  useEffect(refresh, [status]);
-  useEffect(() => {
-    listClients()
-      .then(setClients)
-      .catch(() => {});
-  }, []);
+  const filterStatus = status === "all" ? undefined : status;
+  const {
+    data: entries,
+    error: entriesError,
+    isLoading: entriesLoading,
+    mutate: mutateEntries,
+  } = useSWR(emailLogKey(filterStatus), () => listEmailLog(filterStatus));
+  const { data: clientsData } = useSWR(clientsKey(), listClients);
+  const error = entriesError
+    ? entriesError instanceof ApiError
+      ? entriesError.message
+      : String(entriesError)
+    : null;
 
   const clientsById = useMemo(() => {
     const map: Record<number, Client> = {};
-    for (const c of clients) map[c.id] = c;
+    for (const c of clientsData ?? []) map[c.id] = c;
     return map;
-  }, [clients]);
+  }, [clientsData]);
 
   const threads = useMemo<Thread[]>(() => {
     if (!entries) return [];
@@ -136,14 +136,14 @@ export default function EmailLogPage() {
   }, [status]);
 
   const selectedThread = threads.find((t) => t.key === selectedKey) ?? null;
-  const loading = entries === null;
+  const loading = entriesLoading;
 
   const onSend = async (entry: EmailLogEntry) => {
     setSendingId(entry.id);
     setRowError((prev) => ({ ...prev, [entry.id]: "" }));
     try {
       await sendEmailLogEntry(entry.client_id, entry.id);
-      refresh();
+      mutateEntries();
     } catch (e) {
       setRowError((prev) => ({
         ...prev,
@@ -183,7 +183,7 @@ export default function EmailLogPage() {
     await Promise.allSettled(selectedDrafts.map((m) => sendEmailLogEntry(m.client_id, m.id)));
     setBulkSending(false);
     setSelectedKeys(new Set());
-    refresh();
+    mutateEntries();
   };
 
   return (

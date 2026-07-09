@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import useSWR from "swr";
+import { clientsKey, emailLogKey } from "@/lib/swr-keys";
 import {
   AlertTriangle,
   ArrowUp,
@@ -17,7 +19,6 @@ import {
   ChecklistSummary,
   Client,
   ClientStatus,
-  ClientWithChecklistSummary,
   EmailLogEntry,
   createClient,
   listClients,
@@ -96,8 +97,18 @@ function deriveWorkflowStatus(
 
 export default function ClientsPage() {
   const router = useRouter();
-  const [clients, setClients] = useState<ClientWithChecklistSummary[] | null>(null);
-  const [emailLog, setEmailLog] = useState<EmailLogEntry[] | null>(null);
+  const {
+    data: clients,
+    error: clientsError,
+    isLoading: clientsLoading,
+    mutate: mutateClients,
+  } = useSWR(clientsKey(), listClients);
+  const {
+    data: emailLog,
+    error: emailLogError,
+    isLoading: emailLogLoading,
+    mutate: mutateEmailLog,
+  } = useSWR(emailLogKey(), () => listEmailLog());
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -159,16 +170,15 @@ export default function ClientsPage() {
     })();
   }, []);
 
-  const refresh = () => {
-    listClients()
-      .then(setClients)
-      .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
-    listEmailLog()
-      .then(setEmailLog)
-      .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
-  };
-
-  useEffect(refresh, []);
+  const fetchError = clientsError
+    ? clientsError instanceof ApiError
+      ? clientsError.message
+      : String(clientsError)
+    : emailLogError
+      ? emailLogError instanceof ApiError
+        ? emailLogError.message
+        : String(emailLogError)
+      : null;
 
   const clientsById = useMemo(() => {
     const map: Record<number, Client> = {};
@@ -293,7 +303,8 @@ export default function ClientsPage() {
       setEmail("");
       setStatus("pending");
       setOpen(false);
-      refresh();
+      mutateClients();
+      mutateEmailLog();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : String(e));
     } finally {
@@ -301,7 +312,7 @@ export default function ClientsPage() {
     }
   };
 
-  const loading = clients === null || emailLog === null;
+  const loading = clientsLoading || emailLogLoading;
 
   const sendReminder = async (e: React.MouseEvent, clientId: number) => {
     e.preventDefault();
@@ -416,7 +427,9 @@ export default function ClientsPage() {
         </Dialog>
       </div>
 
-      {error && !open && <p className="text-sm text-destructive">{error}</p>}
+      {(error || fetchError) && !open && (
+        <p className="text-sm text-destructive">{error || fetchError}</p>
+      )}
 
       <section className="flex flex-col gap-4">
         <div className="flex items-center gap-2 text-xs font-medium tracking-wide text-amber-600 uppercase dark:text-amber-500">
