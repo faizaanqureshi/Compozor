@@ -39,7 +39,8 @@ export function Nav() {
   if (
     pathname === "/" ||
     pathname.startsWith("/sign-in") ||
-    pathname.startsWith("/sign-up")
+    pathname.startsWith("/sign-up") ||
+    pathname.startsWith("/onboarding")
   )
     return null;
 
@@ -106,7 +107,7 @@ export function Nav() {
 
       <div className="flex flex-col gap-2 border-t border-sidebar-foreground/10 pt-4">
         <Show when="signed-out">
-          <SignInButton>
+          <SignInButton fallbackRedirectUrl="/clients">
             <Button
               variant="ghost"
               size="sm"
@@ -116,7 +117,7 @@ export function Nav() {
             </Button>
           </SignInButton>
           {!collapsed && (
-            <SignUpButton>
+            <SignUpButton fallbackRedirectUrl="/clients">
               <Button size="sm" className="w-full">
                 Sign up
               </Button>

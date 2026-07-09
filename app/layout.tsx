@@ -2,6 +2,7 @@ import {ClerkProvider} from "@clerk/nextjs";
 import type { Metadata } from "next";
 import "./globals.css";
 import { Nav } from "@/components/nav";
+import { OnboardingGate } from "@/components/onboarding-gate";
 import localFont from "next/font/local";
 import { cn } from "@/lib/utils";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -52,12 +53,14 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         <ClerkProvider>
           <TooltipProvider>
-            <div className="flex min-h-full flex-1">
-              <Nav />
-              <div className="relative isolate flex-1 overflow-x-hidden">
-                <main className="relative p-8 md:p-10">{children}</main>
+            <OnboardingGate>
+              <div className="flex min-h-full flex-1">
+                <Nav />
+                <div className="relative isolate flex-1 overflow-x-hidden">
+                  <main className="relative p-8 md:p-10">{children}</main>
+                </div>
               </div>
-            </div>
+            </OnboardingGate>
           </TooltipProvider>
         </ClerkProvider>
       </body>

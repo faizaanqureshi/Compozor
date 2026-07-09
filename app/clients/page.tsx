@@ -22,7 +22,9 @@ import {
   createClient,
   listClients,
   listEmailLog,
+  listInboxConnections,
   sendChecklistReminder,
+  watchInboxConnection,
 } from "@/lib/api";
 import { cn, formatRelativeTime } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -109,6 +111,53 @@ export default function ClientsPage() {
   const [reminderState, setReminderState] = useState<
     Record<number, "sending" | "sent">
   >({});
+
+  const [gmailBanner, setGmailBanner] = useState<
+    { type: "success" | "error"; message: string } | null
+  >(null);
+
+  // The Gmail OAuth callback always redirects the browser here (see
+  // FRONTEND_CONTEXT.md "Gmail connection"), whether the connect flow was
+  // started from onboarding or from settings. Starting push notifications
+  // isn't automatic on connect, so this is also the one place responsible
+  // for kicking that off.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const gmailStatus = params.get("gmail");
+    if (!gmailStatus) return;
+
+    const email = params.get("email");
+    const reason = params.get("reason");
+    window.history.replaceState({}, "", window.location.pathname);
+
+    (async () => {
+      if (gmailStatus === "connected") {
+        try {
+          const connections = await listInboxConnections();
+          const match = email
+            ? connections.find(
+                (c) => c.email_address.toLowerCase() === email.toLowerCase()
+              )
+            : connections[0];
+          if (match) await watchInboxConnection(match.id);
+          setGmailBanner({
+            type: "success",
+            message: `Connected ${email ?? "your mailbox"}.`,
+          });
+        } catch (e) {
+          setGmailBanner({
+            type: "error",
+            message: e instanceof ApiError ? e.message : String(e),
+          });
+        }
+      } else if (gmailStatus === "error") {
+        setGmailBanner({
+          type: "error",
+          message: reason ?? "Failed to connect Gmail.",
+        });
+      }
+    })();
+  }, []);
 
   const refresh = () => {
     listClients()
@@ -272,6 +321,24 @@ export default function ClientsPage() {
 
   return (
     <div className="flex w-full flex-col gap-8">
+      {gmailBanner && (
+        <div
+          className={cn(
+            "flex items-center justify-between gap-4 rounded-lg border px-4 py-3 text-sm",
+            gmailBanner.type === "success"
+              ? "border-accent/30 bg-accent/[0.06] text-accent"
+              : "border-destructive/30 bg-destructive/[0.06] text-destructive"
+          )}
+        >
+          <span>{gmailBanner.message}</span>
+          <button
+            onClick={() => setGmailBanner(null)}
+            className="text-xs font-medium underline-offset-4 hover:underline"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
       <div className="flex items-end justify-between">
         <div className="flex flex-col gap-2">
           <h1 className="text-6xl font-thin tracking-tight [font-family:var(--font-denton)]">

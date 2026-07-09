@@ -1,6 +1,15 @@
 import { SignUp } from "@clerk/nextjs";
 import { AuroraBackground } from "@/components/aurora-background";
 
+// See app/sign-in - a redirect_url of "/" comes from buttons clicked on the
+// landing page, and the query param outranks fallbackRedirectUrl in Clerk's
+// resolution order, so it must be actively overridden, not just omitted.
+function meaningfulRedirect(redirectUrl: string | undefined) {
+  if (!redirectUrl) return undefined;
+  const path = new URL(redirectUrl, "http://localhost").pathname;
+  return path === "/" ? "/clients" : redirectUrl;
+}
+
 export default async function SignUpPage({
   searchParams,
 }: {
@@ -12,7 +21,10 @@ export default async function SignUpPage({
     <div className="fixed inset-0 isolate overflow-hidden bg-background">
       <AuroraBackground />
       <div className="relative flex h-full items-center justify-center">
-        <SignUp forceRedirectUrl={redirect_url} />
+        <SignUp
+          forceRedirectUrl={meaningfulRedirect(redirect_url)}
+          fallbackRedirectUrl="/clients"
+        />
       </div>
     </div>
   );

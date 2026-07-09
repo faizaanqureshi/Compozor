@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Check } from "lucide-react";
+import { GmailIcon } from "@/components/icons/gmail";
 import {
   ApiError,
   AutomationLevel,
@@ -285,6 +286,7 @@ function GmailSection({
         >
           <p className="text-sm text-muted-foreground">No mailbox connected.</p>
           <Button onClick={onConnect} disabled={connecting}>
+            <GmailIcon className="size-4" />
             {connecting ? "Redirecting…" : "Connect Gmail"}
           </Button>
         </div>

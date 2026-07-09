@@ -103,7 +103,7 @@ export function LandingNav() {
             </Button>
           </Show>
           <Show when="signed-out">
-            <SignInButton>
+            <SignInButton forceRedirectUrl="/clients">
               <Button size="sm" variant="outline" className="px-2.5 sm:px-3">
                 Sign in
               </Button>

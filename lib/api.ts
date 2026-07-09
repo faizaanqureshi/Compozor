@@ -96,6 +96,9 @@ export interface Organization {
   name: string;
   automation_level: AutomationLevel;
   reminder_interval_days: number | null;
+  practice_description: string | null;
+  jurisdiction: string | null;
+  onboarding_completed_at: string | null;
 }
 
 export interface Client {
@@ -237,8 +240,12 @@ export interface InboxConnection {
 export const getMyOrganization = () => request<Organization>("/organizations/me");
 
 export const updateMyOrganization = (input: {
+  name?: string;
   automation_level?: AutomationLevel;
   reminder_interval_days?: number | null;
+  practice_description?: string;
+  jurisdiction?: string;
+  onboarding_completed?: boolean;
 }) => request<Organization>("/organizations/me", json("PATCH", input));
 
 export const deleteMyOrganization = () =>
@@ -409,3 +416,6 @@ export const listInboxConnections = () =>
 
 export const deleteInboxConnection = (connectionId: number) =>
   request<void>(`/inbox-connections/${connectionId}`, { method: "DELETE" });
+
+export const watchInboxConnection = (connectionId: number) =>
+  request<void>(`/inbox-connections/${connectionId}/watch`, { method: "POST" });
