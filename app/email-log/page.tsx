@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, ArrowDownLeft, ArrowUpRight, Sparkles } from "lucide-react";
+import { AlertTriangle, ArrowDownLeft, ArrowUpRight, Paperclip, Sparkles } from "lucide-react";
 import {
   ApiError,
   Client,
+  DocumentOut,
   EmailLogEntry,
   EmailStatus,
   listClients,
@@ -451,6 +452,13 @@ function MessageCard({
       <p className="whitespace-pre-wrap text-sm text-foreground/80">
         {entry.content || "(no body)"}
       </p>
+      {entry.documents.length > 0 && (
+        <div className="flex flex-col gap-1.5">
+          {entry.documents.map((doc) => (
+            <AttachmentRow key={doc.id} doc={doc} />
+          ))}
+        </div>
+      )}
       {entry.status === "draft" && (
         <div>
           <Button size="sm" disabled={sending} onClick={onSend}>
@@ -460,6 +468,39 @@ function MessageCard({
       )}
       {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
+  );
+}
+
+function attachmentFilename(doc: DocumentOut) {
+  const path = doc.s3_path.split("/").pop() ?? doc.s3_path;
+  return path.replace(/^[a-f0-9-]{20,}[-_]/i, "");
+}
+
+function AttachmentRow({ doc }: { doc: DocumentOut }) {
+  const filename = attachmentFilename(doc);
+  const content = (
+    <span className="inline-flex min-w-0 items-center gap-1.5 rounded-md border border-border/50 bg-muted/30 px-2 py-1 text-xs">
+      <Paperclip className="size-3 shrink-0 text-muted-foreground/70" />
+      <span className="truncate">{filename}</span>
+      {doc.classified_type && (
+        <span className="shrink-0 truncate text-muted-foreground">
+          · {doc.classified_type}
+        </span>
+      )}
+    </span>
+  );
+
+  if (!doc.download_url) return content;
+
+  return (
+    <a
+      href={doc.download_url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="w-fit transition-opacity hover:opacity-70"
+    >
+      {content}
+    </a>
   );
 }
 

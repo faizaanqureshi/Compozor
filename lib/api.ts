@@ -140,6 +140,7 @@ export interface DocumentOut {
   id: number;
   client_id: number;
   checklist_item_id: number | null;
+  email_log_id: number | null;
   s3_path: string;
   classified_type: string | null;
   year: number | null;
@@ -190,6 +191,7 @@ export interface EmailLogEntry {
   autosend_error: string | null;
   tool_trajectory: ToolTrajectoryStep[] | null;
   created_at: string;
+  documents: DocumentOut[];
 }
 
 export interface EmailThread {
