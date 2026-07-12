@@ -339,6 +339,34 @@ export const uploadDocument = (clientId: number, file: File) => {
 export const listClientDocuments = (clientId: number) =>
   request<DocumentOut[]>(`/clients/${clientId}/documents`);
 
+// Bypasses request<T>() (which always calls res.json()) since this returns
+// a binary .zip, not JSON - fetches it as a blob with the same auth header
+// and triggers the browser's normal download prompt, reading the filename
+// the backend already picked (client name + today's date) off the
+// Content-Disposition header rather than re-deriving it here.
+export const downloadClientDocumentsZip = async (clientId: number) => {
+  const token = await getAuthToken();
+  const headers = new Headers();
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+
+  const res = await fetch(`${API_BASE_URL}/clients/${clientId}/documents/zip`, { headers });
+  if (!res.ok) {
+    throw new ApiError(res.status, `${res.status} ${res.statusText}`);
+  }
+
+  const disposition = res.headers.get("Content-Disposition") ?? "";
+  const match = disposition.match(/filename="(.+)"/);
+  const filename = match?.[1] ?? `documents-${clientId}.zip`;
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+};
+
 // ---------- Email replies ----------
 
 export const submitEmailReply = (
@@ -377,6 +405,16 @@ export const sendEmailLogEntry = (clientId: number, emailLogId: number) =>
   request<EmailLogEntry>(
     `/clients/${clientId}/email-log/${emailLogId}/send`,
     { method: "POST" }
+  );
+
+export const updateEmailLogEntry = (
+  clientId: number,
+  emailLogId: number,
+  update: { content: string; subject?: string | null }
+) =>
+  request<EmailLogEntry>(
+    `/clients/${clientId}/email-log/${emailLogId}`,
+    json("PATCH", update)
   );
 
 export const listEmailThreads = (clientId: number) =>

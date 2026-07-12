@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
-import { AlertTriangle, ArrowDownLeft, ArrowUpRight, Loader2, Paperclip, Sparkles } from "lucide-react";
+import { AlertTriangle, ArrowDownLeft, ArrowUpRight, Loader2, Paperclip, Pencil, Sparkles } from "lucide-react";
 import { clientsKey, emailLogKey } from "@/lib/swr-keys";
 import {
   ApiError,
@@ -17,11 +17,20 @@ import {
   listEmailLog,
   sendEmailLogEntry,
   subscribeToEmailLogStream,
+  updateEmailLogEntry,
 } from "@/lib/api";
 import { cn, formatRelativeTime } from "@/lib/utils";
 import { AgentActivityDisclosure, TraceStep } from "@/components/agent-activity-disclosure";
+import { EmailDraftEditor } from "@/components/email-draft-editor";
 import { Linkify } from "@/components/linkify";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Tooltip,
@@ -94,6 +103,7 @@ export default function EmailLogPage() {
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [bulkSending, setBulkSending] = useState(false);
+  const [editingEntry, setEditingEntry] = useState<EmailLogEntry | null>(null);
 
   const filterStatus = status === "all" ? undefined : status;
   const {
@@ -305,6 +315,13 @@ export default function EmailLogPage() {
     }
   };
 
+  const onSaveDraft = async (content: string) => {
+    if (!editingEntry) return;
+    await updateEmailLogEntry(editingEntry.client_id, editingEntry.id, { content });
+    setEditingEntry(null);
+    mutateEntries();
+  };
+
   const toggleThreadSelection = (key: string) => {
     setSelectedKeys((prev) => {
       const next = new Set(prev);
@@ -466,6 +483,7 @@ export default function EmailLogPage() {
                     sending={sendingId === entry.id}
                     error={rowError[entry.id]}
                     onSend={() => onSend(entry)}
+                    onEdit={() => setEditingEntry(entry)}
                   />
                 ))}
                 {liveRuns[selectedThread.key] && (
@@ -480,6 +498,14 @@ export default function EmailLogPage() {
           )}
         </div>
       </div>
+
+      <DraftEditDialog
+        entry={editingEntry}
+        onOpenChange={(open) => {
+          if (!open) setEditingEntry(null);
+        }}
+        onSave={onSaveDraft}
+      />
     </div>
   );
 }
@@ -572,11 +598,13 @@ function MessageCard({
   sending,
   error,
   onSend,
+  onEdit,
 }: {
   entry: EmailLogEntry;
   sending: boolean;
   error?: string;
   onSend: () => void;
+  onEdit: () => void;
 }) {
   return (
     <div className="flex flex-col gap-2.5 rounded-lg border border-border/50 p-4">
@@ -623,9 +651,13 @@ function MessageCard({
         </div>
       )}
       {entry.status === "draft" && (
-        <div>
+        <div className="flex items-center gap-2">
           <Button size="sm" disabled={sending} onClick={onSend}>
             {sending ? "Sending…" : "Send"}
+          </Button>
+          <Button size="sm" variant="outline" disabled={sending} onClick={onEdit}>
+            <Pencil className="size-3.5" />
+            Edit
           </Button>
         </div>
       )}
@@ -747,5 +779,63 @@ function AutosendCell({ entry }: { entry: EmailLogEntry }) {
         </Tooltip>
       )}
     </div>
+  );
+}
+
+function DraftEditDialog({
+  entry,
+  onOpenChange,
+  onSave,
+}: {
+  entry: EmailLogEntry | null;
+  onOpenChange: (open: boolean) => void;
+  onSave: (content: string) => Promise<void>;
+}) {
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (entry) {
+      setDraft(entry.content);
+      setError(null);
+    }
+  }, [entry]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      await onSave(draft);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={entry !== null} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-xl">
+        <DialogHeader>
+          <DialogTitle>Edit draft</DialogTitle>
+          {entry?.to_email && (
+            <p className="text-sm text-muted-foreground">To {entry.to_email}</p>
+          )}
+        </DialogHeader>
+        {entry && (
+          <EmailDraftEditor content={draft} onChange={setDraft} autoFocus />
+        )}
+        {error && <p className="text-sm text-destructive">{error}</p>}
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
+            Cancel
+          </Button>
+          <Button onClick={handleSave} disabled={saving || !draft.trim()}>
+            {saving ? "Saving…" : "Save draft"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

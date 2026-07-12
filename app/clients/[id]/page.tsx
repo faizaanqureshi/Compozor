@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   ChevronDown,
+  Download,
+  Loader2,
   MoreHorizontal,
   Plus,
   Trash2,
@@ -27,6 +29,7 @@ import {
   createChecklistItem,
   deleteClient,
   deleteClientMemoryNote,
+  downloadClientDocumentsZip,
   getClient,
   listChecklistItems,
   listClientCommitments,
@@ -65,19 +68,24 @@ import {
 function SectionCard({
   title,
   subtitle,
+  action,
   children,
 }: {
   title: string;
   subtitle?: React.ReactNode;
+  action?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <section className="flex flex-col gap-5 rounded-2xl bg-card p-6 ring-1 ring-foreground/10">
-      <div className="flex flex-col gap-2">
-        <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-          {title}
-        </h2>
-        {subtitle && <div className="text-sm text-muted-foreground">{subtitle}</div>}
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex flex-col gap-2">
+          <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+            {title}
+          </h2>
+          {subtitle && <div className="text-sm text-muted-foreground">{subtitle}</div>}
+        </div>
+        {action && <div className="shrink-0">{action}</div>}
       </div>
       {children}
     </section>
@@ -971,7 +979,20 @@ function DocumentVaultCard({
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<DocumentUploadResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const onDownloadZip = async () => {
+    setDownloading(true);
+    setError(null);
+    try {
+      await downloadClientDocumentsZip(clientId);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   const onUpload = async (f: File) => {
     setSubmitting(true);
@@ -1007,7 +1028,26 @@ function DocumentVaultCard({
   }, [documents]);
 
   return (
-    <SectionCard title="Document vault">
+    <SectionCard
+      title="Document vault"
+      action={
+        documents && documents.length > 0 ? (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={downloading}
+            onClick={onDownloadZip}
+          >
+            {downloading ? (
+              <Loader2 className="animate-spin" />
+            ) : (
+              <Download />
+            )}
+            {downloading ? "Zipping…" : "Download all"}
+          </Button>
+        ) : undefined
+      }
+    >
       <div
         role="button"
         tabIndex={0}

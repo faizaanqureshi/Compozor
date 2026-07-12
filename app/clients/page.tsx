@@ -10,6 +10,8 @@ import {
   ArrowUp,
   Check,
   ChevronRight,
+  Download,
+  Loader2,
   Mail,
   Plus,
   Search,
@@ -21,6 +23,7 @@ import {
   ClientStatus,
   EmailLogEntry,
   createClient,
+  downloadClientDocumentsZip,
   listClients,
   listEmailLog,
   listInboxConnections,
@@ -313,6 +316,22 @@ export default function ClientsPage() {
   };
 
   const loading = clientsLoading || emailLogLoading;
+
+  const [downloadingId, setDownloadingId] = useState<number | null>(null);
+
+  const onDownloadZip = async (e: React.MouseEvent, clientId: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDownloadingId(clientId);
+    try {
+      await downloadClientDocumentsZip(clientId);
+    } catch {
+      // Best-effort - the button just stops spinning; nothing else to show
+      // inline in a single table cell without cluttering the row.
+    } finally {
+      setDownloadingId(null);
+    }
+  };
 
   const sendReminder = async (e: React.MouseEvent, clientId: number) => {
     e.preventDefault();
@@ -618,11 +637,28 @@ export default function ClientsPage() {
                         {c.email}
                       </td>
                       <td className="border-b border-border/50 py-3 pr-4 text-foreground/70">
-                        {summary
-                          ? summary.total > 0
-                            ? `${summary.received} of ${summary.total} received`
-                            : "No checklist"
-                          : "—"}
+                        <span className="inline-flex items-center gap-1.5">
+                          {summary
+                            ? summary.total > 0
+                              ? `${summary.received} of ${summary.total} received`
+                              : "No checklist"
+                            : "—"}
+                          {summary && summary.received > 0 && (
+                            <button
+                              type="button"
+                              title="Download documents (.zip)"
+                              disabled={downloadingId === c.id}
+                              onClick={(e) => onDownloadZip(e, c.id)}
+                              className="text-muted-foreground/50 transition-colors hover:text-foreground disabled:opacity-50"
+                            >
+                              {downloadingId === c.id ? (
+                                <Loader2 className="size-3.5 animate-spin" />
+                              ) : (
+                                <Download className="size-3.5" />
+                              )}
+                            </button>
+                          )}
+                        </span>
                       </td>
                       <td className="border-b border-border/50 py-3 pr-4 text-foreground/70">
                         {activity ? formatRelativeTime(activity) : "No activity yet"}

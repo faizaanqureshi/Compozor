@@ -56,7 +56,12 @@ export function Nav() {
         collapsed ? "w-[4.5rem] p-3" : "w-72 p-6"
       )}
     >
-      <div className="flex items-center justify-between gap-2 px-1">
+      <div
+        className={cn(
+          "flex items-center gap-2",
+          collapsed ? "justify-center" : "justify-between px-1"
+        )}
+      >
         {!collapsed && (
           <Link href="/" className="shrink-0">
             <Image
@@ -72,7 +77,10 @@ export function Nav() {
         <Button
           variant="ghost"
           size="icon-sm"
-          className="ml-auto shrink-0 text-sidebar-foreground/50 hover:bg-sidebar-foreground/8 hover:text-sidebar-foreground"
+          className={cn(
+            "shrink-0 text-sidebar-foreground/50 hover:bg-sidebar-foreground/8 hover:text-sidebar-foreground",
+            !collapsed && "ml-auto"
+          )}
           onClick={() => setCollapsed((c) => !c)}
         >
           {collapsed ? <ChevronsRight /> : <ChevronsLeft />}
