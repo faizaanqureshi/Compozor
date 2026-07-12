@@ -36,7 +36,7 @@ export function MobileTopBar() {
           width={795}
           height={214}
           priority
-          className="h-5 w-auto"
+          className="h-7 w-auto"
         />
       </Link>
     </div>
