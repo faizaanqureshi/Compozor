@@ -21,3 +21,8 @@ export const unmatchedEmailsKey = (filters?: {
     filters?.review_status ?? "all",
     filters?.category ?? "all",
   ] as const;
+
+export const adminOrganizationsKey = () => ["admin-organizations"] as const;
+
+export const adminOrganizationUsageKey = (organizationId: number) =>
+  ["admin-organization-usage", organizationId] as const;

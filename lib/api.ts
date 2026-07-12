@@ -247,6 +247,74 @@ export interface InboxConnection {
   status: InboxConnectionStatus;
 }
 
+// unpriced_call_count on every usage aggregate below: how many calls in
+// that bucket have no cost figure (a model the backend's pricing table
+// doesn't know yet - see openai_pricing.py). Nonzero means cost_usd
+// understates real spend for that row.
+
+export interface OrganizationUsageOut {
+  id: number;
+  name: string;
+  created_at: string;
+  client_count: number;
+  call_count: number;
+  unpriced_call_count: number;
+  input_tokens: number;
+  cached_input_tokens: number;
+  output_tokens: number;
+  cost_usd: number;
+}
+
+export interface FeatureUsageOut {
+  feature: string;
+  call_count: number;
+  unpriced_call_count: number;
+  input_tokens: number;
+  cached_input_tokens: number;
+  output_tokens: number;
+  cost_usd: number;
+}
+
+export interface ModelUsageOut {
+  model: string;
+  call_count: number;
+  unpriced_call_count: number;
+  input_tokens: number;
+  cached_input_tokens: number;
+  output_tokens: number;
+  cost_usd: number;
+}
+
+export interface DailyUsageOut {
+  day: string;
+  call_count: number;
+  unpriced_call_count: number;
+  input_tokens: number;
+  cached_input_tokens: number;
+  output_tokens: number;
+  cost_usd: number;
+}
+
+export interface ClientUsageOut {
+  client_id: number | null;
+  client_name: string | null;
+  call_count: number;
+  unpriced_call_count: number;
+  input_tokens: number;
+  cached_input_tokens: number;
+  output_tokens: number;
+  cost_usd: number;
+}
+
+export interface OrganizationUsageBreakdownOut {
+  organization_id: number;
+  organization_name: string;
+  by_feature: FeatureUsageOut[];
+  by_model: ModelUsageOut[];
+  by_day: DailyUsageOut[];
+  by_client: ClientUsageOut[];
+}
+
 // ---------- Organizations ----------
 //
 // One Clerk user = one org. The backend derives "your" org from the
@@ -570,3 +638,30 @@ export const deleteInboxConnection = (connectionId: number) =>
 
 export const watchInboxConnection = (connectionId: number) =>
   request<void>(`/inbox-connections/${connectionId}/watch`, { method: "POST" });
+
+// ---------- Admin (internal usage/cost dashboard) ----------
+//
+// Restricted server-side to a whitelisted set of internal staff emails
+// (see accounting-saas/app/auth.py's get_internal_admin) - a non-admin
+// caller gets a 403 from these, regardless of what the sidebar shows.
+
+export const listOrganizationsUsage = (filters?: { start?: string; end?: string }) => {
+  const params = new URLSearchParams();
+  if (filters?.start) params.set("start", filters.start);
+  if (filters?.end) params.set("end", filters.end);
+  const qs = params.toString();
+  return request<OrganizationUsageOut[]>(`/admin/organizations${qs ? `?${qs}` : ""}`);
+};
+
+export const getOrganizationUsageBreakdown = (
+  organizationId: number,
+  filters?: { start?: string; end?: string }
+) => {
+  const params = new URLSearchParams();
+  if (filters?.start) params.set("start", filters.start);
+  if (filters?.end) params.set("end", filters.end);
+  const qs = params.toString();
+  return request<OrganizationUsageBreakdownOut>(
+    `/admin/organizations/${organizationId}/usage${qs ? `?${qs}` : ""}`
+  );
+};

@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 import {
   ChevronsLeft,
   ChevronsRight,
+  Landmark,
   LogOut,
   Mail,
   MailQuestion,
@@ -24,6 +25,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
+import { isAdminEmail } from "@/lib/admin";
 import { useMobileNav } from "@/components/mobile-nav-context";
 
 const links = [
@@ -38,6 +40,10 @@ const links = [
   { href: "/settings", label: "Settings", icon: Settings, tourId: "settings" },
 ];
 
+// Not part of `links` above - only shown to whitelisted internal staff (see
+// lib/admin.ts), spliced in below rather than always present.
+const adminLink = { href: "/admin", label: "Admin", icon: Landmark, tourId: "admin" };
+
 // Breakpoint behavior:
 //  - below md: off-canvas drawer, opened via the mobile top bar's hamburger.
 //  - md to lg: docked in the layout, but permanently collapsed to an icon
@@ -48,6 +54,9 @@ export function Nav() {
   const { user } = useUser();
   const [collapsed, setCollapsed] = useState(false);
   const { mobileOpen, setMobileOpen } = useMobileNav();
+  const visibleLinks = isAdminEmail(user?.primaryEmailAddress?.emailAddress)
+    ? [...links, adminLink]
+    : links;
 
   useEffect(() => {
     setMobileOpen(false);
@@ -133,7 +142,7 @@ export function Nav() {
       </div>
 
       <nav className="flex flex-1 flex-col gap-0.5">
-        {links.map((link) => {
+        {visibleLinks.map((link) => {
           const Icon = link.icon;
           const active = pathname.startsWith(link.href);
           return (

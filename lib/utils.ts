@@ -30,3 +30,32 @@ export function formatRelativeTime(iso: string): string {
   }
   return relativeTimeFormatter.format(diffSeconds, "second")
 }
+
+// Costs are computed server-side from fractions of a cent per call (see
+// openai_pricing.py), so a $0.01-precision formatter would round small
+// per-org totals to "$0.00" - four decimal places keeps them legible.
+// One formatter per currency code (a fresh Intl.NumberFormat per call is
+// wasteful and the codes here are a closed, tiny set).
+const currencyFormatters: Partial<Record<string, Intl.NumberFormat>> = {}
+
+function currencyFormatter(currency: string): Intl.NumberFormat {
+  return (currencyFormatters[currency] ??= new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 4,
+  }))
+}
+
+export function formatCurrency(amount: number, currency: string = "USD"): string {
+  return currencyFormatter(currency).format(amount)
+}
+
+const compactNumberFormatter = new Intl.NumberFormat("en-US", {
+  notation: "compact",
+  maximumFractionDigits: 1,
+})
+
+export function formatCompactNumber(value: number): string {
+  return compactNumberFormatter.format(value)
+}
