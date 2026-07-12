@@ -326,8 +326,20 @@ function ChecklistCard({
   const [description, setDescription] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
 
   const actionRequired = checklist ? checklist.missing + checklist.wrong : 0;
+
+  const onDownloadZip = async () => {
+    setDownloading(true);
+    try {
+      await downloadClientDocumentsZip(clientId);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -363,6 +375,19 @@ function ChecklistCard({
             )}
           </div>
         )
+      }
+      action={
+        documents && documents.length > 0 ? (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={downloading}
+            onClick={onDownloadZip}
+          >
+            {downloading ? <Loader2 className="animate-spin" /> : <Download />}
+            {downloading ? "Zipping…" : "Download all"}
+          </Button>
+        ) : undefined
       }
     >
       {checklist === null ? (

@@ -720,11 +720,11 @@ function attachmentFilename(doc: DocumentOut) {
 function AttachmentRow({ doc }: { doc: DocumentOut }) {
   const filename = attachmentFilename(doc);
   const content = (
-    <span className="inline-flex min-w-0 items-center gap-1.5 rounded-md border border-border/50 bg-muted/30 px-2 py-1 text-xs">
+    <span className="inline-flex w-fit max-w-full items-center gap-1.5 rounded-md border border-border/50 bg-muted/30 px-2 py-1 text-xs">
       <Paperclip className="size-3 shrink-0 text-muted-foreground/70" />
-      <span className="truncate">{filename}</span>
+      <span className="min-w-0 shrink truncate">{filename}</span>
       {doc.classified_type && (
-        <span className="shrink-0 truncate text-muted-foreground">
+        <span className="min-w-0 shrink truncate text-muted-foreground">
           · {doc.classified_type}
         </span>
       )}
@@ -738,7 +738,7 @@ function AttachmentRow({ doc }: { doc: DocumentOut }) {
       href={doc.download_url}
       target="_blank"
       rel="noopener noreferrer"
-      className="w-fit transition-opacity hover:opacity-70"
+      className="inline-block w-fit max-w-full transition-opacity hover:opacity-70"
     >
       {content}
     </a>

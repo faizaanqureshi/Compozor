@@ -96,6 +96,19 @@ export function Nav() {
             className="h-7 w-auto"
           />
         </Link>
+        <Link
+          href="/"
+          className="relative hidden size-7 shrink-0 overflow-hidden rounded-md md:block lg:hidden"
+        >
+          <Image
+            src="/compozor-logo.png"
+            alt="Compozor"
+            fill
+            sizes="28px"
+            priority
+            className="object-cover object-left"
+          />
+        </Link>
         <Button
           variant="ghost"
           size="icon-sm"
