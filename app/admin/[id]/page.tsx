@@ -1,42 +1,65 @@
 "use client";
 
-import { use, useEffect, useMemo } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import { useUser } from "@clerk/nextjs";
-import { AlertTriangle, ArrowLeft } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ChevronDown } from "lucide-react";
 import {
   ApiError,
   ClientUsageOut,
-  DailyUsageOut,
   FeatureUsageOut,
   ModelUsageOut,
+  PeriodUsageOut,
+  UsageBucket,
   getOrganizationUsageBreakdown,
 } from "@/lib/api";
 import { adminOrganizationUsageKey } from "@/lib/swr-keys";
-import { formatCompactNumber, formatCurrency } from "@/lib/utils";
-import { isAdminEmail } from "@/lib/admin";
+import { cn, formatCompactNumber, formatCurrency } from "@/lib/utils";
+import {
+  RangePreset,
+  USAGE_BUCKETS,
+  autoBucketForRange,
+  isAdminEmail,
+  periodLabel,
+  rangeLabel,
+  rangeToWindow,
+} from "@/lib/admin";
 import { useCurrency } from "@/components/currency-context";
 import { CurrencyToggle } from "@/components/currency-toggle";
+import { RangeToggle } from "@/components/range-toggle";
+import { CostOverTimeChart } from "@/components/cost-over-time-chart";
+import { CostBarChart } from "@/components/cost-bar-chart";
 import { Skeleton } from "@/components/ui/skeleton";
 
 function SectionCard({
   title,
+  action,
   children,
 }: {
   title: string;
+  action?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <section className="flex flex-col gap-5 rounded-2xl bg-card p-6 ring-1 ring-foreground/10">
-      <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{title}</h2>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{title}</h2>
+        {action}
+      </div>
       {children}
     </section>
   );
 }
 
 type Row = { label: string; call_count: number; unpriced_call_count: number; input_tokens: number; output_tokens: number; cost_usd: number };
+
+// How many rows a breakdown table shows before it collapses behind an
+// expand toggle - most of these lists (features, models) are naturally
+// short, but by_client/by_day can run long, and nobody needs to scroll
+// through a hundred rows to see the totals above.
+const TABLE_ROW_LIMIT = 5;
 
 function UsageTable({
   rows,
@@ -49,51 +72,69 @@ function UsageTable({
   currency: string;
   toDisplay: (usd: number) => number;
 }) {
+  const [expanded, setExpanded] = useState(false);
+
   if (rows.length === 0) {
     return <p className="text-sm text-muted-foreground">No usage in this window.</p>;
   }
+
+  const hasMore = rows.length > TABLE_ROW_LIMIT;
+  const visibleRows = expanded ? rows : rows.slice(0, TABLE_ROW_LIMIT);
+
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[520px] border-collapse text-sm">
-        <thead>
-          <tr className="text-left">
-            <th className="border-b border-border/70 py-2 pr-4 text-[11px] font-medium tracking-wide text-muted-foreground/70 uppercase">
-              {labelHeader}
-            </th>
-            <th className="border-b border-border/70 py-2 pr-4 text-[11px] font-medium tracking-wide text-muted-foreground/70 uppercase">
-              Calls
-            </th>
-            <th className="border-b border-border/70 py-2 pr-4 text-[11px] font-medium tracking-wide text-muted-foreground/70 uppercase">
-              Tokens
-            </th>
-            <th className="border-b border-border/70 py-2 pr-4 text-[11px] font-medium tracking-wide text-muted-foreground/70 uppercase">
-              Cost
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r, i) => (
-            <tr key={i}>
-              <td className="border-b border-border/50 py-3 pr-4 text-foreground/80">{r.label}</td>
-              <td className="border-b border-border/50 py-3 pr-4 text-foreground/70">{r.call_count}</td>
-              <td className="border-b border-border/50 py-3 pr-4 text-foreground/70">
-                {formatCompactNumber(r.input_tokens)} in / {formatCompactNumber(r.output_tokens)} out
-              </td>
-              <td className="border-b border-border/50 py-3 pr-4">
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="text-foreground/80">{formatCurrency(toDisplay(r.cost_usd), currency)}</span>
-                  {r.unpriced_call_count > 0 && (
-                    <span
-                      title={`${r.unpriced_call_count} call(s) with no pricing entry - actual spend is higher`}
-                      className="size-1.5 rounded-full bg-amber-500"
-                    />
-                  )}
-                </span>
-              </td>
+    <div className="flex flex-col gap-2">
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[520px] border-collapse text-sm">
+          <thead>
+            <tr className="text-left">
+              <th className="border-b border-border/70 py-2 pr-4 text-[11px] font-medium tracking-wide text-muted-foreground/70 uppercase">
+                {labelHeader}
+              </th>
+              <th className="border-b border-border/70 py-2 pr-4 text-[11px] font-medium tracking-wide text-muted-foreground/70 uppercase">
+                Calls
+              </th>
+              <th className="border-b border-border/70 py-2 pr-4 text-[11px] font-medium tracking-wide text-muted-foreground/70 uppercase">
+                Tokens
+              </th>
+              <th className="border-b border-border/70 py-2 pr-4 text-[11px] font-medium tracking-wide text-muted-foreground/70 uppercase">
+                Cost
+              </th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {visibleRows.map((r, i) => (
+              <tr key={i}>
+                <td className="border-b border-border/50 py-3 pr-4 text-foreground/80">{r.label}</td>
+                <td className="border-b border-border/50 py-3 pr-4 text-foreground/70">{r.call_count}</td>
+                <td className="border-b border-border/50 py-3 pr-4 text-foreground/70">
+                  {formatCompactNumber(r.input_tokens)} in / {formatCompactNumber(r.output_tokens)} out
+                </td>
+                <td className="border-b border-border/50 py-3 pr-4">
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="text-foreground/80">{formatCurrency(toDisplay(r.cost_usd), currency)}</span>
+                    {r.unpriced_call_count > 0 && (
+                      <span
+                        title={`${r.unpriced_call_count} call(s) with no pricing entry - actual spend is higher`}
+                        className="size-1.5 rounded-full bg-amber-500"
+                      />
+                    )}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {hasMore && (
+        <button
+          type="button"
+          onClick={() => setExpanded((e) => !e)}
+          className="inline-flex w-fit items-center gap-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+        >
+          {expanded ? "Show less" : `Show all ${rows.length}`}
+          <ChevronDown className={cn("size-3 transition-transform", expanded && "rotate-180")} />
+        </button>
+      )}
     </div>
   );
 }
@@ -101,11 +142,8 @@ function UsageTable({
 const featureRows = (rows: FeatureUsageOut[]): Row[] =>
   rows.map((r) => ({ label: r.feature, ...r }));
 const modelRows = (rows: ModelUsageOut[]): Row[] => rows.map((r) => ({ label: r.model, ...r }));
-const dayRows = (rows: DailyUsageOut[]): Row[] =>
-  rows.map((r) => ({
-    label: new Date(r.day).toLocaleDateString(undefined, { month: "short", day: "numeric" }),
-    ...r,
-  }));
+const periodRows = (rows: PeriodUsageOut[], bucket: UsageBucket): Row[] =>
+  rows.map((r) => ({ label: periodLabel(r.period, bucket), ...r }));
 const clientRows = (rows: ClientUsageOut[]): Row[] =>
   rows.map((r) => ({ label: r.client_name ?? "(no client)", ...r }));
 
@@ -124,12 +162,20 @@ export default function AdminOrganizationDetailPage({
     if (isLoaded && !admin) router.replace("/clients");
   }, [isLoaded, admin, router]);
 
+  // Same date-range filter as the org list page - scopes the hero total and
+  // every breakdown card (feature/model/period/client) on this page to the
+  // same window at once. The chart's own time-bucket granularity is derived
+  // from the range rather than chosen separately, so there's only one
+  // filter control on the page, not two.
+  const [range, setRange] = useState<RangePreset>("all");
+  const bucket = autoBucketForRange(range);
+  const usageWindow = useMemo(() => rangeToWindow(range), [range]);
   const {
     data: breakdown,
     error,
     isLoading,
-  } = useSWR(admin ? adminOrganizationUsageKey(organizationId) : null, () =>
-    getOrganizationUsageBreakdown(organizationId)
+  } = useSWR(admin ? adminOrganizationUsageKey(organizationId, bucket, range) : null, () =>
+    getOrganizationUsageBreakdown(organizationId, { bucket, ...usageWindow })
   );
   const { currency, rate } = useCurrency();
   const toDisplay = (usd: number) => usd * (rate ?? 1);
@@ -166,18 +212,14 @@ export default function AdminOrganizationDetailPage({
                 {breakdown?.organization_name}
               </h1>
             )}
-            {isLoading ? (
-              <Skeleton className="h-4 w-56" />
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                {totals.calls} call{totals.calls === 1 ? "" : "s"} ·{" "}
-                {formatCurrency(toDisplay(totals.cost), currency)} total spend
-              </p>
-            )}
           </div>
           <CurrencyToggle />
         </div>
       </div>
+
+      {/* Date range first - scopes the hero total, chart, and every
+          breakdown card below it. */}
+      <RangeToggle value={range} onChange={setRange} />
 
       {fetchError && <p className="text-sm text-destructive">{fetchError}</p>}
 
@@ -193,12 +235,44 @@ export default function AdminOrganizationDetailPage({
 
       {isLoading ? (
         <div className="flex flex-col gap-4">
-          <Skeleton className="h-48 w-full rounded-2xl" />
+          <Skeleton className="h-72 w-full rounded-2xl" />
           <Skeleton className="h-48 w-full rounded-2xl" />
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <SectionCard title="Cost over time">
+            <div className="flex flex-col gap-1">
+              <span className="text-4xl font-thin tracking-tight tabular-nums [font-family:var(--font-denton)]">
+                {formatCurrency(toDisplay(totals.cost), currency)}
+              </span>
+              <span className="text-sm text-muted-foreground">
+                Total spend · {totals.calls} call{totals.calls === 1 ? "" : "s"} ·{" "}
+                {rangeLabel(range).toLowerCase()}
+              </span>
+            </div>
+            <CostOverTimeChart
+              data={(breakdown?.by_period ?? []).map((r) => ({
+                label: periodLabel(r.period, bucket),
+                value: toDisplay(r.cost_usd),
+              }))}
+              formatValue={(v) => formatCurrency(v, currency)}
+            />
+            <UsageTable
+              rows={periodRows(breakdown?.by_period ?? [], bucket)}
+              labelHeader={USAGE_BUCKETS.find((b) => b.value === bucket)?.label ?? "Period"}
+              currency={currency}
+              toDisplay={toDisplay}
+            />
+          </SectionCard>
+
           <SectionCard title="By feature">
+            <CostBarChart
+              data={(breakdown?.by_feature ?? []).map((r) => ({
+                label: r.feature,
+                value: toDisplay(r.cost_usd),
+              }))}
+              formatValue={(v) => formatCurrency(v, currency)}
+            />
             <UsageTable
               rows={featureRows(breakdown?.by_feature ?? [])}
               labelHeader="Feature"
@@ -207,6 +281,13 @@ export default function AdminOrganizationDetailPage({
             />
           </SectionCard>
           <SectionCard title="By model">
+            <CostBarChart
+              data={(breakdown?.by_model ?? []).map((r) => ({
+                label: r.model,
+                value: toDisplay(r.cost_usd),
+              }))}
+              formatValue={(v) => formatCurrency(v, currency)}
+            />
             <UsageTable
               rows={modelRows(breakdown?.by_model ?? [])}
               labelHeader="Model"
@@ -214,15 +295,14 @@ export default function AdminOrganizationDetailPage({
               toDisplay={toDisplay}
             />
           </SectionCard>
-          <SectionCard title="By day">
-            <UsageTable
-              rows={dayRows(breakdown?.by_day ?? [])}
-              labelHeader="Day"
-              currency={currency}
-              toDisplay={toDisplay}
-            />
-          </SectionCard>
           <SectionCard title="By client">
+            <CostBarChart
+              data={(breakdown?.by_client ?? []).map((r) => ({
+                label: r.client_name ?? "(no client)",
+                value: toDisplay(r.cost_usd),
+              }))}
+              formatValue={(v) => formatCurrency(v, currency)}
+            />
             <UsageTable
               rows={clientRows(breakdown?.by_client ?? [])}
               labelHeader="Client"

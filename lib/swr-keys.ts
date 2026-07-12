@@ -1,4 +1,5 @@
-import { EmailStatus, InboundEmailCategory, InboundEmailReviewStatus } from "@/lib/api";
+import { EmailStatus, InboundEmailCategory, InboundEmailReviewStatus, UsageBucket } from "@/lib/api";
+import type { RangePreset } from "@/lib/admin";
 
 // Centralized so pages that fetch the same resource (e.g. clients/page.tsx and
 // email-log/page.tsx both list the full email log) share one SWR cache entry
@@ -22,7 +23,10 @@ export const unmatchedEmailsKey = (filters?: {
     filters?.category ?? "all",
   ] as const;
 
-export const adminOrganizationsKey = () => ["admin-organizations"] as const;
+export const adminOrganizationsKey = (range: RangePreset) => ["admin-organizations", range] as const;
 
-export const adminOrganizationUsageKey = (organizationId: number) =>
-  ["admin-organization-usage", organizationId] as const;
+export const adminUsageOverviewKey = (bucket: UsageBucket, range: RangePreset) =>
+  ["admin-usage-overview", bucket, range] as const;
+
+export const adminOrganizationUsageKey = (organizationId: number, bucket: UsageBucket, range: RangePreset) =>
+  ["admin-organization-usage", organizationId, bucket, range] as const;

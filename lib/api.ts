@@ -285,8 +285,10 @@ export interface ModelUsageOut {
   cost_usd: number;
 }
 
-export interface DailyUsageOut {
-  day: string;
+export type UsageBucket = "day" | "week" | "month" | "year";
+
+export interface PeriodUsageOut {
+  period: string;
   call_count: number;
   unpriced_call_count: number;
   input_tokens: number;
@@ -311,7 +313,7 @@ export interface OrganizationUsageBreakdownOut {
   organization_name: string;
   by_feature: FeatureUsageOut[];
   by_model: ModelUsageOut[];
-  by_day: DailyUsageOut[];
+  by_period: PeriodUsageOut[];
   by_client: ClientUsageOut[];
 }
 
@@ -653,13 +655,23 @@ export const listOrganizationsUsage = (filters?: { start?: string; end?: string 
   return request<OrganizationUsageOut[]>(`/admin/organizations${qs ? `?${qs}` : ""}`);
 };
 
+export const getUsageOverview = (filters?: { start?: string; end?: string; bucket?: UsageBucket }) => {
+  const params = new URLSearchParams();
+  if (filters?.start) params.set("start", filters.start);
+  if (filters?.end) params.set("end", filters.end);
+  if (filters?.bucket) params.set("bucket", filters.bucket);
+  const qs = params.toString();
+  return request<PeriodUsageOut[]>(`/admin/usage${qs ? `?${qs}` : ""}`);
+};
+
 export const getOrganizationUsageBreakdown = (
   organizationId: number,
-  filters?: { start?: string; end?: string }
+  filters?: { start?: string; end?: string; bucket?: UsageBucket }
 ) => {
   const params = new URLSearchParams();
   if (filters?.start) params.set("start", filters.start);
   if (filters?.end) params.set("end", filters.end);
+  if (filters?.bucket) params.set("bucket", filters.bucket);
   const qs = params.toString();
   return request<OrganizationUsageBreakdownOut>(
     `/admin/organizations/${organizationId}/usage${qs ? `?${qs}` : ""}`
