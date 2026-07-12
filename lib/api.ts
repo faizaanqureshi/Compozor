@@ -90,6 +90,7 @@ export type InboundEmailCategory =
   | "automated"
   | "other";
 export type InboundEmailReviewStatus = "needs_review" | "dismissed";
+export type CommitmentStatus = "pending" | "fulfilled" | "cancelled" | "escalated";
 
 export interface Organization {
   id: number;
@@ -207,6 +208,21 @@ export interface ClientMemoryNote {
   client_id: number;
   note: string;
   source_email_log_id: number | null;
+  superseded_at: string | null;
+  created_at: string;
+}
+
+export interface ClientCommitment {
+  id: number;
+  client_id: number;
+  checklist_item_id: number | null;
+  description: string;
+  expected_by: string | null;
+  status: CommitmentStatus;
+  source_email_log_id: number | null;
+  fulfilled_at: string | null;
+  followup_email_log_id: number | null;
+  last_followup_sent_at: string | null;
   created_at: string;
 }
 
@@ -447,6 +463,26 @@ export function subscribeToEmailLogStream(
 
 export const listClientMemoryNotes = (clientId: number) =>
   request<ClientMemoryNote[]>(`/clients/${clientId}/memory-notes`);
+
+export const deleteClientMemoryNote = (clientId: number, noteId: number) =>
+  request<void>(`/clients/${clientId}/memory-notes/${noteId}`, {
+    method: "DELETE",
+  });
+
+// ---------- Client commitments ----------
+
+export const listClientCommitments = (clientId: number) =>
+  request<ClientCommitment[]>(`/clients/${clientId}/commitments`);
+
+export const resolveClientCommitment = (
+  clientId: number,
+  commitmentId: number,
+  status: "fulfilled" | "cancelled"
+) =>
+  request<ClientCommitment>(
+    `/clients/${clientId}/commitments/${commitmentId}/resolve`,
+    json("POST", { status })
+  );
 
 // ---------- Unmatched inbound emails ----------
 

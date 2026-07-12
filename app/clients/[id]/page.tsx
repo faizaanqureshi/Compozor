@@ -17,18 +17,23 @@ import {
   ChecklistItem,
   ChecklistItemStatus,
   ChecklistSummary,
+  ClientCommitment,
   ClientDetail,
   ClientMemoryNote,
+  CommitmentStatus,
   DocumentOut,
   DocumentUploadResult,
   EmailThread,
   createChecklistItem,
   deleteClient,
+  deleteClientMemoryNote,
   getClient,
   listChecklistItems,
+  listClientCommitments,
   listClientDocuments,
   listClientMemoryNotes,
   listEmailThreads,
+  resolveClientCommitment,
   sendChecklistItemReminder,
   sendChecklistReminder,
   updateChecklistItem,
@@ -119,6 +124,9 @@ export default function ClientDetailPage({
   const [memoryNotes, setMemoryNotes] = useState<ClientMemoryNote[] | null>(
     null
   );
+  const [commitments, setCommitments] = useState<ClientCommitment[] | null>(
+    null
+  );
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
@@ -137,6 +145,9 @@ export default function ClientDetailPage({
       .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
     listClientMemoryNotes(clientId)
       .then(setMemoryNotes)
+      .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
+    listClientCommitments(clientId)
+      .then(setCommitments)
       .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
   };
 
@@ -196,6 +207,12 @@ export default function ClientDetailPage({
         onChange={refresh}
       />
 
+      <WaitingOnCard
+        clientId={clientId}
+        commitments={commitments}
+        onChange={refresh}
+      />
+
       <CommunicationCard
         clientId={clientId}
         client={client}
@@ -210,7 +227,11 @@ export default function ClientDetailPage({
         onChange={refresh}
       />
 
-      <MemoryNotesCard notes={memoryNotes} />
+      <MemoryNotesCard
+        clientId={clientId}
+        notes={memoryNotes}
+        onChange={refresh}
+      />
     </div>
   );
 }
@@ -571,6 +592,197 @@ function ChecklistItemActions({
             </Button>
             <Button variant="destructive" onClick={onWaive} disabled={pending}>
               {pending ? "Waiving…" : "Waive requirement"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+const commitmentPillClasses: Record<CommitmentStatus, string> = {
+  pending: "bg-amber-500/20 text-amber-900 dark:bg-amber-500/15 dark:text-amber-300",
+  fulfilled: "bg-accent/15 text-accent",
+  cancelled: "bg-muted text-muted-foreground",
+  escalated: "bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-400",
+};
+
+const commitmentLabels: Record<CommitmentStatus, string> = {
+  pending: "Pending",
+  fulfilled: "Fulfilled",
+  cancelled: "Cancelled",
+  escalated: "Escalated",
+};
+
+function CommitmentPill({ status }: { status: CommitmentStatus }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium",
+        commitmentPillClasses[status]
+      )}
+    >
+      {commitmentLabels[status]}
+    </span>
+  );
+}
+
+function WaitingOnCard({
+  clientId,
+  commitments,
+  onChange,
+}: {
+  clientId: number;
+  commitments: ClientCommitment[] | null;
+  onChange: () => void;
+}) {
+  return (
+    <SectionCard
+      title="Waiting on"
+      subtitle="Promises this client has made to send something, tracked automatically from their emails."
+    >
+      {commitments === null ? (
+        <div className="flex flex-col gap-2">
+          <Skeleton className="h-9 w-full" />
+          <Skeleton className="h-9 w-full" />
+        </div>
+      ) : (
+      <table
+        className="w-full border-collapse text-sm animate-blur-in-sm"
+        style={{ animationDelay: "90ms" }}
+      >
+        <thead>
+          <tr className="border-b border-border text-left">
+            <th className="py-1.5 pr-4 pb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+              Promise
+            </th>
+            <th className="py-1.5 pr-4 pb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+              Expected by
+            </th>
+            <th className="py-1.5 pr-4 pb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+              Status
+            </th>
+            <th className="py-1.5 pr-0 pb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+              <span className="sr-only">Actions</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {commitments.map((c) => {
+            const overdue =
+              c.status === "pending" &&
+              c.expected_by !== null &&
+              c.expected_by < new Date().toISOString().slice(0, 10);
+            return (
+              <tr key={c.id} className="border-b border-border/40">
+                <td className="py-2 pr-4 font-medium">{c.description}</td>
+                <td
+                  className={cn(
+                    "py-2 pr-4",
+                    overdue ? "font-medium text-red-600 dark:text-red-400" : "text-muted-foreground"
+                  )}
+                >
+                  {c.expected_by ?? "no date given"}
+                </td>
+                <td className="py-2 pr-4">
+                  <CommitmentPill status={c.status} />
+                </td>
+                <td className="py-2 pr-0 text-right">
+                  {(c.status === "pending" || c.status === "escalated") && (
+                    <CommitmentResolveActions
+                      clientId={clientId}
+                      commitment={c}
+                      onChange={onChange}
+                    />
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+          {commitments.length === 0 && (
+            <tr>
+              <td colSpan={4} className="py-4 text-muted-foreground">
+                No outstanding promises from this client.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+      )}
+    </SectionCard>
+  );
+}
+
+function CommitmentResolveActions({
+  clientId,
+  commitment,
+  onChange,
+}: {
+  clientId: number;
+  commitment: ClientCommitment;
+  onChange: () => void;
+}) {
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState<"fulfilled" | "cancelled" | null>(null);
+
+  const onResolve = async (status: "fulfilled" | "cancelled") => {
+    setPending(true);
+    setError(null);
+    try {
+      await resolveClientCommitment(clientId, commitment.id, status);
+      setConfirming(null);
+      onChange();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center justify-end gap-2">
+      {error && <p className="text-xs text-destructive">{error}</p>}
+      <Button
+        variant="ghost"
+        size="sm"
+        disabled={pending}
+        onClick={() => setConfirming("fulfilled")}
+      >
+        Mark resolved
+      </Button>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="text-muted-foreground hover:text-destructive"
+        disabled={pending}
+        onClick={() => setConfirming("cancelled")}
+      >
+        Cancel
+      </Button>
+
+      <Dialog open={confirming !== null} onOpenChange={(open) => !pending && !open && setConfirming(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {confirming === "fulfilled" ? "Mark this promise resolved?" : "Cancel this promise?"}
+            </DialogTitle>
+            <DialogDescription>
+              {confirming === "fulfilled"
+                ? `This marks "${commitment.description}" as fulfilled - use this if the client delivered it some other way (in person, a different channel).`
+                : `This marks "${commitment.description}" as cancelled - use this if it's no longer relevant.`}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirming(null)} disabled={pending}>
+              Back
+            </Button>
+            <Button
+              variant={confirming === "cancelled" ? "destructive" : "default"}
+              onClick={() => confirming && onResolve(confirming)}
+              disabled={pending}
+            >
+              {pending ? "Saving…" : confirming === "fulfilled" ? "Mark resolved" : "Cancel promise"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -959,7 +1171,15 @@ function DocumentVaultCard({
   );
 }
 
-function MemoryNotesCard({ notes }: { notes: ClientMemoryNote[] | null }) {
+function MemoryNotesCard({
+  clientId,
+  notes,
+  onChange,
+}: {
+  clientId: number;
+  notes: ClientMemoryNote[] | null;
+  onChange: () => void;
+}) {
   return (
     <SectionCard
       title="What we know about this client"
@@ -978,12 +1198,29 @@ function MemoryNotesCard({ notes }: { notes: ClientMemoryNote[] | null }) {
         {notes.map((note) => (
           <div
             key={note.id}
-            className="rounded-lg border border-border/60 bg-muted/30 px-3.5 py-2.5 text-sm"
+            className={cn(
+              "flex items-start justify-between gap-3 rounded-lg border border-border/60 bg-muted/30 px-3.5 py-2.5 text-sm",
+              note.superseded_at && "opacity-50"
+            )}
           >
-            <p className="text-foreground/80">{note.note}</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {new Date(note.created_at).toLocaleString()}
-            </p>
+            <div>
+              <p className="text-foreground/80">
+                {note.note}
+                {note.superseded_at && (
+                  <span className="ml-2 inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                    superseded
+                  </span>
+                )}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {new Date(note.created_at).toLocaleString()}
+              </p>
+            </div>
+            <DeleteMemoryNoteButton
+              clientId={clientId}
+              note={note}
+              onChange={onChange}
+            />
           </div>
         ))}
         {notes.length === 0 && (
@@ -992,5 +1229,69 @@ function MemoryNotesCard({ notes }: { notes: ClientMemoryNote[] | null }) {
       </div>
       )}
     </SectionCard>
+  );
+}
+
+function DeleteMemoryNoteButton({
+  clientId,
+  note,
+  onChange,
+}: {
+  clientId: number;
+  note: ClientMemoryNote;
+  onChange: () => void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const onDelete = async () => {
+    setPending(true);
+    setError(null);
+    try {
+      await deleteClientMemoryNote(clientId, note.id);
+      setConfirming(false);
+      onChange();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <>
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        className="shrink-0 text-muted-foreground hover:text-destructive"
+        onClick={() => setConfirming(true)}
+      >
+        <Trash2 className="size-3.5" />
+        <span className="sr-only">Delete note</span>
+      </Button>
+
+      <Dialog open={confirming} onOpenChange={(open) => !pending && setConfirming(open)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete this memory note?</DialogTitle>
+            <DialogDescription>
+              This removes “{note.note}” from what the AI knows about this
+              client. Use this to correct something wrong - it won&apos;t be
+              suggested again.
+            </DialogDescription>
+          </DialogHeader>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirming(false)} disabled={pending}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={onDelete} disabled={pending}>
+              {pending ? "Deleting…" : "Delete note"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
