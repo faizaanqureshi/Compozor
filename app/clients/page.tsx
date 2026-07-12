@@ -369,9 +369,9 @@ export default function ClientsPage() {
           </button>
         </div>
       )}
-      <div className="flex items-end justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="flex flex-col gap-2">
-          <h1 className="text-6xl font-thin tracking-tight [font-family:var(--font-denton)]">
+          <h1 className="text-4xl font-thin tracking-tight [font-family:var(--font-denton)] sm:text-5xl md:text-6xl">
             Clients
           </h1>
           {loading ? (
@@ -463,7 +463,7 @@ export default function ClientsPage() {
           </div>
         )}
         <div className="rounded-2xl bg-card p-4 ring-1 ring-foreground/10">
-          <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-2">
             {loading &&
               Array.from({ length: 2 }).map((_, i) => (
                 <Skeleton key={i} className="h-[4.75rem] w-full rounded-xl" />
@@ -565,7 +565,7 @@ export default function ClientsPage() {
       </section>
 
       <section className="flex flex-col gap-4">
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
             All clients
           </div>
@@ -575,12 +575,13 @@ export default function ClientsPage() {
               placeholder="Search clients…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-56 border-none bg-muted/60 pl-8 shadow-none focus-visible:ring-1 focus-visible:ring-ring/30"
+              className="w-full border-none bg-muted/60 pl-8 shadow-none focus-visible:ring-1 focus-visible:ring-ring/30 sm:w-56"
             />
           </div>
         </div>
         <div className="rounded-2xl bg-card p-6 ring-1 ring-foreground/10">
-          <table className="w-full border-collapse text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[640px] border-collapse text-sm">
             <thead>
               <tr className="text-left">
                 <SortableTh label="Name" sortKey="name" sort={sort} onSort={toggleSort} />
@@ -681,6 +682,7 @@ export default function ClientsPage() {
               )}
             </tbody>
           </table>
+          </div>
         </div>
       </section>
     </div>

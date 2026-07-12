@@ -298,7 +298,7 @@ function TriageActions({
   };
 
   return (
-    <div className="flex w-72 shrink-0 flex-col gap-3 rounded-xl bg-card p-4 ring-1 ring-foreground/10">
+    <div className="flex w-full flex-col gap-3 rounded-xl bg-card p-4 ring-1 ring-foreground/10 lg:w-72 lg:shrink-0">
       <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
         Triage actions
       </h3>
@@ -388,7 +388,7 @@ export default function UnmatchedEmailsPage() {
   return (
     <div className="flex w-full flex-col gap-8">
       <div className="flex flex-col gap-2">
-        <h1 className="text-6xl font-thin tracking-tight [font-family:var(--font-denton)]">
+        <h1 className="text-4xl font-thin tracking-tight [font-family:var(--font-denton)] sm:text-5xl md:text-6xl">
           Unmatched emails
         </h1>
         <p className="text-sm text-muted-foreground">
@@ -396,8 +396,8 @@ export default function UnmatchedEmailsPage() {
         </p>
       </div>
 
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-1.5">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center gap-1.5">
           {reviewStatusOptions.map((opt) => (
             <Button
               key={opt.value}
@@ -417,7 +417,8 @@ export default function UnmatchedEmailsPage() {
 
       <div className="animate-blur-in-sm rounded-2xl bg-card p-6 ring-1 ring-foreground/10">
         {emailsLoading ? (
-          <table className="w-full border-collapse text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[640px] border-collapse text-sm">
             <thead>
               <tr className="border-b border-border text-left">
                 <th className="pt-1 pb-2.5 pr-4 text-xs font-medium tracking-wide text-muted-foreground uppercase">
@@ -444,10 +445,12 @@ export default function UnmatchedEmailsPage() {
               ))}
             </tbody>
           </table>
+          </div>
         ) : emailsList.length === 0 ? (
           <EmptyState />
         ) : (
-          <table className="w-full border-collapse text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[640px] border-collapse text-sm">
             <thead>
               <tr className="border-b border-border text-left">
                 <th className="pt-1 pb-2.5 pr-4 text-xs font-medium tracking-wide text-muted-foreground uppercase">
@@ -503,7 +506,7 @@ export default function UnmatchedEmailsPage() {
                     {isOpen && (
                       <tr className="border-b border-border/40">
                         <td colSpan={4} className="bg-muted/30 py-4 pr-4 pl-4">
-                          <div className="flex items-start gap-4">
+                          <div className="flex flex-col items-start gap-4 lg:flex-row">
                             <p className="flex-1 whitespace-pre-wrap text-foreground/80">
                               <Linkify text={email.body_text} />
                             </p>
@@ -521,6 +524,7 @@ export default function UnmatchedEmailsPage() {
               })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     </div>

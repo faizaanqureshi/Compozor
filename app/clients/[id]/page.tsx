@@ -190,7 +190,7 @@ export default function ClientDetailPage({
           </div>
         ) : (
           <div className="flex flex-col gap-2 animate-blur-in-sm">
-            <h1 className="text-6xl font-thin tracking-tight [font-family:var(--font-denton)]">
+            <h1 className="text-4xl font-thin tracking-tight [font-family:var(--font-denton)] sm:text-5xl md:text-6xl">
               {client.name}
             </h1>
             <p className="text-sm text-muted-foreground">
@@ -372,8 +372,9 @@ function ChecklistCard({
           ))}
         </div>
       ) : (
+      <div className="overflow-x-auto">
       <table
-        className="w-full border-collapse text-sm animate-blur-in-sm"
+        className="w-full min-w-[640px] border-collapse text-sm animate-blur-in-sm"
         style={{ animationDelay: "60ms" }}
       >
         <thead>
@@ -452,6 +453,7 @@ function ChecklistCard({
           )}
         </tbody>
       </table>
+      </div>
       )}
 
       {error && <p className="text-sm text-destructive">{error}</p>}
@@ -655,8 +657,9 @@ function WaitingOnCard({
           <Skeleton className="h-9 w-full" />
         </div>
       ) : (
+      <div className="overflow-x-auto">
       <table
-        className="w-full border-collapse text-sm animate-blur-in-sm"
+        className="w-full min-w-[560px] border-collapse text-sm animate-blur-in-sm"
         style={{ animationDelay: "90ms" }}
       >
         <thead>
@@ -716,6 +719,7 @@ function WaitingOnCard({
           )}
         </tbody>
       </table>
+      </div>
       )}
     </SectionCard>
   );
@@ -1128,8 +1132,9 @@ function DocumentVaultCard({
           ))}
         </div>
       ) : (
+      <div className="overflow-x-auto">
       <table
-        className="w-full border-collapse text-sm animate-blur-in-sm"
+        className="w-full min-w-[600px] border-collapse text-sm animate-blur-in-sm"
         style={{ animationDelay: "180ms" }}
       >
         <thead>
@@ -1206,6 +1211,7 @@ function DocumentVaultCard({
           )}
         </tbody>
       </table>
+      </div>
       )}
     </SectionCard>
   );

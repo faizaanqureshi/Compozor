@@ -255,9 +255,9 @@ function GmailSection({
           {connections!.map((conn) => (
             <div
               key={conn.id}
-              className="flex items-center justify-between gap-4 px-4 py-3"
+              className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
             >
-              <div className="flex items-center gap-2.5">
+              <div className="flex flex-wrap items-center gap-2.5">
                 <span className="text-sm font-medium">{conn.email_address}</span>
                 {conn.status === "needs_reauth" ? (
                   <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-600 dark:text-amber-500">
@@ -384,7 +384,7 @@ export default function SettingsPage() {
   return (
     <div className="flex w-full flex-col gap-12">
       <div className="flex flex-col gap-2">
-        <h1 className="text-6xl font-thin tracking-tight [font-family:var(--font-denton)]">
+        <h1 className="text-4xl font-thin tracking-tight [font-family:var(--font-denton)] sm:text-5xl md:text-6xl">
           Settings
         </h1>
         <p className="text-sm text-muted-foreground">

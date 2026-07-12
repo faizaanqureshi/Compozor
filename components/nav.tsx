@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -12,6 +12,7 @@ import {
   MailQuestion,
   Settings,
   Users,
+  X,
 } from "lucide-react";
 import {
   SignInButton,
@@ -23,6 +24,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
+import { useMobileNav } from "@/components/mobile-nav-context";
 
 const links = [
   { href: "/clients", label: "Clients", icon: Users, tourId: "clients" },
@@ -36,10 +38,21 @@ const links = [
   { href: "/settings", label: "Settings", icon: Settings, tourId: "settings" },
 ];
 
+// Breakpoint behavior:
+//  - below md: off-canvas drawer, opened via the mobile top bar's hamburger.
+//  - md to lg: docked in the layout, but permanently collapsed to an icon
+//    rail - there's no room to offer the expand/collapse toggle here.
+//  - lg and up: docked, and the user can expand/collapse it via `collapsed`.
 export function Nav() {
   const pathname = usePathname();
   const { user } = useUser();
   const [collapsed, setCollapsed] = useState(false);
+  const { mobileOpen, setMobileOpen } = useMobileNav();
+
+  useEffect(() => {
+    setMobileOpen(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
 
   if (
     pathname === "/" ||
@@ -50,35 +63,53 @@ export function Nav() {
     return null;
 
   return (
-    <aside
-      className={cn(
-        "dark sticky top-0 flex h-screen shrink-0 flex-col gap-6 border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width] duration-200",
-        collapsed ? "w-[4.5rem] p-3" : "w-72 p-6"
+    <>
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/50 md:hidden"
+          onClick={() => setMobileOpen(false)}
+        />
       )}
-    >
-      <div
+      <aside
         className={cn(
-          "flex items-center gap-2",
-          collapsed ? "justify-center" : "justify-between px-1"
+          "dark fixed inset-y-0 left-0 z-50 flex h-screen w-72 shrink-0 flex-col gap-6 border-r border-sidebar-border bg-sidebar p-6 text-sidebar-foreground transition-transform duration-200 md:sticky md:top-0 md:w-[4.5rem] md:translate-x-0 md:p-3 md:transition-[width]",
+          mobileOpen ? "translate-x-0" : "-translate-x-full",
+          collapsed ? "lg:w-[4.5rem] lg:p-3" : "lg:w-72 lg:p-6"
         )}
       >
-        {!collapsed && (
-          <Link href="/" className="shrink-0">
-            <Image
-              src="/compozor-logo.png"
-              alt="Compozor"
-              width={795}
-              height={214}
-              priority
-              className="h-7 w-auto"
-            />
-          </Link>
+      <div
+        className={cn(
+          "flex items-center gap-2 justify-between px-1 md:justify-center md:px-0",
+          !collapsed && "lg:justify-between lg:px-1"
         )}
+      >
+        <Link
+          href="/"
+          className={cn("shrink-0 md:hidden", !collapsed && "lg:inline-block")}
+        >
+          <Image
+            src="/compozor-logo.png"
+            alt="Compozor"
+            width={795}
+            height={214}
+            priority
+            className="h-7 w-auto"
+          />
+        </Link>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="shrink-0 text-sidebar-foreground/50 hover:bg-sidebar-foreground/8 hover:text-sidebar-foreground md:hidden"
+          onClick={() => setMobileOpen(false)}
+        >
+          <X />
+          <span className="sr-only">Close menu</span>
+        </Button>
         <Button
           variant="ghost"
           size="icon-sm"
           className={cn(
-            "shrink-0 text-sidebar-foreground/50 hover:bg-sidebar-foreground/8 hover:text-sidebar-foreground",
+            "hidden shrink-0 text-sidebar-foreground/50 hover:bg-sidebar-foreground/8 hover:text-sidebar-foreground lg:inline-flex",
             !collapsed && "ml-auto"
           )}
           onClick={() => setCollapsed((c) => !c)}
@@ -96,11 +127,12 @@ export function Nav() {
             <Link
               key={link.href}
               href={link.href}
-              title={collapsed ? link.label : undefined}
+              title={link.label}
               data-tour-nav={link.tourId}
               className={cn(
                 "flex items-center gap-3 rounded-md px-2.5 py-1.5 text-sm transition-colors",
-                collapsed && "justify-center px-0",
+                "md:justify-center md:px-0",
+                !collapsed && "lg:justify-start lg:px-2.5",
                 active
                   ? "bg-sidebar-foreground/[0.06] font-medium text-sidebar-foreground"
                   : "text-sidebar-foreground/40 hover:text-sidebar-foreground/70"
@@ -108,12 +140,14 @@ export function Nav() {
             >
               <Icon
                 className={cn(
-                  "shrink-0",
-                  collapsed ? "size-[18px]" : "size-[15px]",
+                  "size-[15px] shrink-0 md:size-[18px]",
+                  !collapsed && "lg:size-[15px]",
                   active ? "text-sidebar-foreground/80" : "text-sidebar-foreground/30"
                 )}
               />
-              {!collapsed && <span className="truncate">{link.label}</span>}
+              <span className={cn("truncate md:hidden", !collapsed && "lg:inline")}>
+                {link.label}
+              </span>
             </Link>
           );
         })}
@@ -130,19 +164,20 @@ export function Nav() {
               Sign in
             </Button>
           </SignInButton>
-          {!collapsed && (
-            <SignUpButton fallbackRedirectUrl="/clients">
-              <Button size="sm" className="w-full">
-                Sign up
-              </Button>
-            </SignUpButton>
-          )}
+          <SignUpButton fallbackRedirectUrl="/clients">
+            <Button
+              size="sm"
+              className={cn("w-full md:hidden", !collapsed && "lg:inline-flex")}
+            >
+              Sign up
+            </Button>
+          </SignUpButton>
         </Show>
         <Show when="signed-in">
           <div
             className={cn(
-              "flex items-center gap-2",
-              collapsed && "flex-col gap-3"
+              "flex items-center gap-2 md:flex-col md:gap-3",
+              !collapsed && "lg:flex-row lg:gap-2"
             )}
           >
             <Avatar size="sm" className="shrink-0">
@@ -151,16 +186,19 @@ export function Nav() {
                 {(user?.firstName?.[0] ?? user?.primaryEmailAddress?.emailAddress?.[0] ?? "U").toUpperCase()}
               </AvatarFallback>
             </Avatar>
-            {!collapsed && (
-              <div className="flex min-w-0 flex-1 flex-col leading-tight">
-                <span className="truncate text-sm font-medium text-sidebar-foreground/80">
-                  {user?.fullName ?? "Account"}
-                </span>
-                <span className="truncate text-xs text-sidebar-foreground/65">
-                  {user?.primaryEmailAddress?.emailAddress}
-                </span>
-              </div>
-            )}
+            <div
+              className={cn(
+                "flex min-w-0 flex-1 flex-col leading-tight md:hidden",
+                !collapsed && "lg:flex"
+              )}
+            >
+              <span className="truncate text-sm font-medium text-sidebar-foreground/80">
+                {user?.fullName ?? "Account"}
+              </span>
+              <span className="truncate text-xs text-sidebar-foreground/65">
+                {user?.primaryEmailAddress?.emailAddress}
+              </span>
+            </div>
             <SignOutButton>
               <Button
                 variant="ghost"
@@ -174,6 +212,7 @@ export function Nav() {
           </div>
         </Show>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 }
