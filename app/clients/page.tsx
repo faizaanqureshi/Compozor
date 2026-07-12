@@ -432,73 +432,82 @@ export default function ClientsPage() {
       )}
 
       <section className="flex flex-col gap-4">
-        <div className="flex items-center gap-2 text-xs font-medium tracking-wide text-amber-600 uppercase dark:text-amber-500">
-          <AlertTriangle className="size-3.5" />
-          Waiting for action
-        </div>
-        <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
-          {loading &&
-            Array.from({ length: 2 }).map((_, i) => (
-              <Skeleton key={i} className="h-[4.75rem] w-full rounded-xl" />
-            ))}
-          {!loading &&
-            waiting.map(({ client, items }, i) => {
-            const state = reminderState[client.id];
-            return (
-              <div
-                key={client.id}
-                role="button"
-                tabIndex={0}
-                onClick={() => router.push(`/clients/${client.id}`)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") router.push(`/clients/${client.id}`);
-                }}
-                style={{ animationDelay: `${Math.min(i, 6) * 40}ms` }}
-                className="group/waiting flex cursor-pointer animate-blur-in-sm items-center justify-between gap-4 rounded-xl border border-amber-500/20 bg-amber-500/[0.04] px-4 py-3.5 transition-colors hover:bg-amber-500/[0.07]"
-              >
-                <div className="flex flex-col gap-1.5">
-                  <span className="font-thin underline-offset-4 [font-family:var(--font-denton)] group-hover/waiting:underline">
-                    {client.name}
-                  </span>
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {items.slice(0, 3).map((i) => (
-                      <span
-                        key={i.id}
-                        className="rounded-full bg-amber-500/20 px-2 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-500/15 dark:text-amber-300"
-                      >
-                        {i.doc_type_needed}
-                      </span>
-                    ))}
-                    {items.length > 3 && (
-                      <span className="text-xs text-muted-foreground">
-                        +{items.length - 3} more
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <div className="flex shrink-0 items-center gap-3">
-                  <button
-                    type="button"
-                    disabled={state === "sending" || state === "sent"}
-                    onClick={(e) => sendReminder(e, client.id)}
-                    className="rounded-full border border-amber-600/30 px-3 py-1.5 text-xs font-medium text-amber-700 opacity-0 transition-opacity group-hover/waiting:opacity-100 hover:bg-amber-500/10 disabled:opacity-100 dark:text-amber-400"
+        {!loading && waiting.length === 0 ? (
+          <div className="flex items-center gap-2 text-xs font-medium tracking-wide text-chart-2 uppercase dark:text-chart-4">
+            <Check className="size-3.5" />
+            No action needed
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 text-xs font-medium tracking-wide text-amber-600 uppercase dark:text-amber-500">
+            <AlertTriangle className="size-3.5" />
+            Waiting for action
+          </div>
+        )}
+        <div className="rounded-2xl bg-card p-4 ring-1 ring-foreground/10">
+          <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
+            {loading &&
+              Array.from({ length: 2 }).map((_, i) => (
+                <Skeleton key={i} className="h-[4.75rem] w-full rounded-xl" />
+              ))}
+            {!loading &&
+              waiting.map(({ client, items }, i) => {
+                const state = reminderState[client.id];
+                return (
+                  <div
+                    key={client.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => router.push(`/clients/${client.id}`)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") router.push(`/clients/${client.id}`);
+                    }}
+                    style={{ animationDelay: `${Math.min(i, 6) * 40}ms` }}
+                    className="group/waiting flex cursor-pointer animate-blur-in-sm items-center justify-between gap-4 rounded-xl border border-amber-500/20 bg-amber-500/[0.04] px-4 py-3.5 transition-colors hover:bg-amber-500/[0.07]"
                   >
-                    {state === "sent"
-                      ? "Sent"
-                      : state === "sending"
-                        ? "Sending…"
-                        : "Send reminder"}
-                  </button>
-                  <ChevronRight className="size-4 text-amber-700/50 dark:text-amber-400/50" />
-                </div>
-              </div>
-            );
-          })}
-          {!loading && waiting.length === 0 && (
-            <p className="py-3 text-sm text-muted-foreground">
-              Nothing outstanding — every client is caught up.
-            </p>
-          )}
+                    <div className="flex flex-col gap-1.5">
+                      <span className="font-thin underline-offset-4 [font-family:var(--font-denton)] group-hover/waiting:underline">
+                        {client.name}
+                      </span>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {items.slice(0, 3).map((i) => (
+                          <span
+                            key={i.id}
+                            className="rounded-full bg-amber-500/20 px-2 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-500/15 dark:text-amber-300"
+                          >
+                            {i.doc_type_needed}
+                          </span>
+                        ))}
+                        {items.length > 3 && (
+                          <span className="text-xs text-muted-foreground">
+                            +{items.length - 3} more
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-3">
+                      <button
+                        type="button"
+                        disabled={state === "sending" || state === "sent"}
+                        onClick={(e) => sendReminder(e, client.id)}
+                        className="rounded-full border border-amber-600/30 px-3 py-1.5 text-xs font-medium text-amber-700 opacity-0 transition-opacity group-hover/waiting:opacity-100 hover:bg-amber-500/10 disabled:opacity-100 dark:text-amber-400"
+                      >
+                        {state === "sent"
+                          ? "Sent"
+                          : state === "sending"
+                            ? "Sending…"
+                            : "Send reminder"}
+                      </button>
+                      <ChevronRight className="size-4 text-amber-700/50 dark:text-amber-400/50" />
+                    </div>
+                  </div>
+                );
+              })}
+            {!loading && waiting.length === 0 && (
+              <p className="animate-blur-in-sm py-3 text-sm text-muted-foreground">
+                Nothing outstanding — every client is caught up.
+              </p>
+            )}
+          </div>
         </div>
       </section>
 
@@ -506,31 +515,33 @@ export default function ClientsPage() {
         <div className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
           Recent activity
         </div>
-        <div className="relative flex flex-col">
-          {loading && (
-            <div className="flex flex-col gap-3 py-1">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <Skeleton key={i} className="h-8 w-full" />
+        <div className="rounded-2xl bg-card p-4 ring-1 ring-foreground/10">
+          <div className="relative flex flex-col">
+            {loading && (
+              <div className="flex flex-col gap-3 py-1">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <Skeleton key={i} className="h-8 w-full" />
+                ))}
+              </div>
+            )}
+            {!loading && recentActivity.length > 1 && (
+              <div className="absolute top-2 bottom-2 left-3.5 w-px bg-border/70" />
+            )}
+            {!loading &&
+              recentActivity.map((group, i) => (
+                <ActivityGroupRow
+                  key={group.clientId}
+                  group={group}
+                  expanded={expandedClients.has(group.clientId)}
+                  onToggle={() => toggleExpanded(group.clientId)}
+                  clientName={clientsById[group.clientId]?.name ?? "Unknown client"}
+                  delayMs={60 + Math.min(i, 6) * 40}
+                />
               ))}
-            </div>
-          )}
-          {!loading && recentActivity.length > 1 && (
-            <div className="absolute top-2 bottom-2 left-3.5 w-px bg-border/70" />
-          )}
-          {!loading &&
-            recentActivity.map((group, i) => (
-            <ActivityGroupRow
-              key={group.clientId}
-              group={group}
-              expanded={expandedClients.has(group.clientId)}
-              onToggle={() => toggleExpanded(group.clientId)}
-              clientName={clientsById[group.clientId]?.name ?? "Unknown client"}
-              delayMs={60 + Math.min(i, 6) * 40}
-            />
-          ))}
-          {!loading && recentActivity.length === 0 && (
-            <p className="py-3 text-sm text-muted-foreground">No activity yet.</p>
-          )}
+            {!loading && recentActivity.length === 0 && (
+              <p className="animate-blur-in-sm py-3 text-sm text-muted-foreground">No activity yet.</p>
+            )}
+          </div>
         </div>
       </section>
 
@@ -549,90 +560,92 @@ export default function ClientsPage() {
             />
           </div>
         </div>
-        <table className="w-full border-collapse text-sm">
-          <thead>
-            <tr className="text-left">
-              <SortableTh label="Name" sortKey="name" sort={sort} onSort={toggleSort} />
-              <SortableTh label="Email" sortKey="email" sort={sort} onSort={toggleSort} />
-              <SortableTh
-                label="Documents"
-                sortKey="documents"
-                sort={sort}
-                onSort={toggleSort}
-              />
-              <SortableTh
-                label="Last activity"
-                sortKey="activity"
-                sort={sort}
-                onSort={toggleSort}
-              />
-              <SortableTh
-                label="Status"
-                sortKey="status"
-                sort={sort}
-                onSort={toggleSort}
-              />
-            </tr>
-          </thead>
-          <tbody>
-            {loading &&
-              Array.from({ length: 6 }).map((_, i) => (
-                <tr key={i}>
-                  <td colSpan={5} className="border-b border-border/50 py-3 pr-4">
-                    <Skeleton className="h-4 w-full" />
-                  </td>
-                </tr>
-              ))}
-            {!loading &&
-              rows.map((c, i) => {
-              const summary = c.checklist_summary;
-              const activity = lastActivity[c.id];
-              const workflow = deriveWorkflowStatus(c, summary);
-              return (
-                <tr
-                  key={c.id}
-                  className="group/row animate-blur-in-sm"
-                  style={{ animationDelay: `${120 + Math.min(i, 10) * 25}ms` }}
-                >
-                  <td className="border-b border-border/50 py-3 pr-4">
-                    <Link
-                      href={`/clients/${c.id}`}
-                      className="font-thin underline-offset-4 [font-family:var(--font-denton)] group-hover/row:underline"
-                    >
-                      {c.name}
-                    </Link>
-                  </td>
-                  <td className="border-b border-border/50 py-3 pr-4 text-foreground/70">
-                    {c.email}
-                  </td>
-                  <td className="border-b border-border/50 py-3 pr-4 text-foreground/70">
-                    {summary
-                      ? summary.total > 0
-                        ? `${summary.received} of ${summary.total} received`
-                        : "No checklist"
-                      : "—"}
-                  </td>
-                  <td className="border-b border-border/50 py-3 pr-4 text-foreground/70">
-                    {activity ? formatRelativeTime(activity) : "No activity yet"}
-                  </td>
-                  <td className="border-b border-border/50 py-3 pr-4">
-                    <span className="inline-flex items-center gap-2">
-                      <span className={cn("size-1.5 rounded-full", toneClasses[workflow.tone])} />
-                      <span className="text-foreground/80">{workflow.label}</span>
-                    </span>
-                  </td>
-                </tr>
-              );
-            })}
-            {!loading && rows.length === 0 && (
-              <tr>
-                <td colSpan={5} className="py-8 text-center text-muted-foreground">
-                  {clients?.length === 0 ? "No clients yet." : "No clients match your search."}
-                </td>
+        <div className="rounded-2xl bg-card p-6 ring-1 ring-foreground/10">
+          <table className="w-full border-collapse text-sm">
+            <thead>
+              <tr className="text-left">
+                <SortableTh label="Name" sortKey="name" sort={sort} onSort={toggleSort} />
+                <SortableTh label="Email" sortKey="email" sort={sort} onSort={toggleSort} />
+                <SortableTh
+                  label="Documents"
+                  sortKey="documents"
+                  sort={sort}
+                  onSort={toggleSort}
+                />
+                <SortableTh
+                  label="Last activity"
+                  sortKey="activity"
+                  sort={sort}
+                  onSort={toggleSort}
+                />
+                <SortableTh
+                  label="Status"
+                  sortKey="status"
+                  sort={sort}
+                  onSort={toggleSort}
+                />
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {loading &&
+                Array.from({ length: 6 }).map((_, i) => (
+                  <tr key={i}>
+                    <td colSpan={5} className="border-b border-border/50 py-3 pr-4">
+                      <Skeleton className="h-4 w-full" />
+                    </td>
+                  </tr>
+                ))}
+              {!loading &&
+                rows.map((c, i) => {
+                  const summary = c.checklist_summary;
+                  const activity = lastActivity[c.id];
+                  const workflow = deriveWorkflowStatus(c, summary);
+                  return (
+                    <tr
+                      key={c.id}
+                      className="group/row animate-blur-in-sm"
+                      style={{ animationDelay: `${120 + Math.min(i, 10) * 25}ms` }}
+                    >
+                      <td className="border-b border-border/50 py-3 pr-4">
+                        <Link
+                          href={`/clients/${c.id}`}
+                          className="font-thin underline-offset-4 [font-family:var(--font-denton)] group-hover/row:underline"
+                        >
+                          {c.name}
+                        </Link>
+                      </td>
+                      <td className="border-b border-border/50 py-3 pr-4 text-foreground/70">
+                        {c.email}
+                      </td>
+                      <td className="border-b border-border/50 py-3 pr-4 text-foreground/70">
+                        {summary
+                          ? summary.total > 0
+                            ? `${summary.received} of ${summary.total} received`
+                            : "No checklist"
+                          : "—"}
+                      </td>
+                      <td className="border-b border-border/50 py-3 pr-4 text-foreground/70">
+                        {activity ? formatRelativeTime(activity) : "No activity yet"}
+                      </td>
+                      <td className="border-b border-border/50 py-3 pr-4">
+                        <span className="inline-flex items-center gap-2">
+                          <span className={cn("size-1.5 rounded-full", toneClasses[workflow.tone])} />
+                          <span className="text-foreground/80">{workflow.label}</span>
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              {!loading && rows.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="animate-blur-in-sm py-8 text-center text-muted-foreground">
+                    {clients?.length === 0 ? "No clients yet." : "No clients match your search."}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </section>
     </div>
   );

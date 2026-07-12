@@ -366,6 +366,83 @@ export const sendEmailLogEntry = (clientId: number, emailLogId: number) =>
 export const listEmailThreads = (clientId: number) =>
   request<EmailThread[]>(`/clients/${clientId}/email-threads`);
 
+// ---------- Live pipeline streaming ----------
+//
+// While the backend is processing an inbound email (real or the manual
+// test tool), it broadcasts checkpoints - pipeline_started, stage_started/
+// completed, tool_call_started/result, text_delta, pipeline_finished - over
+// one long-lived SSE connection per org. Used by /email-log to show a
+// thread "processing" live instead of only after a refetch.
+
+export interface EmailLogStreamEvent {
+  type: string;
+  client_id?: number;
+  thread_id?: string | null;
+  [key: string]: unknown;
+}
+
+export interface ActiveRun {
+  client_id: number;
+  thread_id: string | null;
+}
+
+export const listActiveRuns = () => request<ActiveRun[]>("/email-log/active-runs");
+
+// Not EventSource: it can't send the Authorization header this backend
+// requires on every request, so this parses the SSE wire format (blocks
+// separated by "\n\n", each with a "data: <json>" line) directly off a
+// fetch() ReadableStream instead. Returns an unsubscribe function.
+export function subscribeToEmailLogStream(
+  onEvent: (event: EmailLogStreamEvent) => void,
+  onError?: (err: unknown) => void
+): () => void {
+  const controller = new AbortController();
+
+  (async () => {
+    try {
+      const token = await getAuthToken();
+      const headers = new Headers();
+      if (token) headers.set("Authorization", `Bearer ${token}`);
+      const res = await fetch(`${API_BASE_URL}/email-log/stream`, {
+        headers,
+        signal: controller.signal,
+      });
+      if (!res.ok || !res.body) {
+        throw new ApiError(res.status, `Failed to open email-log stream (${res.status})`);
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        let separatorIndex: number;
+        while ((separatorIndex = buffer.indexOf("\n\n")) !== -1) {
+          const rawEvent = buffer.slice(0, separatorIndex);
+          buffer = buffer.slice(separatorIndex + 2);
+          const dataLine = rawEvent
+            .split("\n")
+            .find((line) => line.startsWith("data:"));
+          if (!dataLine) continue;
+          try {
+            onEvent(JSON.parse(dataLine.slice("data:".length).trim()) as EmailLogStreamEvent);
+          } catch {
+            // Malformed frame - skip it rather than killing the whole stream.
+          }
+        }
+      }
+    } catch (err) {
+      if (controller.signal.aborted) return; // expected on unsubscribe
+      onError?.(err);
+    }
+  })();
+
+  return () => controller.abort();
+}
+
 // ---------- Client memory notes ----------
 
 export const listClientMemoryNotes = (clientId: number) =>

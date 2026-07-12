@@ -25,10 +25,15 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 
 const links = [
-  { href: "/clients", label: "Clients", icon: Users },
-  { href: "/email-log", label: "Email Log", icon: Mail },
-  { href: "/unmatched-emails", label: "Unmatched Emails", icon: MailQuestion },
-  { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/clients", label: "Clients", icon: Users, tourId: "clients" },
+  { href: "/email-log", label: "Email Log", icon: Mail, tourId: "email-log" },
+  {
+    href: "/unmatched-emails",
+    label: "Unmatched Emails",
+    icon: MailQuestion,
+    tourId: "unmatched-emails",
+  },
+  { href: "/settings", label: "Settings", icon: Settings, tourId: "settings" },
 ];
 
 export function Nav() {
@@ -84,6 +89,7 @@ export function Nav() {
               key={link.href}
               href={link.href}
               title={collapsed ? link.label : undefined}
+              data-tour-nav={link.tourId}
               className={cn(
                 "flex items-center gap-3 rounded-md px-2.5 py-1.5 text-sm transition-colors",
                 collapsed && "justify-center px-0",

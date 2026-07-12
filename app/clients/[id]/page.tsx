@@ -22,7 +22,6 @@ import {
   DocumentOut,
   DocumentUploadResult,
   EmailThread,
-  ToolTrajectoryStep,
   createChecklistItem,
   deleteClient,
   getClient,
@@ -37,6 +36,8 @@ import {
   waiveChecklistItem,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { AgentActivityDisclosure } from "@/components/agent-activity-disclosure";
+import { Linkify } from "@/components/linkify";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
@@ -66,7 +67,7 @@ function SectionCard({
   children: React.ReactNode;
 }) {
   return (
-    <section className="flex flex-col gap-5 rounded-2xl border border-border/60 p-6">
+    <section className="flex flex-col gap-5 rounded-2xl bg-card p-6 ring-1 ring-foreground/10">
       <div className="flex flex-col gap-2">
         <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
           {title}
@@ -347,23 +348,23 @@ function ChecklistCard({
         style={{ animationDelay: "60ms" }}
       >
         <thead>
-          <tr className="border-b border-border/60 text-left">
-            <th className="py-1.5 pr-4 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+          <tr className="border-b border-border text-left">
+            <th className="py-1.5 pr-4 pb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
               Doc type
             </th>
-            <th className="py-1.5 pr-4 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+            <th className="py-1.5 pr-4 pb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
               Status
             </th>
-            <th className="py-1.5 pr-4 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+            <th className="py-1.5 pr-4 pb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
               Wrong attempts
             </th>
-            <th className="py-1.5 pr-4 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+            <th className="py-1.5 pr-4 pb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
               Last wrong type
             </th>
-            <th className="py-1.5 pr-4 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+            <th className="py-1.5 pr-4 pb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
               Document
             </th>
-            <th className="py-1.5 pr-0 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+            <th className="py-1.5 pr-0 pb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
               <span className="sr-only">Actions</span>
             </th>
           </tr>
@@ -655,87 +656,6 @@ function CommunicationCard({
   );
 }
 
-const TOOL_LABELS: Record<string, string> = {
-  list_client_documents: "Looked up documents on file",
-  read_document: "Read a document",
-  get_full_conversation_history: "Pulled full conversation history",
-};
-
-function humanizeToolName(tool: string): string {
-  return (
-    TOOL_LABELS[tool] ??
-    tool.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase())
-  );
-}
-
-function isToolFailure(step: ToolTrajectoryStep): boolean {
-  return /^(Unknown tool|Tool call '.*' failed)/.test(step.result);
-}
-
-function summarizeToolStep(step: ToolTrajectoryStep): string {
-  if (isToolFailure(step)) return step.result;
-
-  if (step.tool === "list_client_documents") {
-    const count = (step.result.match(/^- id=/gm) ?? []).length;
-    return `Looked up documents on file (${count} found)`;
-  }
-
-  if (step.tool === "read_document") {
-    const match = step.result.match(/^Loaded document \d+ \((.+)\) - attached below\.$/);
-    const description = match?.[1] ?? step.result;
-    return `Read "${description}"`;
-  }
-
-  if (step.tool === "get_full_conversation_history") {
-    return "Pulled full conversation history";
-  }
-
-  const trimmed = step.result.length > 140 ? `${step.result.slice(0, 140)}…` : step.result;
-  return `${humanizeToolName(step.tool)} — ${trimmed}`;
-}
-
-function AgentActivityDisclosure({
-  trajectory,
-}: {
-  trajectory: ToolTrajectoryStep[];
-}) {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <div className="mt-2">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
-      >
-        <ChevronDown
-          className={cn("size-3 transition-transform", open && "rotate-180")}
-        />
-        {open ? "Hide agent activity" : "Show agent activity"}
-      </button>
-      {open && (
-        <ul className="mt-1.5 flex flex-col gap-1 rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-xs">
-          {trajectory.map((step) => {
-            const failed = isToolFailure(step);
-            return (
-              <li
-                key={step.round}
-                className={cn(
-                  "flex items-start gap-1.5",
-                  failed ? "text-destructive" : "text-foreground/80"
-                )}
-              >
-                <span className="shrink-0">{failed ? "✗" : "✓"}</span>
-                <span>{summarizeToolStep(step)}</span>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </div>
-  );
-}
-
 function ThreadsList({ threads }: { threads: EmailThread[] | null }) {
   const [expandedThread, setExpandedThread] = useState<string | null>(null);
 
@@ -763,7 +683,7 @@ function ThreadsList({ threads }: { threads: EmailThread[] | null }) {
               onClick={() =>
                 setExpandedThread(isOpen ? null : thread.thread_key)
               }
-              className="flex w-full items-center justify-between gap-3 px-3.5 py-2.5 text-left"
+              className="flex w-full items-center justify-between gap-3 px-3.5 py-2.5 text-left transition-colors hover:bg-muted/50"
             >
               <span className="truncate text-sm font-medium">
                 {latest?.subject || "(no subject)"}
@@ -798,7 +718,7 @@ function ThreadsList({ threads }: { threads: EmailThread[] | null }) {
                       <span>{new Date(m.created_at).toLocaleString()}</span>
                     </div>
                     <p className="whitespace-pre-wrap text-foreground/80">
-                      {m.content}
+                      <Linkify text={m.content} />
                     </p>
                     {m.escalation_reason && (
                       <p className="mt-1 text-xs text-amber-600 dark:text-amber-500">
@@ -961,17 +881,17 @@ function DocumentVaultCard({
         style={{ animationDelay: "180ms" }}
       >
         <thead>
-          <tr className="border-b border-border/60 text-left">
-            <th className="py-1.5 pr-4 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+          <tr className="border-b border-border text-left">
+            <th className="py-1.5 pr-4 pb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
               Type
             </th>
-            <th className="py-1.5 pr-4 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+            <th className="py-1.5 pr-4 pb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
               Status
             </th>
-            <th className="py-1.5 pr-4 text-right text-xs font-medium tracking-wide text-muted-foreground uppercase">
+            <th className="py-1.5 pr-4 pb-2.5 text-right text-xs font-medium tracking-wide text-muted-foreground uppercase">
               Year
             </th>
-            <th className="py-1.5 pr-4 text-right text-xs font-medium tracking-wide text-muted-foreground uppercase">
+            <th className="py-1.5 pr-4 pb-2.5 text-right text-xs font-medium tracking-wide text-muted-foreground uppercase">
               Received
             </th>
             <th className="py-1.5 pr-4" />

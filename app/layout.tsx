@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { Nav } from "@/components/nav";
 import { OnboardingGate } from "@/components/onboarding-gate";
+import { ProductTour } from "@/components/product-tour";
 import localFont from "next/font/local";
 import { cn } from "@/lib/utils";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -60,6 +61,7 @@ export default function RootLayout({
                   <main className="relative p-8 md:p-10">{children}</main>
                 </div>
               </div>
+              <ProductTour />
             </OnboardingGate>
           </TooltipProvider>
         </ClerkProvider>

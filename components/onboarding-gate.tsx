@@ -4,24 +4,52 @@ import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 import { getMyOrganization } from "@/lib/api";
+import { isProductTourPending } from "@/components/product-tour";
 
 const EXEMPT_PREFIXES = ["/sign-in", "/sign-up"];
 
 const STORAGE_KEY = "onboarding-complete";
 
-// Cached across navigations (and reloads, via sessionStorage) so onboarded
-// users don't wait on an org fetch every time. Only the completed state is
-// cached - it can only flip one way, when the onboarding page finishes and
-// calls markOnboardingComplete.
-let knownComplete =
-  typeof window !== "undefined" && sessionStorage.getItem(STORAGE_KEY) === "1";
+// How long a cached "complete" is trusted before re-checking the server.
+// Bounds staleness if the backend's onboarding state ever changes out from
+// under this cache (e.g. an org/DB reset during testing) - without this, a
+// stale sessionStorage flag would let an unboarded user straight into
+// gated pages indefinitely, since nothing else would ever re-validate it.
+const CACHE_TTL_MS = 10 * 60 * 1000;
+
+interface CachedStatus {
+  complete: true;
+  cachedAt: number;
+}
+
+// Re-read (and re-validate the TTL on) every call rather than freezing to a
+// module-level boolean forever once true - a long-lived tab that's never
+// reloaded still re-checks after the TTL elapses, not just on next reload.
+function readCache(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    if (!raw) return false;
+    const parsed = JSON.parse(raw) as Partial<CachedStatus>;
+    return (
+      parsed.complete === true &&
+      typeof parsed.cachedAt === "number" &&
+      Date.now() - parsed.cachedAt < CACHE_TTL_MS
+    );
+  } catch {
+    return false;
+  }
+}
 
 export function markOnboardingComplete() {
-  knownComplete = true;
   try {
-    sessionStorage.setItem(STORAGE_KEY, "1");
+    sessionStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ complete: true, cachedAt: Date.now() } satisfies CachedStatus)
+    );
   } catch {
-    // Storage unavailable (private mode etc.) - in-memory flag still works.
+    // Storage unavailable (private mode etc.) - falls back to fetching
+    // getMyOrganization() every navigation, which is correct if slower.
   }
 }
 
@@ -37,8 +65,8 @@ export function OnboardingGate({ children }: { children: React.ReactNode }) {
   const { isLoaded, isSignedIn } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
-  const [status, setStatus] = useState<Status>(
-    knownComplete ? "complete" : "unknown"
+  const [status, setStatus] = useState<Status>(() =>
+    readCache() ? "complete" : "unknown"
   );
 
   const exempt =
@@ -46,7 +74,7 @@ export function OnboardingGate({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn || exempt) return;
-    if (knownComplete) {
+    if (readCache()) {
       setStatus("complete");
       return;
     }
@@ -75,7 +103,11 @@ export function OnboardingGate({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (exempt) return;
-    if (status === "incomplete" && pathname !== "/onboarding") {
+    // A pending product tour means the wizard is done and the user is
+    // deliberately being kept on gated pages (the tour itself gates them
+    // instead) even though onboarding_completed hasn't been set server-side
+    // yet - see startProductTour() in product-tour.tsx for why.
+    if (status === "incomplete" && pathname !== "/onboarding" && !isProductTourPending()) {
       router.replace("/onboarding");
     } else if (status === "complete" && pathname === "/onboarding") {
       router.replace("/clients");
@@ -93,8 +125,10 @@ export function OnboardingGate({ children }: { children: React.ReactNode }) {
 
   // Hold back gated pages until we know onboarding is done ("error" fails
   // open). Covers Clerk still loading, the org fetch in flight, and the
-  // redirect to /onboarding being in progress.
-  if (!isLoaded || status === "unknown" || status === "incomplete") return null;
+  // redirect to /onboarding being in progress. A pending tour is let through
+  // regardless - see the effect above.
+  if (!isLoaded || status === "unknown") return null;
+  if (status === "incomplete" && !isProductTourPending()) return null;
 
   return <>{children}</>;
 }

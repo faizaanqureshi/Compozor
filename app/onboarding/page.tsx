@@ -21,7 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
-import { markOnboardingComplete } from "@/components/onboarding-gate";
+import { startProductTour } from "@/components/product-tour";
 
 type Category = {
   value: string;
@@ -203,8 +203,11 @@ export default function OnboardingPage() {
     setFinishError(null);
     try {
       await updateMyOrganization({ automation_level: automationLevel });
-      await updateMyOrganization({ onboarding_completed: true });
-      markOnboardingComplete();
+      // Deliberately not marking onboarding complete yet - that only happens
+      // once the guided product tour finishes (see ProductTour.onFinish),
+      // so a user who bails mid-tour lands back in the wizard, then the
+      // tour, rather than skipping straight into the app.
+      startProductTour();
       router.replace("/clients");
     } catch (e) {
       setFinishError(e instanceof ApiError ? e.message : String(e));

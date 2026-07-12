@@ -1,21 +1,26 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
-import { AlertTriangle, ArrowDownLeft, ArrowUpRight, Paperclip, Sparkles } from "lucide-react";
+import { AlertTriangle, ArrowDownLeft, ArrowUpRight, Loader2, Paperclip, Sparkles } from "lucide-react";
 import { clientsKey, emailLogKey } from "@/lib/swr-keys";
 import {
   ApiError,
   Client,
   DocumentOut,
   EmailLogEntry,
+  EmailLogStreamEvent,
   EmailStatus,
+  listActiveRuns,
   listClients,
   listEmailLog,
   sendEmailLogEntry,
+  subscribeToEmailLogStream,
 } from "@/lib/api";
 import { cn, formatRelativeTime } from "@/lib/utils";
+import { AgentActivityDisclosure, TraceStep } from "@/components/agent-activity-disclosure";
+import { Linkify } from "@/components/linkify";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -23,6 +28,22 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+
+// Human-readable label for each pipeline stage while a thread is being
+// processed live (see event_broadcast.py / email_reply_pipeline.py on the
+// backend for where these are emitted).
+const STAGE_LABELS: Record<string, string> = {
+  junk_check: "Checking for spam…",
+  intent_classification: "Reading the question…",
+  document_processing: "Processing attachment(s)…",
+  qa_answer: "Answering the question…",
+};
+
+type LiveRun = {
+  stage: string | null;
+  trace: TraceStep[];
+  draftText: string;
+};
 
 const statusOptions: { value: EmailStatus | "all"; label: string }[] = [
   { value: "all", label: "All" },
@@ -87,6 +108,136 @@ export default function EmailLogPage() {
       ? entriesError.message
       : String(entriesError)
     : null;
+
+  // Live pipeline state, keyed the same way `threads` groups entries
+  // (thread_id, or single-${email_log_id} when there isn't one) so a live
+  // run and its eventual persisted thread line up under the same key -
+  // see resolveRunKey below for how that key gets resolved per event.
+  const [liveRuns, setLiveRuns] = useState<Record<string, LiveRun>>({});
+  const mutateEntriesRef = useRef(mutateEntries);
+  mutateEntriesRef.current = mutateEntries;
+  // Manual test-tool runs have no thread_id, so there's nothing to key on
+  // until the first (pipeline_started) event tells us the new inbound
+  // email's id - remembered per client for the rest of that run's events.
+  // Only reliable within one continuous SSE connection; a reconnect
+  // mid-run loses this mapping (acceptable - the manual test tool is a
+  // lower-stakes case than real inbound mail, which always has a stable
+  // Gmail thread_id and doesn't depend on this at all).
+  const manualRunKeyByClientRef = useRef<Record<number, string>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+
+    listActiveRuns()
+      .then((runs) => {
+        if (cancelled) return;
+        setLiveRuns((prev) => {
+          const next = { ...prev };
+          for (const run of runs) {
+            // Only real Gmail threads (stable thread_id) can be seeded
+            // this way - a manual-test run with no thread_id has no key
+            // to seed until its own pipeline_started event arrives.
+            if (run.thread_id && !next[run.thread_id]) {
+              next[run.thread_id] = { stage: null, trace: [], draftText: "" };
+            }
+          }
+          return next;
+        });
+      })
+      .catch(() => {
+        // Best-effort - live state will still catch up from the stream.
+      });
+
+    function resolveRunKey(event: EmailLogStreamEvent): string | null {
+      const clientId = event.client_id;
+      if (clientId == null) return null;
+      const threadId = event.thread_id as string | null | undefined;
+      if (threadId) return threadId;
+      if (event.type === "pipeline_started" && typeof event.inbound_email_id === "number") {
+        const key = `single-${event.inbound_email_id}`;
+        manualRunKeyByClientRef.current[clientId] = key;
+        return key;
+      }
+      return manualRunKeyByClientRef.current[clientId] ?? null;
+    }
+
+    const unsubscribe = subscribeToEmailLogStream(
+      (event) => {
+        const key = resolveRunKey(event);
+        if (key == null) return;
+
+        if (event.type === "pipeline_started") {
+          // The new inbound row now exists in the DB - refetch so it
+          // (and its thread) shows up in the list right away.
+          mutateEntriesRef.current();
+        }
+        if (event.type === "pipeline_finished") {
+          setLiveRuns((prev) => {
+            if (!(key in prev)) return prev;
+            const next = { ...prev };
+            delete next[key];
+            return next;
+          });
+          mutateEntriesRef.current();
+          return;
+        }
+
+        setLiveRuns((prev) => {
+          const existing = prev[key] ?? { stage: null, trace: [], draftText: "" };
+          switch (event.type) {
+            case "pipeline_started":
+            case "stage_started":
+              return { ...prev, [key]: { ...existing, stage: (event.stage as string) ?? "processing" } };
+            case "stage_completed":
+              return { ...prev, [key]: { ...existing, stage: null } };
+            case "tool_call_started":
+              return {
+                ...prev,
+                [key]: {
+                  ...existing,
+                  trace: [
+                    ...existing.trace,
+                    {
+                      round: event.round as number,
+                      tool: event.tool as string,
+                      arguments: event.arguments as Record<string, unknown>,
+                    },
+                  ],
+                },
+              };
+            case "tool_call_result": {
+              const idx = existing.trace.findIndex(
+                (s) => s.round === event.round && s.tool === event.tool && s.result == null
+              );
+              const trace =
+                idx === -1
+                  ? [
+                      ...existing.trace,
+                      { round: event.round as number, tool: event.tool as string, result: event.result as string },
+                    ]
+                  : existing.trace.map((s, i) => (i === idx ? { ...s, result: event.result as string } : s));
+              return { ...prev, [key]: { ...existing, trace } };
+            }
+            case "text_delta":
+              return {
+                ...prev,
+                [key]: { ...existing, draftText: existing.draftText + ((event.delta as string) ?? "") },
+              };
+            default:
+              return prev;
+          }
+        });
+      },
+      (err) => {
+        console.error("email-log stream error", err);
+      }
+    );
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, []);
 
   const clientsById = useMemo(() => {
     const map: Record<number, Client> = {};
@@ -187,7 +338,7 @@ export default function EmailLogPage() {
   };
 
   return (
-    <div className="flex w-full flex-col gap-8">
+    <div className="flex h-[calc(100vh-4rem)] w-full flex-col gap-8 md:h-[calc(100vh-5rem)]">
       <div className="flex flex-col gap-2">
         <h1 className="text-6xl font-thin tracking-tight [font-family:var(--font-denton)]">
           Email log
@@ -232,9 +383,9 @@ export default function EmailLogPage() {
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
-      <div className="flex gap-6" style={{ height: "calc(100vh - 21rem)" }}>
-        <div className="flex w-[22rem] shrink-0 flex-col rounded-xl border border-border/60">
-          <div className="flex items-center gap-2.5 border-b border-border/60 px-3 py-2">
+      <div className="flex min-h-0 flex-1 gap-6">
+        <div className="flex w-[22rem] shrink-0 flex-col rounded-2xl bg-card ring-1 ring-foreground/10">
+          <div className="flex items-center gap-2.5 border-b border-border/70 px-3 py-2">
             <input
               type="checkbox"
               checked={allVisibleSelected}
@@ -265,17 +416,18 @@ export default function EmailLogPage() {
                   onSelect={() => setSelectedKey(thread.key)}
                   onCheck={() => toggleThreadSelection(thread.key)}
                   delayMs={Math.min(i, 10) * 25}
+                  live={liveRuns[thread.key]}
                 />
               ))}
             {!loading && threads.length === 0 && (
-              <p className="px-3 py-8 text-center text-sm text-muted-foreground">
+              <p className="animate-blur-in-sm px-3 py-8 text-center text-sm text-muted-foreground">
                 No entries.
               </p>
             )}
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto rounded-xl border border-border/60">
+        <div className="flex-1 overflow-y-auto rounded-2xl bg-card ring-1 ring-foreground/10">
           {loading ? (
             <div className="flex flex-col gap-4 p-6">
               <div className="flex flex-col gap-2">
@@ -316,10 +468,13 @@ export default function EmailLogPage() {
                     onSend={() => onSend(entry)}
                   />
                 ))}
+                {liveRuns[selectedThread.key] && (
+                  <LiveRunCard run={liveRuns[selectedThread.key]} />
+                )}
               </div>
             </div>
           ) : (
-            <p className="flex h-full items-center justify-center text-sm text-muted-foreground">
+            <p className="animate-blur-in-sm flex h-full items-center justify-center text-sm text-muted-foreground">
               Select a thread to read it.
             </p>
           )}
@@ -337,6 +492,7 @@ function ThreadRow({
   onSelect,
   onCheck,
   delayMs = 0,
+  live,
 }: {
   thread: Thread;
   client?: Client;
@@ -345,6 +501,7 @@ function ThreadRow({
   onSelect: () => void;
   onCheck: () => void;
   delayMs?: number;
+  live?: LiveRun;
 }) {
   const latest = thread.messages[thread.messages.length - 1];
   const hasAttention = thread.messages.some((m) => m.status === "needs_human_attention");
@@ -398,6 +555,12 @@ function ThreadRow({
           {thread.messages.some((m) => m.autosent) && (
             <Sparkles className="size-3 shrink-0 text-accent" />
           )}
+          {live && (
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-accent/15 px-1.5 py-px text-[10px] font-medium text-accent">
+              <Loader2 className="size-2.5 animate-spin" />
+              {STAGE_LABELS[live.stage ?? ""] ?? "Processing…"}
+            </span>
+          )}
         </div>
       </div>
     </div>
@@ -450,7 +613,7 @@ function MessageCard({
         </p>
       )}
       <p className="whitespace-pre-wrap text-sm text-foreground/80">
-        {entry.content || "(no body)"}
+        {entry.content ? <Linkify text={entry.content} /> : "(no body)"}
       </p>
       {entry.documents.length > 0 && (
         <div className="flex flex-col gap-1.5">
@@ -467,6 +630,30 @@ function MessageCard({
         </div>
       )}
       {error && <p className="text-xs text-destructive">{error}</p>}
+    </div>
+  );
+}
+
+// A pseudo-message-card for a thread currently mid-pipeline - there's no
+// persisted EmailLog row for this yet (the eventual draft/autosend only
+// gets created once the pipeline finishes), so this renders straight from
+// live SSE state instead of an EmailLogEntry. Replaced by the real
+// MessageCard once pipeline_finished fires and the entries list refetches.
+function LiveRunCard({ run }: { run: LiveRun }) {
+  return (
+    <div className="flex flex-col gap-2.5 rounded-lg border border-accent/40 bg-accent/5 p-4">
+      <div className="flex items-center gap-1.5 text-xs font-medium text-accent">
+        <Loader2 className="size-3 animate-spin" />
+        {STAGE_LABELS[run.stage ?? ""] ?? "Processing…"}
+      </div>
+      {run.draftText && (
+        <p className="whitespace-pre-wrap text-sm text-foreground/70">
+          <Linkify text={run.draftText} />
+        </p>
+      )}
+      {run.trace.length > 0 && (
+        <AgentActivityDisclosure trajectory={run.trace} defaultOpen />
+      )}
     </div>
   );
 }

@@ -27,6 +27,7 @@ import {
   listUnmatchedInboundEmails,
 } from "@/lib/api";
 import { cn, formatRelativeTime } from "@/lib/utils";
+import { Linkify } from "@/components/linkify";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -142,7 +143,7 @@ function CategoryDropdown({
 
 function EmptyState() {
   return (
-    <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border/60 py-20">
+    <div className="flex flex-col items-center justify-center gap-3 py-16">
       <span className="flex size-11 items-center justify-center rounded-full bg-muted text-muted-foreground/70">
         <Inbox className="size-5" />
       </span>
@@ -297,7 +298,7 @@ function TriageActions({
   };
 
   return (
-    <div className="flex w-72 shrink-0 flex-col gap-3 rounded-xl border border-border/60 bg-background p-4">
+    <div className="flex w-72 shrink-0 flex-col gap-3 rounded-xl bg-card p-4 ring-1 ring-foreground/10">
       <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
         Triage actions
       </h3>
@@ -414,112 +415,114 @@ export default function UnmatchedEmailsPage() {
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
-      {emailsLoading ? (
-        <table className="w-full border-collapse text-sm">
-          <thead>
-            <tr className="border-b border-border text-left">
-              <th className="pt-1 pb-2.5 pr-4 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                Sender
-              </th>
-              <th className="pt-1 pb-2.5 pr-4 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                Subject
-              </th>
-              <th className="pt-1 pb-2.5 pr-4 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                AI category
-              </th>
-              <th className="pt-1 pb-2.5 pr-4 text-right text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                Received
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {Array.from({ length: 6 }).map((_, i) => (
-              <tr key={i} className="border-b border-border/40">
-                <td colSpan={4} className="py-3 pr-4">
-                  <Skeleton className="h-4 w-full" />
-                </td>
+      <div className="animate-blur-in-sm rounded-2xl bg-card p-6 ring-1 ring-foreground/10">
+        {emailsLoading ? (
+          <table className="w-full border-collapse text-sm">
+            <thead>
+              <tr className="border-b border-border text-left">
+                <th className="pt-1 pb-2.5 pr-4 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                  Sender
+                </th>
+                <th className="pt-1 pb-2.5 pr-4 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                  Subject
+                </th>
+                <th className="pt-1 pb-2.5 pr-4 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                  AI category
+                </th>
+                <th className="pt-1 pb-2.5 pr-4 text-right text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                  Received
+                </th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      ) : emailsList.length === 0 ? (
-        <EmptyState />
-      ) : (
-        <table className="w-full border-collapse text-sm">
-          <thead>
-            <tr className="border-b border-border text-left">
-              <th className="pt-1 pb-2.5 pr-4 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                Sender
-              </th>
-              <th className="pt-1 pb-2.5 pr-4 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                Subject
-              </th>
-              <th className="pt-1 pb-2.5 pr-4 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                AI category
-              </th>
-              <th className="pt-1 pb-2.5 pr-4 text-right text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                Received
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {emailsList.map((email, i) => {
-              const isOpen = expandedId === email.id;
-              return (
-                <Fragment key={email.id}>
-                  <tr
-                    className="group/row animate-blur-in-sm border-b border-border/40"
-                    style={{ animationDelay: `${Math.min(i, 10) * 25}ms` }}
-                  >
-                    <td className="py-3 pr-4 align-top">
-                      <button
-                        type="button"
-                        onClick={() => setExpandedId(isOpen ? null : email.id)}
-                        className="flex items-start gap-1.5 text-left font-medium text-foreground/90 hover:underline hover:underline-offset-4"
-                      >
-                        <ChevronDown
-                          className={cn(
-                            "mt-0.5 size-3.5 shrink-0 text-muted-foreground transition-transform",
-                            isOpen && "rotate-180"
-                          )}
-                        />
-                        <span className="line-clamp-1">{email.from_email}</span>
-                      </button>
-                    </td>
-                    <td className="py-3 pr-4 align-top text-foreground/70">
-                      <span className="line-clamp-1">
-                        {email.subject || "(no subject)"}
-                      </span>
-                    </td>
-                    <td className="py-3 pr-4 align-top">
-                      <CategoryBadge email={email} />
-                    </td>
-                    <td className="py-3 pr-4 align-top text-right text-muted-foreground">
-                      {formatRelativeTime(email.created_at)}
-                    </td>
-                  </tr>
-                  {isOpen && (
-                    <tr className="border-b border-border/40">
-                      <td colSpan={4} className="bg-muted/30 py-4 pr-4 pl-4">
-                        <div className="flex items-start gap-4">
-                          <p className="flex-1 whitespace-pre-wrap text-foreground/80">
-                            {email.body_text}
-                          </p>
-                          <TriageActions
-                            email={email}
-                            clients={clients}
-                            onResolved={onResolved}
+            </thead>
+            <tbody>
+              {Array.from({ length: 6 }).map((_, i) => (
+                <tr key={i} className="border-b border-border/40">
+                  <td colSpan={4} className="py-3 pr-4">
+                    <Skeleton className="h-4 w-full" />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : emailsList.length === 0 ? (
+          <EmptyState />
+        ) : (
+          <table className="w-full border-collapse text-sm">
+            <thead>
+              <tr className="border-b border-border text-left">
+                <th className="pt-1 pb-2.5 pr-4 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                  Sender
+                </th>
+                <th className="pt-1 pb-2.5 pr-4 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                  Subject
+                </th>
+                <th className="pt-1 pb-2.5 pr-4 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                  AI category
+                </th>
+                <th className="pt-1 pb-2.5 pr-4 text-right text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                  Received
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {emailsList.map((email, i) => {
+                const isOpen = expandedId === email.id;
+                return (
+                  <Fragment key={email.id}>
+                    <tr
+                      className="group/row animate-blur-in-sm border-b border-border/40"
+                      style={{ animationDelay: `${Math.min(i, 10) * 25}ms` }}
+                    >
+                      <td className="py-3 pr-4 align-top">
+                        <button
+                          type="button"
+                          onClick={() => setExpandedId(isOpen ? null : email.id)}
+                          className="flex items-start gap-1.5 text-left font-medium text-foreground/90 hover:underline hover:underline-offset-4"
+                        >
+                          <ChevronDown
+                            className={cn(
+                              "mt-0.5 size-3.5 shrink-0 text-muted-foreground transition-transform",
+                              isOpen && "rotate-180"
+                            )}
                           />
-                        </div>
+                          <span className="line-clamp-1">{email.from_email}</span>
+                        </button>
+                      </td>
+                      <td className="py-3 pr-4 align-top text-foreground/70">
+                        <span className="line-clamp-1">
+                          {email.subject || "(no subject)"}
+                        </span>
+                      </td>
+                      <td className="py-3 pr-4 align-top">
+                        <CategoryBadge email={email} />
+                      </td>
+                      <td className="py-3 pr-4 align-top text-right text-muted-foreground">
+                        {formatRelativeTime(email.created_at)}
                       </td>
                     </tr>
-                  )}
-                </Fragment>
-              );
-            })}
-          </tbody>
-        </table>
-      )}
+                    {isOpen && (
+                      <tr className="border-b border-border/40">
+                        <td colSpan={4} className="bg-muted/30 py-4 pr-4 pl-4">
+                          <div className="flex items-start gap-4">
+                            <p className="flex-1 whitespace-pre-wrap text-foreground/80">
+                              <Linkify text={email.body_text} />
+                            </p>
+                            <TriageActions
+                              email={email}
+                              clients={clients}
+                              onResolved={onResolved}
+                            />
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   );
 }
