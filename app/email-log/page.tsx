@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
-import { AlertTriangle, ArrowDownLeft, ArrowLeft, ArrowUpRight, Loader2, Paperclip, Pencil, Sparkles } from "lucide-react";
+import { AlertTriangle, ArrowDownLeft, ArrowLeft, ArrowUpRight, Check, ChevronDown, Info, Loader2, Paperclip, Pencil, Sparkles } from "lucide-react";
 import { clientsKey, emailLogKey } from "@/lib/swr-keys";
 import {
   ApiError,
@@ -15,6 +15,7 @@ import {
   listActiveRuns,
   listClients,
   listEmailLog,
+  resolveEmailLogEntry,
   sendEmailLogEntry,
   subscribeToEmailLogStream,
   updateEmailLogEntry,
@@ -84,6 +85,20 @@ const statusLabels: Record<EmailStatus, string> = {
   needs_human_attention: "Needs attention",
 };
 
+// A resolved escalation is still, historically, status="needs_human_attention"
+// (see backend EmailLog.resolved_at) - these two read that pair together so
+// nothing in the UI ever shows "Needs attention" for a thread/message a
+// human already resolved.
+function effectiveTone(entry: EmailLogEntry): StatusTone {
+  if (entry.status === "needs_human_attention" && entry.resolved_at) return "positive";
+  return statusTone[entry.status];
+}
+
+function effectiveStatusLabel(entry: EmailLogEntry): string {
+  if (entry.status === "needs_human_attention" && entry.resolved_at) return "Resolved";
+  return statusLabels[entry.status];
+}
+
 function normalizeSubject(subject: string | null) {
   if (!subject) return null;
   return subject.replace(/^\s*(re|fwd?)\s*:\s*/gi, "").trim() || subject;
@@ -99,6 +114,7 @@ type Thread = {
 export default function EmailLogPage() {
   const [status, setStatus] = useState<EmailStatus | "all">("all");
   const [sendingId, setSendingId] = useState<number | null>(null);
+  const [resolvingId, setResolvingId] = useState<number | null>(null);
   const [rowError, setRowError] = useState<Record<number, string>>({});
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
@@ -107,12 +123,16 @@ export default function EmailLogPage() {
   const [editingEntry, setEditingEntry] = useState<EmailLogEntry | null>(null);
 
   const filterStatus = status === "all" ? undefined : status;
+  // The "Needs attention" tab is a queue of what still needs a human, so
+  // resolved escalations drop out of it by default - "All" still shows
+  // them, since resolved rows are history there, not noise to hide.
+  const filterResolved = filterStatus === "needs_human_attention" ? false : undefined;
   const {
     data: entries,
     error: entriesError,
     isLoading: entriesLoading,
     mutate: mutateEntries,
-  } = useSWR(emailLogKey(filterStatus), () => listEmailLog(filterStatus));
+  } = useSWR(emailLogKey(filterStatus, filterResolved), () => listEmailLog(filterStatus, filterResolved));
   const { data: clientsData } = useSWR(clientsKey(), listClients);
   const error = entriesError
     ? entriesError instanceof ApiError
@@ -316,6 +336,22 @@ export default function EmailLogPage() {
     }
   };
 
+  const onResolve = async (entry: EmailLogEntry) => {
+    setResolvingId(entry.id);
+    setRowError((prev) => ({ ...prev, [entry.id]: "" }));
+    try {
+      await resolveEmailLogEntry(entry.client_id, entry.id);
+      mutateEntries();
+    } catch (e) {
+      setRowError((prev) => ({
+        ...prev,
+        [entry.id]: e instanceof ApiError ? e.message : String(e),
+      }));
+    } finally {
+      setResolvingId(null);
+    }
+  };
+
   const onSaveDraft = async (content: string) => {
     if (!editingEntry) return;
     await updateEmailLogEntry(editingEntry.client_id, editingEntry.id, { content });
@@ -503,9 +539,11 @@ export default function EmailLogPage() {
                     key={entry.id}
                     entry={entry}
                     sending={sendingId === entry.id}
+                    resolving={resolvingId === entry.id}
                     error={rowError[entry.id]}
                     onSend={() => onSend(entry)}
                     onEdit={() => setEditingEntry(entry)}
+                    onResolve={() => onResolve(entry)}
                   />
                 ))}
                 {liveRuns[selectedThread.key] && (
@@ -552,8 +590,10 @@ function ThreadRow({
   live?: LiveRun;
 }) {
   const latest = thread.messages[thread.messages.length - 1];
-  const hasAttention = thread.messages.some((m) => m.status === "needs_human_attention");
-  const tone = hasAttention ? "attention" : statusTone[latest.status];
+  const hasAttention = thread.messages.some(
+    (m) => m.status === "needs_human_attention" && !m.resolved_at
+  );
+  const tone = hasAttention ? "attention" : effectiveTone(latest);
 
   return (
     <div
@@ -618,15 +658,19 @@ function ThreadRow({
 function MessageCard({
   entry,
   sending,
+  resolving,
   error,
   onSend,
   onEdit,
+  onResolve,
 }: {
   entry: EmailLogEntry;
   sending: boolean;
+  resolving: boolean;
   error?: string;
   onSend: () => void;
   onEdit: () => void;
+  onResolve: () => void;
 }) {
   return (
     <div className="flex flex-col gap-2.5 rounded-lg border border-border/50 p-4">
@@ -650,17 +694,15 @@ function MessageCard({
           <span
             className={cn(
               "size-1.5 rounded-full",
-              statusToneClasses[statusTone[entry.status]]
+              statusToneClasses[effectiveTone(entry)]
             )}
           />
-          <span className="text-sm text-foreground/80">{statusLabels[entry.status]}</span>
+          <span className="text-sm text-foreground/80">{effectiveStatusLabel(entry)}</span>
         </span>
         <AutosendCell entry={entry} />
       </div>
       {entry.status === "needs_human_attention" && entry.escalation_reason && (
-        <p className="text-xs text-amber-600 dark:text-amber-500">
-          {entry.escalation_reason}
-        </p>
+        <EscalationReasonDisclosure reason={entry.escalation_reason} resolved={!!entry.resolved_at} />
       )}
       <p className="whitespace-pre-wrap text-sm text-foreground/80">
         {entry.content ? <Linkify text={entry.content} /> : "(no body)"}
@@ -680,6 +722,14 @@ function MessageCard({
           <Button size="sm" variant="outline" disabled={sending} onClick={onEdit}>
             <Pencil className="size-3.5" />
             Edit
+          </Button>
+        </div>
+      )}
+      {entry.status === "needs_human_attention" && !entry.resolved_at && (
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" disabled={resolving} onClick={onResolve}>
+            <Check className="size-3.5" />
+            {resolving ? "Resolving…" : "Mark resolved"}
           </Button>
         </div>
       )}
@@ -742,6 +792,41 @@ function AttachmentRow({ doc }: { doc: DocumentOut }) {
     >
       {content}
     </a>
+  );
+}
+
+// Same visual language as AgentActivityDisclosure (collapsed by default,
+// chevron toggle, neutral bordered panel) rather than a wall of colored
+// text. Still amber + a warning icon while unresolved, since that's a live
+// signal someone hasn't dealt with yet - once resolved, it's just history,
+// so it downgrades to quiet muted text with an info icon and past tense
+// ("needed" not "needs") rather than continuing to shout for attention.
+function EscalationReasonDisclosure({ reason, resolved }: { reason: string; resolved: boolean }) {
+  const [open, setOpen] = useState(false);
+  const label = resolved ? "Why this needed review" : "Why this needs review";
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className={cn(
+          "flex items-center gap-1.5 text-xs font-medium transition-colors",
+          resolved
+            ? "text-muted-foreground hover:text-foreground"
+            : "text-amber-600 hover:text-amber-700 dark:text-amber-500 dark:hover:text-amber-400"
+        )}
+      >
+        <ChevronDown className={cn("size-3 transition-transform", open && "rotate-180")} />
+        {resolved ? <Info className="size-3" /> : <AlertTriangle className="size-3" />}
+        {open ? `Hide ${label.charAt(0).toLowerCase()}${label.slice(1)}` : label}
+      </button>
+      {open && (
+        <p className="mt-1.5 whitespace-pre-wrap rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-xs text-foreground/80">
+          {reason}
+        </p>
+      )}
+    </div>
   );
 }
 

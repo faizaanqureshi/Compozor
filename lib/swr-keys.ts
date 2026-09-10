@@ -6,8 +6,8 @@ import type { RangePreset } from "@/lib/admin";
 // instead of refetching on every navigation between them.
 export const clientsKey = () => ["clients"] as const;
 
-export const emailLogKey = (status?: EmailStatus) =>
-  ["email-log", status ?? "all"] as const;
+export const emailLogKey = (status?: EmailStatus, resolved?: boolean) =>
+  ["email-log", status ?? "all", resolved ?? "any"] as const;
 
 export const organizationKey = () => ["organization"] as const;
 

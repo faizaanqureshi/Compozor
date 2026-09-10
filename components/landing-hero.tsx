@@ -6,7 +6,7 @@ import { LandingDemo } from "@/components/landing-demo";
 
 export function LandingHero() {
   return (
-    <section className="animate-blur-in mx-auto flex min-h-screen w-full max-w-7xl flex-col items-center justify-center gap-12 px-4 pt-28 pb-12 sm:gap-16 sm:px-6 sm:pt-32 sm:pb-16 md:flex-row md:gap-20 lg:gap-24">
+    <section className="animate-blur-in mx-auto flex min-h-screen w-full max-w-7xl flex-col items-center justify-center gap-12 px-4 pt-28 pb-12 sm:gap-16 sm:px-6 sm:pt-32 sm:pb-16 md:gap-20 lg:gap-24 xl:flex-row xl:gap-24">
       <div className="flex max-w-2xl flex-col gap-5 sm:gap-7">
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="outline" className="uppercase tracking-wide text-muted-foreground">

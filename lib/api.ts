@@ -187,6 +187,7 @@ export interface EmailLogEntry {
   from_email: string | null;
   to_email: string | null;
   escalation_reason: string | null;
+  resolved_at: string | null;
   is_clarifying_question: boolean;
   autosend_confidence: number | null;
   autosend_threshold: number | null;
@@ -395,6 +396,28 @@ export const sendChecklistItemReminder = (clientId: number, itemId: number) =>
     { method: "POST" }
   );
 
+export interface ExtractedChecklistItem {
+  doc_type_needed: string;
+  description: string | null;
+  expected_date_range_start: string | null;
+  expected_date_range_end: string | null;
+}
+
+export interface ChecklistExtractionResult {
+  items: ExtractedChecklistItem[];
+  suggested_send_reminder: boolean;
+}
+
+// Read-only/side-effect-free: turns a freeform instruction into structured
+// items for an editable preview - nothing is created until the caller
+// separately calls createChecklistItem (and optionally
+// sendChecklistReminder) once a human confirms.
+export const extractChecklistItems = (clientId: number, instruction: string) =>
+  request<ChecklistExtractionResult>(
+    `/clients/${clientId}/checklist-items/extract`,
+    json("POST", { instruction })
+  );
+
 // ---------- Documents ----------
 
 export const uploadDocument = (clientId: number, file: File) => {
@@ -464,9 +487,10 @@ export const sendChecklistReminder = (clientId: number) =>
 
 // ---------- Email log ----------
 
-export const listEmailLog = (status?: EmailStatus) => {
+export const listEmailLog = (status?: EmailStatus, resolved?: boolean) => {
   const params = new URLSearchParams();
   if (status) params.set("status", status);
+  if (resolved !== undefined) params.set("resolved", String(resolved));
   const qs = params.toString();
   return request<EmailLogEntry[]>(`/email-log${qs ? `?${qs}` : ""}`);
 };
@@ -474,6 +498,12 @@ export const listEmailLog = (status?: EmailStatus) => {
 export const sendEmailLogEntry = (clientId: number, emailLogId: number) =>
   request<EmailLogEntry>(
     `/clients/${clientId}/email-log/${emailLogId}/send`,
+    { method: "POST" }
+  );
+
+export const resolveEmailLogEntry = (clientId: number, emailLogId: number) =>
+  request<EmailLogEntry>(
+    `/clients/${clientId}/email-log/${emailLogId}/resolve`,
     { method: "POST" }
   );
 
