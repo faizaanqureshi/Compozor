@@ -62,7 +62,7 @@ export default function RootLayout({
                   <Nav />
                   <div className="relative isolate flex min-w-0 flex-1 flex-col overflow-x-hidden">
                     <MobileTopBar />
-                    <main className="relative flex-1 p-6 lg:p-10">{children}</main>
+                    <main className="relative flex-1 p-6 xl:p-10">{children}</main>
                   </div>
                 </div>
                 <ProductTour />

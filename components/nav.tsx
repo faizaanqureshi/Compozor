@@ -46,9 +46,9 @@ const adminLink = { href: "/admin", label: "Admin", icon: Landmark, tourId: "adm
 
 // Breakpoint behavior:
 //  - below md: off-canvas drawer, opened via the mobile top bar's hamburger.
-//  - md to lg: docked in the layout, but permanently collapsed to an icon
+//  - md to xl: docked in the layout, but permanently collapsed to an icon
 //    rail - there's no room to offer the expand/collapse toggle here.
-//  - lg and up: docked, and the user can expand/collapse it via `collapsed`.
+//  - xl and up: docked, and the user can expand/collapse it via `collapsed`.
 export function Nav() {
   const pathname = usePathname();
   const { user } = useUser();
@@ -83,18 +83,18 @@ export function Nav() {
         className={cn(
           "dark fixed inset-y-0 left-0 z-50 flex h-screen w-72 shrink-0 flex-col gap-6 border-r border-sidebar-border bg-sidebar p-6 text-sidebar-foreground transition-transform duration-200 md:sticky md:top-0 md:w-[4.5rem] md:translate-x-0 md:p-3 md:transition-[width]",
           mobileOpen ? "translate-x-0" : "-translate-x-full",
-          collapsed ? "lg:w-[4.5rem] lg:p-3" : "lg:w-72 lg:p-6"
+          collapsed ? "xl:w-[4.5rem] xl:p-3" : "xl:w-72 xl:p-6"
         )}
       >
       <div
         className={cn(
           "flex items-center gap-2 justify-between px-1 md:justify-center md:px-0",
-          !collapsed && "lg:justify-between lg:px-1"
+          !collapsed && "xl:justify-between xl:px-1"
         )}
       >
         <Link
           href="/"
-          className={cn("shrink-0 md:hidden", !collapsed && "lg:inline-block")}
+          className={cn("shrink-0 md:hidden", !collapsed && "xl:inline-block")}
         >
           <Image
             src="/compozor-logo.png"
@@ -107,7 +107,7 @@ export function Nav() {
         </Link>
         <Link
           href="/"
-          className="relative hidden size-7 shrink-0 overflow-hidden rounded-md md:block lg:hidden"
+          className="relative hidden size-7 shrink-0 overflow-hidden rounded-md md:block xl:hidden"
         >
           <Image
             src="/compozor-logo.png"
@@ -131,7 +131,7 @@ export function Nav() {
           variant="ghost"
           size="icon-sm"
           className={cn(
-            "hidden shrink-0 text-sidebar-foreground/50 hover:bg-sidebar-foreground/8 hover:text-sidebar-foreground lg:inline-flex",
+            "hidden shrink-0 text-sidebar-foreground/50 hover:bg-sidebar-foreground/8 hover:text-sidebar-foreground xl:inline-flex",
             !collapsed && "ml-auto"
           )}
           onClick={() => setCollapsed((c) => !c)}
@@ -154,7 +154,7 @@ export function Nav() {
               className={cn(
                 "flex items-center gap-3 rounded-md px-2.5 py-1.5 text-sm transition-colors",
                 "md:justify-center md:px-0",
-                !collapsed && "lg:justify-start lg:px-2.5",
+                !collapsed && "xl:justify-start xl:px-2.5",
                 active
                   ? "bg-sidebar-foreground/[0.06] font-medium text-sidebar-foreground"
                   : "text-sidebar-foreground/40 hover:text-sidebar-foreground/70"
@@ -163,11 +163,11 @@ export function Nav() {
               <Icon
                 className={cn(
                   "size-[15px] shrink-0 md:size-[18px]",
-                  !collapsed && "lg:size-[15px]",
+                  !collapsed && "xl:size-[15px]",
                   active ? "text-sidebar-foreground/80" : "text-sidebar-foreground/30"
                 )}
               />
-              <span className={cn("truncate md:hidden", !collapsed && "lg:inline")}>
+              <span className={cn("truncate md:hidden", !collapsed && "xl:inline")}>
                 {link.label}
               </span>
             </Link>
@@ -189,7 +189,7 @@ export function Nav() {
           <SignUpButton fallbackRedirectUrl="/clients">
             <Button
               size="sm"
-              className={cn("w-full md:hidden", !collapsed && "lg:inline-flex")}
+              className={cn("w-full md:hidden", !collapsed && "xl:inline-flex")}
             >
               Sign up
             </Button>
@@ -199,7 +199,7 @@ export function Nav() {
           <div
             className={cn(
               "flex items-center gap-2 md:flex-col md:gap-3",
-              !collapsed && "lg:flex-row lg:gap-2"
+              !collapsed && "xl:flex-row xl:gap-2"
             )}
           >
             <Avatar size="sm" className="shrink-0">
@@ -211,7 +211,7 @@ export function Nav() {
             <div
               className={cn(
                 "flex min-w-0 flex-1 flex-col leading-tight md:hidden",
-                !collapsed && "lg:flex"
+                !collapsed && "xl:flex"
               )}
             >
               <span className="truncate text-sm font-medium text-sidebar-foreground/80">

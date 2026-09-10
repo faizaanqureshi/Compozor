@@ -239,7 +239,7 @@ export default function AdminOrganizationDetailPage({
           <Skeleton className="h-48 w-full rounded-2xl" />
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
           <SectionCard title="Cost over time">
             <div className="flex flex-col gap-1">
               <span className="text-4xl font-thin tracking-tight tabular-nums [font-family:var(--font-denton)]">

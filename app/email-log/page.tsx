@@ -392,7 +392,7 @@ export default function EmailLogPage() {
   };
 
   return (
-    <div className="flex h-[calc(100vh-6.5rem)] w-full flex-col gap-8 md:h-[calc(100vh-3rem)] lg:h-[calc(100vh-5rem)]">
+    <div className="flex h-[calc(100vh-6.5rem)] w-full flex-col gap-8 md:h-[calc(100vh-3rem)] xl:h-[calc(100vh-5rem)]">
       <div className="flex flex-col gap-2">
         <h1 className="text-4xl font-thin tracking-tight [font-family:var(--font-denton)] sm:text-5xl md:text-6xl">
           Email log
@@ -437,11 +437,11 @@ export default function EmailLogPage() {
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
-      <div className="flex min-h-0 flex-1 flex-col gap-6 lg:flex-row">
+      <div className="flex min-h-0 flex-1 flex-col gap-6 xl:flex-row">
         <div
           className={cn(
-            "w-full shrink-0 flex-col rounded-2xl bg-card ring-1 ring-foreground/10 lg:flex lg:w-[22rem]",
-            mobileDetailOpen ? "hidden" : "flex"
+            "w-full flex-col rounded-2xl bg-card ring-1 ring-foreground/10 md:flex md:max-h-72 md:shrink-0 xl:max-h-none xl:w-[22rem]",
+            mobileDetailOpen ? "hidden md:flex" : "flex"
           )}
         >
           <div className="flex items-center gap-2.5 border-b border-border/70 px-3 py-2">
@@ -491,7 +491,7 @@ export default function EmailLogPage() {
 
         <div
           className={cn(
-            "flex-1 overflow-y-auto rounded-2xl bg-card ring-1 ring-foreground/10 lg:block",
+            "min-h-0 flex-1 overflow-y-auto rounded-2xl bg-card ring-1 ring-foreground/10 md:block",
             mobileDetailOpen ? "block" : "hidden"
           )}
         >
@@ -516,7 +516,7 @@ export default function EmailLogPage() {
                   <button
                     type="button"
                     onClick={() => setMobileDetailOpen(false)}
-                    className="mb-1 flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground lg:hidden"
+                    className="mb-1 flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground md:hidden"
                   >
                     <ArrowLeft className="size-3.5" />
                     All threads

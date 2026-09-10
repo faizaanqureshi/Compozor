@@ -298,7 +298,7 @@ function TriageActions({
   };
 
   return (
-    <div className="flex w-full flex-col gap-3 rounded-xl bg-card p-4 ring-1 ring-foreground/10 lg:w-72 lg:shrink-0">
+    <div className="flex w-full flex-col gap-3 rounded-xl bg-card p-4 ring-1 ring-foreground/10 xl:w-72 xl:shrink-0">
       <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
         Triage actions
       </h3>
@@ -506,7 +506,7 @@ export default function UnmatchedEmailsPage() {
                     {isOpen && (
                       <tr className="border-b border-border/40">
                         <td colSpan={4} className="bg-muted/30 py-4 pr-4 pl-4">
-                          <div className="flex flex-col items-start gap-4 lg:flex-row">
+                          <div className="flex flex-col items-start gap-4 xl:flex-row">
                             <p className="flex-1 whitespace-pre-wrap text-foreground/80">
                               <Linkify text={email.body_text} />
                             </p>

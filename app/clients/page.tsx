@@ -463,7 +463,7 @@ export default function ClientsPage() {
           </div>
         )}
         <div className="rounded-2xl bg-card p-4 ring-1 ring-foreground/10">
-          <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-2.5 xl:grid-cols-2">
             {loading &&
               Array.from({ length: 2 }).map((_, i) => (
                 <Skeleton key={i} className="h-[4.75rem] w-full rounded-xl" />
