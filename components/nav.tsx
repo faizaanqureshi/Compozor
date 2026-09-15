@@ -110,12 +110,12 @@ export function Nav() {
           className="relative hidden size-7 shrink-0 overflow-hidden rounded-md md:block xl:hidden"
         >
           <Image
-            src="/compozor-logo.png"
+            src="/android-chrome-192x192.png"
             alt="Compozor"
             fill
             sizes="28px"
             priority
-            className="object-cover object-left"
+            className="object-contain"
           />
         </Link>
         <Button
