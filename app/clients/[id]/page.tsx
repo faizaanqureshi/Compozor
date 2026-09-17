@@ -9,6 +9,7 @@ import {
   Download,
   Loader2,
   MoreHorizontal,
+  Pencil,
   Plus,
   Trash2,
   UploadCloud,
@@ -22,6 +23,7 @@ import {
   ClientCommitment,
   ClientDetail,
   ClientMemoryNote,
+  ClientStatus,
   CommitmentStatus,
   DocumentOut,
   DocumentUploadResult,
@@ -42,6 +44,7 @@ import {
   sendChecklistItemReminder,
   sendChecklistReminder,
   updateChecklistItem,
+  updateClient,
   uploadDocument,
   waiveChecklistItem,
 } from "@/lib/api";
@@ -50,6 +53,7 @@ import { AgentActivityDisclosure } from "@/components/agent-activity-disclosure"
 import { Linkify } from "@/components/linkify";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -178,11 +182,14 @@ export default function ClientDetailPage({
             Clients
           </Link>
           {client !== null && (
-            <DeleteClientButton
-              clientId={clientId}
-              clientName={client.name}
-              onDeleted={() => router.push("/clients")}
-            />
+            <div className="flex items-center gap-1">
+              <EditClientButton client={client} onUpdated={refresh} />
+              <DeleteClientButton
+                clientId={clientId}
+                clientName={client.name}
+                onDeleted={() => router.push("/clients")}
+              />
+            </div>
           )}
         </div>
         {client === null ? (
@@ -248,6 +255,111 @@ export default function ClientDetailPage({
         onChange={refresh}
       />
     </div>
+  );
+}
+
+function EditClientButton({
+  client,
+  onUpdated,
+}: {
+  client: ClientDetail;
+  onUpdated: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(client.name);
+  const [email, setEmail] = useState(client.email);
+  const [status, setStatus] = useState<ClientStatus>(client.status);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const openDialog = () => {
+    setName(client.name);
+    setEmail(client.email);
+    setStatus(client.status);
+    setError(null);
+    setEditing(true);
+  };
+
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    setError(null);
+    try {
+      await updateClient(client.id, { name, email, status });
+      setEditing(false);
+      onUpdated();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="mt-2 mb-4 text-muted-foreground hover:text-foreground"
+        onClick={openDialog}
+      >
+        <Pencil className="size-4" />
+        Edit
+      </Button>
+
+      <Dialog open={editing} onOpenChange={(open) => !submitting && setEditing(open)}>
+        <DialogContent>
+          <form onSubmit={onSubmit} className="flex flex-col gap-4">
+            <DialogHeader>
+              <DialogTitle>Edit client</DialogTitle>
+              <DialogDescription>
+                Update {client.name}&apos;s information.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="edit-client-name">Name</Label>
+                <Input
+                  id="edit-client-name"
+                  required
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="edit-client-email">Email</Label>
+                <Input
+                  id="edit-client-email"
+                  required
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="edit-client-status">Status</Label>
+                <select
+                  id="edit-client-status"
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value as ClientStatus)}
+                  className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                >
+                  <option value="pending">Pending</option>
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </div>
+            </div>
+            {error && <p className="text-sm text-destructive">{error}</p>}
+            <DialogFooter>
+              <Button type="submit" disabled={submitting}>
+                {submitting ? "Saving…" : "Save changes"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 

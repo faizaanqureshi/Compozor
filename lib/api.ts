@@ -352,6 +352,11 @@ export const createClient = (input: {
   status?: ClientStatus;
 }) => request<Client>("/clients", json("POST", input));
 
+export const updateClient = (
+  clientId: number,
+  input: { name?: string; email?: string; status?: ClientStatus }
+) => request<Client>(`/clients/${clientId}`, json("PATCH", input));
+
 export const deleteClient = (clientId: number) =>
   request<void>(`/clients/${clientId}`, { method: "DELETE" });
 
