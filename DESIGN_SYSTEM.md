@@ -11,6 +11,36 @@ If a change would violate something below, stop and either find the
 compliant way to do it or flag the conflict — don't silently improvise a
 one-off pattern.
 
+## 0. Visual reference
+
+Rules in this doc describe the system; these are what it should actually
+look like. When in doubt about "does this feel right," compare against these
+rather than just checking the rules in isolation — proportion, whitespace,
+and restraint are easier to see than to specify.
+
+**`docs/design-reference/landing-hero.png`** — the marketing landing hero.
+Reference for:
+- Denton at true hero scale (`Stop chasing clients.`) against Neue Montreal
+  everywhere else (nav, body copy, badge, button) — the contrast between the
+  two faces is the whole effect; note how little else is competing with it.
+- The "AUTOMATED INTAKE" eyebrow: small, uppercase, tracked-out, muted —
+  informative, not decorative. This is the reusable "quiet label" pattern
+  referenced in §3.
+- A single dark, high-contrast surface (the product preview card) as the
+  *only* strong visual element on an otherwise pale, quiet page — restraint
+  makes that one element read as premium instead of just another block.
+  Don't add a second competing high-contrast surface on the same view.
+- Generous, uneven whitespace (the copy block doesn't fill its column,
+  the page isn't packed edge-to-edge) — resist the urge to "use the space."
+- The single primary CTA (`Join the Waitlist`) with no competing secondary
+  button fighting for attention next to it.
+
+If you add more reference screenshots later (a dashboard view, a mobile
+view, an urgency/escalation state), drop them in `docs/design-reference/`
+and add a bullet list here explaining what they demonstrate — a screenshot
+with no annotation isn't a useful reference, since it doesn't say *why* it's
+right.
+
 ## 1. The brand posture: restraint, not decoration
 
 Compozor is a tool for accounting/legal/professional firms handling other
@@ -232,6 +262,8 @@ Before writing new UI:
 
 ## 9. Before you touch frontend code — checklist
 
+- [ ] Have I looked at `docs/design-reference/` (§0) if I'm unsure whether
+      something "feels right," not just whether it follows a rule?
 - [ ] Am I using semantic color tokens only (no raw hex/arbitrary colors)?
 - [ ] Am I using the right font for the context (sans for UI, Denton only
       for hero-scale display type)?
@@ -246,3 +278,8 @@ Before writing new UI:
 - [ ] If this involves urgency/status, does it follow the §6 order
       (copy/structure → weight → accent → destructive) instead of an ad-hoc
       color?
+- [ ] Have I actually run the app and looked at the result (not just
+      trusted that following the rules produced something good)? Rules
+      catch wrong tokens/fonts/spacing; they don't catch a layout that's
+      technically compliant but still looks flat, cluttered, or awkward —
+      that needs an eyes-on look, ideally at mobile, `md`, and `xl`+.

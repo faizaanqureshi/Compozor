@@ -18,6 +18,12 @@ full before making the change. It is the source of truth for:
   `components/` (feature layer), then compose, then only build new as a last
   resort, matching the existing `cva` + `data-slot` + `cn()` shape
 
+`DESIGN_SYSTEM.md` §0 also links annotated screenshots in
+`docs/design-reference/` — check those when judging whether something
+"feels right," not just whether it technically follows a rule.
+
 After reading it, apply its checklist (§9) to the change before considering
-the work done. If a request conflicts with a rule in that doc, say so rather
-than silently picking one or the other.
+the work done — including actually running the app and looking at the
+result, since the written rules can't catch a layout that's compliant but
+still looks flat or cluttered. If a request conflicts with a rule in that
+doc, say so rather than silently picking one or the other.
