@@ -44,6 +44,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { ClientImportModal } from "@/components/client-import-modal";
 
 type WorkflowTone = "positive" | "warning" | "review" | "attention" | "neutral";
 type SortKey = "name" | "email" | "documents" | "activity" | "status";
@@ -386,6 +387,8 @@ export default function ClientsPage() {
             </p>
           )}
         </div>
+        <div className="flex items-center gap-2">
+        <ClientImportModal onImported={() => mutateClients()} />
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger render={<Button />}>
             <Plus />
@@ -444,6 +447,7 @@ export default function ClientsPage() {
             </form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {(error || fetchError) && !open && (

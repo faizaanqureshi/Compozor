@@ -107,6 +107,8 @@ export interface Client {
   organization_id: number;
   name: string;
   email: string;
+  phone: string | null;
+  company_name: string | null;
   status: ClientStatus;
   last_reminder_sent_at: string | null;
   created_at: string;
@@ -349,8 +351,64 @@ export const getClient = (clientId: number) =>
 export const createClient = (input: {
   name: string;
   email: string;
+  phone?: string;
+  company_name?: string;
   status?: ClientStatus;
 }) => request<Client>("/clients", json("POST", input));
+
+// ---------- Batch client import ----------
+
+export interface ImportedClientRow {
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  company_name: string | null;
+  missing_fields: string[];
+  is_duplicate: boolean;
+  duplicate_reason: string | null;
+}
+
+export interface ClientImportParseResult {
+  rows: ImportedClientRow[];
+  truncated: boolean;
+}
+
+export interface ClientImportRowIn {
+  name: string;
+  email: string;
+  phone?: string | null;
+  company_name?: string | null;
+}
+
+export interface SkippedClientImportRow {
+  name: string | null;
+  email: string | null;
+  reason: string;
+}
+
+export interface ClientImportExecuteResult {
+  created: Client[];
+  skipped: SkippedClientImportRow[];
+}
+
+// Read-only/side-effect-free: extracts a structured client list from an
+// uploaded file for the "Import clients" modal's confirmation table -
+// nothing is created until executeClientImport is called once a human
+// reviews and confirms.
+export const parseClientImportFile = (file: File) => {
+  const formData = new FormData();
+  formData.append("file", file);
+  return request<ClientImportParseResult>("/clients/import/parse", {
+    method: "POST",
+    body: formData,
+  });
+};
+
+export const executeClientImport = (clients: ClientImportRowIn[]) =>
+  request<ClientImportExecuteResult>(
+    "/clients/import/execute",
+    json("POST", { clients })
+  );
 
 export const updateClient = (
   clientId: number,
