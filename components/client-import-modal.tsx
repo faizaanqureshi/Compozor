@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { AlertTriangle, Check, Loader2, UploadCloud } from "lucide-react";
+import { Check, Loader2, UploadCloud } from "lucide-react";
 import {
   ApiError,
   ClientImportRowIn,
@@ -21,10 +21,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-
-// Keep in sync with MAX_IMPORT_ROWS in Compozor-API's client_import service -
-// display-only, the backend is the actual source of truth for the cap.
-const MAX_IMPORT_ROWS = 500;
 
 const ACCEPTED_EXTENSIONS = [".xlsx", ".pdf", ".docx"];
 const ACCEPT_ATTR =
@@ -60,7 +56,6 @@ export function ClientImportModal({ onImported }: { onImported: () => void }) {
   const [dragActive, setDragActive] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rows, setRows] = useState<EditableRow[]>([]);
-  const [truncated, setTruncated] = useState(false);
   const [importSummary, setImportSummary] = useState<{
     createdCount: number;
     skipped: { name: string | null; email: string | null; reason: string }[];
@@ -72,7 +67,6 @@ export function ClientImportModal({ onImported }: { onImported: () => void }) {
     setDragActive(false);
     setError(null);
     setRows([]);
-    setTruncated(false);
     setImportSummary(null);
   };
 
@@ -101,7 +95,6 @@ export function ClientImportModal({ onImported }: { onImported: () => void }) {
           included: true,
         }))
       );
-      setTruncated(result.truncated);
       setStage("review");
     } catch (e) {
       setError(e instanceof ApiError ? e.message : String(e));
@@ -221,13 +214,6 @@ export function ClientImportModal({ onImported }: { onImported: () => void }) {
 
         {stage === "review" && (
           <div className="flex flex-col gap-3">
-            {truncated && (
-              <p className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-500">
-                <AlertTriangle className="size-3.5" />
-                This file has more than {MAX_IMPORT_ROWS} rows — only the first{" "}
-                {MAX_IMPORT_ROWS} were extracted.
-              </p>
-            )}
             <div className="max-h-[45vh] overflow-auto rounded-lg ring-1 ring-foreground/10">
               <table className="w-full min-w-[560px] border-collapse text-sm">
                 <thead className="sticky top-0 bg-card">

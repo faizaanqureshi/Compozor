@@ -370,7 +370,6 @@ export interface ImportedClientRow {
 
 export interface ClientImportParseResult {
   rows: ImportedClientRow[];
-  truncated: boolean;
 }
 
 export interface ClientImportRowIn {
