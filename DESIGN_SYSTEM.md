@@ -1,0 +1,248 @@
+# Compozor design system — "silent luxury"
+
+This is the source of truth for how Compozor's frontend looks, feels, and is
+built. It applies to every screen in `Compozor/app/` and every component in
+`Compozor/components/`. **Read this before writing or editing any UI code** —
+tsx, css, or component structure. This holds regardless of which model or
+tool is doing the editing (Claude, GPT, or otherwise); it is not
+Claude-specific.
+
+If a change would violate something below, stop and either find the
+compliant way to do it or flag the conflict — don't silently improvise a
+one-off pattern.
+
+## 1. The brand posture: restraint, not decoration
+
+Compozor is a tool for accounting/legal/professional firms handling other
+people's money and paperwork. The visual language is **old-money,
+quietly confident** — evergreen/charcoal + brass-gold + warm ivory, thin
+display type, generous whitespace, slow soft-focus motion. Think private
+bank or a well-run law office, not a consumer SaaS dashboard.
+
+Concretely, this means:
+
+- **Purposeful over decorative.** Every element earns its place. No badges,
+  icons, gradients, shadows, or animations added "because it looks nice" —
+  only because they communicate something (status, hierarchy, urgency).
+- **Restrained color.** The palette is deliberately narrow (see §2). Color is
+  a signal, not a decoration — the brass accent and destructive/oxblood red
+  are used sparingly, precisely because scarcity is what makes them mean
+  something. Don't reach for a new color when an existing semantic token
+  says what you need.
+- **Quiet hierarchy over loud hierarchy.** Prefer weight, size, and spacing
+  contrasts (thin display serif vs. regular UI sans) over color or borders to
+  establish hierarchy. A page shouldn't need three different badge colors to
+  be readable.
+- **Confidence, not urgency-by-default.** Most UI should feel calm. Urgency
+  (overdue reminders, escalations, needs-human-attention) should look
+  distinctly different from the calm baseline — that contrast is what makes
+  it effective. If everything is emphasized, nothing is.
+- **No haphazard feature sprawl.** Don't add a new UI affordance (extra
+  toggle, extra panel, extra menu item) as a side effect of a feature unless
+  it was actually asked for. Prefer extending an existing pattern over
+  inventing an adjacent one.
+
+## 2. Color — semantic tokens only
+
+All color lives in `app/globals.css` as CSS variables (oklch), mapped through
+Tailwind's `@theme inline` block, with a light palette under `:root` and a
+dark palette under `.dark`. **Never hardcode a hex/oklch value or an
+arbitrary Tailwind color (`text-[#...]`, `bg-neutral-800`, etc.) in a
+component.** Always use the semantic class: `bg-background`,
+`text-foreground`, `bg-card`, `text-muted-foreground`, `bg-primary`,
+`bg-secondary`, `bg-accent`, `text-destructive`, `border-border`, etc.
+
+Palette meaning (light mode; dark mode inverts brand/ivory but keeps the same
+semantics):
+
+| Token | Role |
+|---|---|
+| `background` / `foreground` | Warm ivory page bg / brand deep-teal-charcoal text |
+| `card` / `card-foreground` | Slightly lifted warm white surface |
+| `primary` | Brand deep teal-charcoal (dark mode: brass gold) — the main call-to-action color |
+| `secondary` | Pale camel — low-emphasis surfaces/buttons |
+| `muted` / `muted-foreground` | Soft sand background / warm grey text — de-emphasized content |
+| `accent` | Brass gold — sparing use, for a highlight that should feel earned (active nav state, a key metric, a special affordance) |
+| `destructive` | Oxblood — errors, deletions, escalations only |
+| `border` / `input` | Warm sand hairlines |
+| `sidebar*` | The nav rail always uses the dark brand palette regardless of light/dark mode — it's a fixed "always dark" surface, by design |
+
+If a new token is genuinely needed (e.g. a new chart series), add it beside
+the existing `--chart-*` variables in both `:root` and `.dark`, following the
+existing oklch + hex-comment convention — don't invent an inline color.
+
+**Needs a new color for urgency/severity?** See §6 before adding anything —
+reuse `destructive` for "broken/failing", `accent` for "needs attention but
+not broken", and plain weight/size/copy changes before reaching for another
+color at all.
+
+## 3. Typography
+
+Two type families, each with a specific job — never use one for the other's
+job:
+
+- **`font-sans` (PP Neue Montreal, via `--font-sans`)** — the default
+  UI/body font (`html` sets `font-sans` globally). Use for all body copy,
+  labels, buttons, form fields, table content, nav. This is also aliased as
+  `font-heading` in the theme, so `CardTitle`/section headings default to it
+  too unless a page explicitly wants the display face.
+- **`[font-family:var(--font-denton)]` (Denton, condensed/thin display
+  serif)** — reserved for large marketing/hero headlines only (see
+  `landing-hero.tsx`: `font-thin tracking-tight` at `text-5xl`+). Do not use
+  Denton for in-app dashboard UI, table headers, or anything below hero
+  scale — it reads as decorative at small sizes, which breaks the restraint
+  principle in §1.
+
+Weight and tracking conventions worth following:
+- Thin/light weights (`font-thin`, `font-light`) at large display sizes read
+  as "quiet luxury"; avoid bold display type outside of real emphasis needs.
+- `uppercase tracking-wide text-muted-foreground` on a `Badge`/eyebrow label
+  is the established "quiet label" pattern (see the "Automated intake" badge
+  in `landing-hero.tsx`) — reuse it instead of inventing a new eyebrow style.
+- Use `text-balance` on headlines and `text-pretty` on body paragraphs
+  wrapping to multiple lines (already the convention in the hero).
+
+## 4. Spacing, radius, surfaces
+
+- Radius is driven entirely by the `--radius` variable and its derived scale
+  (`--radius-sm` … `--radius-4xl` in `globals.css`) — use Tailwind's
+  `rounded-lg` / `rounded-xl` / etc., never a raw `rounded-[Npx]`.
+  Cards/panels are `rounded-xl`; small controls (`Button`, `Input`) are
+  `rounded-lg`; pill-shaped elements (`Badge`) use `rounded-4xl`.
+- `Card` exposes its internal padding as a CSS variable (`--card-spacing`,
+  default `--spacing(4)`, `sm` size variant `--spacing(3)`) so header/content/
+  footer stay in sync — if a card needs different density, set the `size`
+  prop rather than overriding padding by hand on individual card parts.
+- Surfaces are layered subtly: `background` → `card` → `muted`/`secondary`
+  for nested emphasis, with `ring-1 ring-foreground/10` (not a heavy border)
+  as the default card edge. Prefer a soft ring/hairline border over a drop
+  shadow for separating surfaces — shadows are essentially unused in this
+  system on purpose.
+
+## 5. Motion
+
+Motion is slow, soft-focus, and used only at moments that deserve it (page
+entrance, not every interaction):
+
+- `animate-blur-in` (2.4s, `cubic-bezier(0.16,1,0.3,1)`, blur+translateY+fade)
+  for large hero/page-level reveals.
+- `animate-blur-in-sm` (700ms, same easing) for smaller in-page elements.
+- Everyday interactive states (hover, focus, active) use short `transition-all`
+  / `transition-colors` already baked into the `ui/` primitives — don't add
+  bespoke transition timing to one-off components; match what `Button`/
+  `Input`/`Badge` already do.
+- No bouncy/elastic easing, no spring physics, no attention-grabbing loops.
+  If motion calls attention to itself, it's wrong for this brand.
+
+## 6. Urgency & status — the one place color is expressive
+
+Compozor dashboards surface real urgency (overdue documents, escalations,
+needs-human-attention, reauth-needed connections). This is the one area
+where visual emphasis is not just allowed but expected — the backend
+(`FRONTEND_CONTEXT.md`) explicitly calls out deadline/urgency surfacing as a
+current gap worth designing well. Do it with restraint, in this order of
+preference:
+
+1. **Copy and structure first** — sort/group by urgency, use a clear status
+   word, before reaching for color.
+2. **Weight/size** — a slightly heavier label or a small dot indicator beats
+   a colored pill for low-stakes emphasis.
+3. **`accent` (brass)** — "needs attention, not broken" (e.g. drafts pending
+   review, a connection nearing reauth).
+4. **`destructive` (oxblood)** — "broken / failed / needs immediate human
+   action" (e.g. `needs_human_attention`, `needs_reauth`, escalations). This
+   is the strongest visual signal in the system — use it only for genuine
+   escalation states, never for routine information, or it stops meaning
+   anything.
+
+Never invent a new ad-hoc severity color (a random red/orange/yellow) outside
+`accent`/`destructive`. If two distinct severities are genuinely needed
+beyond these two, that's a design decision to raise explicitly, not a
+default `bg-orange-500` to reach for silently.
+
+## 7. Breakpoints — design for every size, mobile first
+
+Tailwind v4 defaults, unmodified: `sm` 640px, `md` 768px, `lg` 1024px, `xl`
+1280px, `2xl` 1536px. Write mobile-first (base styles = smallest screen, add
+`sm:`/`md:`/`xl:` overrides upward) — this is the existing convention
+throughout `app/` and `components/` (`sm`, `md`, and `xl` are the
+heavily-used breakpoints in this codebase; `lg` is used sparingly as a
+fine-tuning step, not a primary layout break).
+
+Every new page or component must be checked at, at minimum: mobile (<640px),
+tablet (`md`, ~768–1024px), and desktop (`xl`+, ~1280px+). Two concrete
+patterns already established — follow them rather than reinventing
+responsive behavior:
+
+- **Nav rail (`components/nav.tsx`)** — three distinct layouts at three
+  breakpoints, documented inline in that file:
+  - `< md`: off-canvas drawer opened from the mobile top bar.
+  - `md`–`xl`: docked but permanently collapsed to an icon rail (no room for
+    an expand toggle).
+  - `xl+`: docked, user-expandable/collapsible.
+  This is the reference example for "don't just hide/show — redesign the
+  interaction per breakpoint when the available width genuinely changes what
+  makes sense."
+- **Hero layout (`components/landing-hero.tsx`)** — stacked column on
+  mobile, switching to a side-by-side row only at `xl` (`flex-col
+  xl:flex-row`), with spacing/gap scaling up through `sm`/`md`/`lg`/`xl`
+  rather than jumping straight to the desktop gap.
+
+Never ship a component that only looks right at one width. If you can't
+verify a breakpoint visually, say so explicitly rather than assuming it's
+fine.
+
+## 8. Componentization — reuse, compose, then create
+
+Before writing new UI:
+
+1. **Check `components/ui/` first.** This is the shadcn-based primitive
+   layer (style: `base-nova`, base color `neutral`, built on `@base-ui/react`
+   + `class-variance-authority` + `lucide-react` icons — see
+   `components.json`). Current inventory: `accordion`, `avatar`, `badge`,
+   `button`, `card`, `dialog`, `dropdown-menu`, `grid-pattern`, `input`,
+   `label`, `navigation-menu`, `separator`, `sheet`, `skeleton`, `switch`,
+   `tabs`, `textarea`, `tooltip`. If one of these does what you need, use it
+   — don't hand-roll a competing button/card/badge.
+2. **Check `components/` (feature layer) second** for existing
+   product-specific pieces (e.g. `cost-bar-chart.tsx`, `email-draft-editor.tsx`,
+   `agent-activity-disclosure.tsx`) before building a near-duplicate.
+3. **Compose before extending.** Prefer combining existing primitives
+   (`Card` + `Badge` + `Button`) over adding new variants to a primitive.
+   If a primitive genuinely needs a new variant (new `cva` branch), that's
+   fine and is the established pattern (see `buttonVariants`,
+   `badgeVariants`) — add a variant, don't fork the component.
+4. **New primitive, only when genuinely missing.** If nothing in
+   `components/ui/` covers it, build it in that same style: a typed,
+   `data-slot`-tagged component using `cva` for variants, `cn()` from
+   `lib/utils` for class merging, composed from `@base-ui/react` primitives
+   where one exists for the pattern (menus, dialogs, tooltips, switches all
+   go through `@base-ui/react`, not hand-rolled). Match the existing file's
+   shape exactly (see `button.tsx`/`badge.tsx`) — variants object, sizes
+   object, `defaultVariants`, exported alongside its `*Variants` cva
+   function.
+5. **New feature component** (a composed, page-specific piece, not a
+   primitive) belongs in `components/`, named descriptively
+   (`kebab-case.tsx`), and should itself be built from `components/ui/`
+   primitives — not raw divs re-implementing card/button/badge styling.
+6. **Keep components single-purpose and modular.** A component should do one
+   legible thing. Prefer several small composed components over one large
+   component with many conditional branches for unrelated states — this
+   keeps reuse possible and keeps diffs small when one part changes.
+
+## 9. Before you touch frontend code — checklist
+
+- [ ] Am I using semantic color tokens only (no raw hex/arbitrary colors)?
+- [ ] Am I using the right font for the context (sans for UI, Denton only
+      for hero-scale display type)?
+- [ ] Does this reuse an existing `components/ui/` primitive or feature
+      component before adding a new one?
+- [ ] If I added a new primitive/variant, does it follow the `cva` +
+      `data-slot` + `cn()` shape of the existing ones?
+- [ ] Have I checked the layout at mobile, `md`, and `xl`+ (and redesigned
+      the interaction per breakpoint where needed, not just hidden/shown)?
+- [ ] Is every new element earning its place — nothing decorative, no scope
+      creep beyond what was asked?
+- [ ] If this involves urgency/status, does it follow the §6 order
+      (copy/structure → weight → accent → destructive) instead of an ad-hoc
+      color?
