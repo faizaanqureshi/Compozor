@@ -207,7 +207,7 @@ export default function ClientDetailPage({
               {[
                 client.email,
                 client.phone ? formatPhoneNumber(client.phone) : null,
-                client.company_name ? `Company: ${client.company_name}` : null,
+                client.company_name,
               ]
                 .filter((part): part is string => Boolean(part))
                 .map((part, i) => (
