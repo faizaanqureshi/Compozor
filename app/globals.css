@@ -24,6 +24,8 @@
     --color-input: var(--input);
     --color-border: var(--border);
     --color-destructive: var(--destructive);
+    --color-success-foreground: var(--success-foreground);
+    --color-success: var(--success);
     --color-accent-foreground: var(--accent-foreground);
     --color-accent: var(--accent);
     --color-muted-foreground: var(--muted-foreground);
@@ -66,6 +68,8 @@
     --accent: oklch(0.6290 0.1095 82.85); /* #A9822F brass gold */
     --accent-foreground: oklch(0.1969 0.0216 75.83); /* #1B140A near-black brown */
     --destructive: oklch(0.4033 0.1126 26.26); /* #7A2A26 oxblood */
+    --success: oklch(0.4300 0.0850 152); /* muted evergreen - completed/success only */
+    --success-foreground: oklch(0.9593 0.0143 84.58);
     --border: oklch(0.8830 0.0295 89.59); /* #E0D8C3 warm sand */
     --input: oklch(0.8830 0.0295 89.59);
     --ring: oklch(0.6290 0.1095 82.85); /* brass gold */
@@ -101,6 +105,8 @@
     --accent: oklch(0.3500 0.0256 188.32); /* #2B3F3D muted teal */
     --accent-foreground: oklch(0.9261 0.0226 87.15);
     --destructive: oklch(0.5162 0.1288 27.24); /* #A5453D oxblood, brightened for dark bg */
+    --success: oklch(0.6400 0.1050 152); /* muted evergreen, brightened for dark bg */
+    --success-foreground: oklch(0.1969 0.0216 75.83);
     --border: oklch(1 0 0 / 10%);
     --input: oklch(1 0 0 / 12%);
     --ring: oklch(0.7280 0.1380 89.73); /* brass gold */

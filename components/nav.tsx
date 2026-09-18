@@ -13,6 +13,7 @@ import {
   MailQuestion,
   Settings,
   Users,
+  Workflow,
   X,
 } from "lucide-react";
 import {
@@ -30,6 +31,7 @@ import { useMobileNav } from "@/components/mobile-nav-context";
 
 const links = [
   { href: "/clients", label: "Clients", icon: Users, tourId: "clients" },
+  { href: "/workflows", label: "Workflows", icon: Workflow, tourId: "workflows" },
   { href: "/email-log", label: "Email Log", icon: Mail, tourId: "email-log" },
   {
     href: "/unmatched-emails",

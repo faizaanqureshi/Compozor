@@ -15,19 +15,24 @@ import {
   Mail,
   Plus,
   Search,
+  Workflow as WorkflowIcon,
+  X as XIcon,
 } from "lucide-react";
 import {
   ApiError,
   ChecklistSummary,
   Client,
   ClientStatus,
+  ClientWorkflowStatus,
   EmailLogEntry,
+  WorkflowRunStatus,
   createClient,
   downloadClientDocumentsZip,
   listClients,
   listEmailLog,
   listInboxConnections,
   sendChecklistReminder,
+  unassignWorkflowFromClient,
   watchInboxConnection,
 } from "@/lib/api";
 import { cn, formatRelativeTime } from "@/lib/utils";
@@ -45,18 +50,55 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { ClientImportModal } from "@/components/client-import-modal";
+import { WorkflowFormDialog } from "@/components/workflow-form-dialog";
+import { AssignWorkflowDialog } from "@/components/assign-workflow-dialog";
 
-type WorkflowTone = "positive" | "warning" | "review" | "attention" | "neutral";
+type WorkflowTone = "success" | "warning" | "attention" | "neutral";
 type SortKey = "name" | "email" | "documents" | "activity" | "status";
 type Sort = { key: SortKey; direction: "asc" | "desc" };
 
 const toneClasses: Record<WorkflowTone, string> = {
-  positive: "bg-accent",
+  success: "bg-success",
   warning: "bg-amber-500",
-  review: "bg-sky-500",
   attention: "bg-destructive",
   neutral: "bg-muted-foreground/40",
 };
+
+// null status = assigned but never run yet (checklist not complete).
+// Reuses the same tone-dot idiom as the Status column above rather than
+// introducing a second visual language for what's conceptually the same
+// "status" concept - see toneClasses.
+function workflowStatusTone(status: WorkflowRunStatus | null): WorkflowTone {
+  switch (status) {
+    case "completed":
+      return "success";
+    case "needs_review":
+    case "failed":
+      return "attention";
+    case "running":
+    case "queued":
+      return "warning";
+    case null:
+      return "neutral";
+  }
+}
+
+function workflowStatusLabel(status: WorkflowRunStatus | null): string {
+  switch (status) {
+    case "completed":
+      return "Completed";
+    case "needs_review":
+      return "Needs review";
+    case "failed":
+      return "Failed";
+    case "running":
+      return "Running";
+    case "queued":
+      return "Queued";
+    case null:
+      return "Not started";
+  }
+}
 
 function describeActivity(entry: EmailLogEntry) {
   const needsAttention = entry.status === "needs_human_attention";
@@ -90,13 +132,13 @@ function deriveWorkflowStatus(
 ): { label: string; tone: WorkflowTone } {
   if (client.status === "inactive") return { label: "Inactive", tone: "neutral" };
   if (summary && summary.total > 0) {
-    if (summary.wrong > 0) return { label: "Under review", tone: "review" };
+    if (summary.wrong > 0) return { label: "Under review", tone: "warning" };
     if (summary.missing > 0) return { label: "Awaiting docs", tone: "warning" };
-    return { label: "Complete", tone: "positive" };
+    return { label: "Complete", tone: "success" };
   }
   return client.status === "pending"
     ? { label: "Pending", tone: "neutral" }
-    : { label: "Active", tone: "positive" };
+    : { label: "Active", tone: "success" };
 }
 
 export default function ClientsPage() {
@@ -246,6 +288,20 @@ export default function ClientsPage() {
     });
   };
 
+  // Batch client selection, for bulk actions (currently just "assign
+  // workflow") - lives on this table rather than on the Workflows page, so
+  // picking who a workflow runs for happens in the same place you're
+  // already looking at/sorting/searching clients.
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const toggleSelected = (clientId: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(clientId)) next.delete(clientId);
+      else next.add(clientId);
+      return next;
+    });
+  };
+
   const stats = useMemo(() => {
     const counts = { active: 0, pending: 0, inactive: 0 };
     for (const c of clients ?? []) counts[c.status]++;
@@ -296,6 +352,11 @@ export default function ClientsPage() {
       }
     });
   }, [clients, lastActivity, search, sort]);
+
+  const allVisibleSelected = rows.length > 0 && rows.every((c) => selectedIds.has(c.id));
+  const toggleSelectAll = () => {
+    setSelectedIds(allVisibleSelected ? new Set() : new Set(rows.map((c) => c.id)));
+  };
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -388,6 +449,7 @@ export default function ClientsPage() {
           )}
         </div>
         <div className="flex items-center gap-2">
+        <WorkflowFormDialog onSaved={() => {}} variant="outline" />
         <ClientImportModal onImported={() => mutateClients()} />
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger render={<Button />}>
@@ -583,11 +645,43 @@ export default function ClientsPage() {
             />
           </div>
         </div>
+        {selectedIds.size > 0 && (
+          <div className="flex items-center gap-3 rounded-lg bg-accent/[0.08] px-4 py-2.5 text-sm animate-blur-in-sm">
+            <span className="font-medium text-accent">
+              {selectedIds.size} client{selectedIds.size === 1 ? "" : "s"} selected
+            </span>
+            <div className="ml-auto flex items-center gap-1.5">
+              <AssignWorkflowDialog
+                clientIds={Array.from(selectedIds)}
+                onAssigned={() => setSelectedIds(new Set())}
+                trigger={
+                  <Button variant="secondary" size="sm">
+                    <WorkflowIcon />
+                    Assign workflow
+                  </Button>
+                }
+              />
+              <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>
+                <XIcon />
+                Clear
+              </Button>
+            </div>
+          </div>
+        )}
         <div className="rounded-2xl bg-card p-6 ring-1 ring-foreground/10">
           <div className="overflow-x-auto">
-          <table className="w-full min-w-[640px] border-collapse text-sm">
+          <table className="w-full min-w-[800px] border-collapse text-sm">
             <thead>
               <tr className="text-left">
+                <th className="w-8 border-b border-border/50 py-2 pr-2">
+                  <input
+                    type="checkbox"
+                    aria-label="Select all clients"
+                    className="size-4 rounded border-input accent-primary"
+                    checked={allVisibleSelected}
+                    onChange={toggleSelectAll}
+                  />
+                </th>
                 <SortableTh label="Name" sortKey="name" sort={sort} onSort={toggleSort} />
                 <SortableTh label="Email" sortKey="email" sort={sort} onSort={toggleSort} />
                 <SortableTh
@@ -608,13 +702,16 @@ export default function ClientsPage() {
                   sort={sort}
                   onSort={toggleSort}
                 />
+                <th className="border-b border-border/70 py-2 pr-4 text-[11px] font-medium tracking-wide text-muted-foreground/70">
+                  Workflow
+                </th>
               </tr>
             </thead>
             <tbody>
               {loading &&
                 Array.from({ length: 6 }).map((_, i) => (
                   <tr key={i}>
-                    <td colSpan={5} className="border-b border-border/50 py-3 pr-4">
+                    <td colSpan={7} className="border-b border-border/50 py-3 pr-4">
                       <Skeleton className="h-4 w-full" />
                     </td>
                   </tr>
@@ -627,9 +724,21 @@ export default function ClientsPage() {
                   return (
                     <tr
                       key={c.id}
-                      className="group/row animate-blur-in-sm"
+                      className={cn(
+                        "group/row animate-blur-in-sm",
+                        selectedIds.has(c.id) && "bg-accent/[0.05]"
+                      )}
                       style={{ animationDelay: `${120 + Math.min(i, 10) * 25}ms` }}
                     >
+                      <td className="border-b border-border/50 py-3 pr-2">
+                        <input
+                          type="checkbox"
+                          aria-label={`Select ${c.name}`}
+                          className="size-4 rounded border-input accent-primary"
+                          checked={selectedIds.has(c.id)}
+                          onChange={() => toggleSelected(c.id)}
+                        />
+                      </td>
                       <td className="border-b border-border/50 py-3 pr-4">
                         <Link
                           href={`/clients/${c.id}`}
@@ -674,12 +783,19 @@ export default function ClientsPage() {
                           <span className="text-foreground/80">{workflow.label}</span>
                         </span>
                       </td>
+                      <td className="border-b border-border/50 py-3 pr-4">
+                        <WorkflowStatusCell
+                          clientId={c.id}
+                          workflowStatuses={c.workflow_statuses}
+                          onRemoved={() => mutateClients()}
+                        />
+                      </td>
                     </tr>
                   );
                 })}
               {!loading && rows.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="animate-blur-in-sm py-8 text-center text-muted-foreground">
+                  <td colSpan={7} className="animate-blur-in-sm py-8 text-center text-muted-foreground">
                     {clients?.length === 0 ? "No clients yet." : "No clients match your search."}
                   </td>
                 </tr>
@@ -690,6 +806,78 @@ export default function ClientsPage() {
         </div>
       </section>
     </div>
+  );
+}
+
+function WorkflowStatusCell({
+  clientId,
+  workflowStatuses,
+  onRemoved,
+}: {
+  clientId: number;
+  workflowStatuses: ClientWorkflowStatus[];
+  onRemoved: () => void;
+}) {
+  if (workflowStatuses.length === 0) {
+    return <span className="text-foreground/40">—</span>;
+  }
+  return (
+    <div className="flex flex-col gap-1">
+      {workflowStatuses.map((w) => (
+        <WorkflowStatusBadge key={w.workflow_id} clientId={clientId} workflowStatus={w} onRemoved={onRemoved} />
+      ))}
+    </div>
+  );
+}
+
+// Hover reveals an unassign "x" in place of the status label, so removing
+// a workflow from a client is possible right from the table row without
+// opening the client's own page - kept compact (swap, not grow) so
+// hovering one row doesn't reflow its neighbors.
+function WorkflowStatusBadge({
+  clientId,
+  workflowStatus,
+  onRemoved,
+}: {
+  clientId: number;
+  workflowStatus: ClientWorkflowStatus;
+  onRemoved: () => void;
+}) {
+  const [removing, setRemoving] = useState(false);
+
+  const onRemove = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setRemoving(true);
+    try {
+      await unassignWorkflowFromClient(workflowStatus.workflow_id, clientId);
+      onRemoved();
+    } catch {
+      setRemoving(false);
+    }
+  };
+
+  return (
+    <span className="group/wf inline-flex items-center gap-1.5">
+      <span
+        className={cn("size-1.5 shrink-0 rounded-full", toneClasses[workflowStatusTone(workflowStatus.status)])}
+      />
+      <span className="max-w-40 truncate text-foreground/80" title={workflowStatus.workflow_name}>
+        {workflowStatus.workflow_name}
+      </span>
+      <span className="shrink-0 text-xs text-muted-foreground group-hover/wf:hidden">
+        {workflowStatusLabel(workflowStatus.status)}
+      </span>
+      <button
+        type="button"
+        onClick={onRemove}
+        disabled={removing}
+        title={`Remove ${workflowStatus.workflow_name}`}
+        className="hidden shrink-0 rounded-full p-0.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive group-hover/wf:inline-flex disabled:opacity-50"
+      >
+        <XIcon className="size-3" />
+      </button>
+    </span>
   );
 }
 

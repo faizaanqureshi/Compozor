@@ -134,8 +134,17 @@ export interface ChecklistSummary {
   items: ChecklistItem[];
 }
 
+export interface ClientWorkflowStatus {
+  workflow_id: number;
+  workflow_name: string;
+  workflow_archived: boolean;
+  // null = assigned but never run yet (checklist not complete)
+  status: WorkflowRunStatus | null;
+}
+
 export interface ClientWithChecklistSummary extends Client {
   checklist_summary: ChecklistSummary;
+  workflow_statuses: ClientWorkflowStatus[];
 }
 
 export interface ClientDetail extends Client {
@@ -769,3 +778,114 @@ export const getOrganizationUsageBreakdown = (
     `/admin/organizations/${organizationId}/usage${qs ? `?${qs}` : ""}`
   );
 };
+
+// ---------- Workflows ----------
+//
+// A firm-defined unit of post-collection work (e.g. "compile all receipts
+// into a transaction CSV") that runs once a client's document checklist is
+// fully complete - see the backend's app/services/workflow_agent.py for
+// the execution model this drives.
+
+export type WorkflowExecutionMode = "auto" | "manual";
+export type WorkflowRunStatus =
+  | "queued"
+  | "running"
+  | "completed"
+  | "failed"
+  | "needs_review";
+
+export interface Workflow {
+  id: number;
+  organization_id: number;
+  name: string;
+  instructions: string;
+  execution_mode: WorkflowExecutionMode;
+  archived_at: string | null;
+  created_at: string;
+}
+
+export interface WorkflowAssignmentWithClient {
+  id: number;
+  workflow_id: number;
+  client_id: number;
+  client_name: string;
+  latest_run_status: WorkflowRunStatus | null;
+  created_at: string;
+}
+
+export interface WorkflowRunOutput {
+  id: number;
+  filename: string;
+  download_url: string | null;
+}
+
+export interface WorkflowRun {
+  id: number;
+  workflow_id: number;
+  workflow_name: string;
+  workflow_archived: boolean;
+  client_id: number;
+  workflow_assignment_id: number | null;
+  status: WorkflowRunStatus;
+  trigger: string;
+  summary: string | null;
+  review_reason: string | null;
+  outputs: WorkflowRunOutput[];
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+}
+
+export interface WorkflowBuilderResult {
+  suggested_name: string;
+  instructions: string;
+}
+
+// Side-effect-free: turns a freeform description into a suggested
+// name/instructions for an editable preview - nothing is created until
+// the caller separately calls createWorkflow once a human accepts/edits it.
+export const buildWorkflowInstructions = (description: string) =>
+  request<WorkflowBuilderResult>("/workflows/builder", json("POST", { description }));
+
+export const listWorkflows = () => request<Workflow[]>("/workflows");
+
+export const getWorkflow = (workflowId: number) =>
+  request<Workflow>(`/workflows/${workflowId}`);
+
+export const createWorkflow = (input: {
+  name: string;
+  instructions: string;
+  execution_mode?: WorkflowExecutionMode;
+}) => request<Workflow>("/workflows", json("POST", input));
+
+export const updateWorkflow = (
+  workflowId: number,
+  input: { name?: string; instructions?: string; execution_mode?: WorkflowExecutionMode }
+) => request<Workflow>(`/workflows/${workflowId}`, json("PATCH", input));
+
+export const archiveWorkflow = (workflowId: number) =>
+  request<void>(`/workflows/${workflowId}`, { method: "DELETE" });
+
+export const listWorkflowAssignments = (workflowId: number) =>
+  request<WorkflowAssignmentWithClient[]>(`/workflows/${workflowId}/assignments`);
+
+export const assignWorkflowToClients = (workflowId: number, clientIds: number[]) =>
+  request<WorkflowAssignmentWithClient[]>(
+    `/workflows/${workflowId}/assignments`,
+    json("POST", { client_ids: clientIds })
+  );
+
+export const unassignWorkflowFromClient = (workflowId: number, clientId: number) =>
+  request<void>(`/workflows/${workflowId}/assignments/${clientId}`, { method: "DELETE" });
+
+export const listClientWorkflowRuns = (clientId: number) =>
+  request<WorkflowRun[]>(`/clients/${clientId}/workflow-runs`);
+
+export const runQueuedWorkflowRun = (clientId: number, runId: number) =>
+  request<WorkflowRun>(`/clients/${clientId}/workflow-runs/${runId}/run`, { method: "POST" });
+
+// Re-runs from scratch (a fresh run row) - for a run that already finished
+// (completed/needs_review/failed), e.g. after editing the workflow's
+// instructions and wanting to try again against the same client.
+export const rerunWorkflowRun = (clientId: number, runId: number) =>
+  request<WorkflowRun>(`/clients/${clientId}/workflow-runs/${runId}/rerun`, { method: "POST" });

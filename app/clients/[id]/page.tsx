@@ -7,10 +7,17 @@ import {
   ArrowLeft,
   ChevronDown,
   Download,
+  File,
+  FileImage,
+  FileJson,
+  FileSpreadsheet,
+  FileText,
   Loader2,
   MoreHorizontal,
   Pencil,
+  Play,
   Plus,
+  RotateCcw,
   Trash2,
   UploadCloud,
   X,
@@ -29,6 +36,7 @@ import {
   DocumentUploadResult,
   EmailThread,
   ExtractedChecklistItem,
+  WorkflowRun,
   createChecklistItem,
   deleteClient,
   deleteClientMemoryNote,
@@ -39,18 +47,31 @@ import {
   listClientCommitments,
   listClientDocuments,
   listClientMemoryNotes,
+  listClientWorkflowRuns,
   listEmailThreads,
   resolveClientCommitment,
+  rerunWorkflowRun,
+  runQueuedWorkflowRun,
   sendChecklistItemReminder,
   sendChecklistReminder,
+  subscribeToEmailLogStream,
+  unassignWorkflowFromClient,
   updateChecklistItem,
   updateClient,
   uploadDocument,
   waiveChecklistItem,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { AgentActivityDisclosure } from "@/components/agent-activity-disclosure";
+import { AgentActivityDisclosure, TraceStep } from "@/components/agent-activity-disclosure";
+import { AssignWorkflowDialog } from "@/components/assign-workflow-dialog";
 import { Linkify } from "@/components/linkify";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -142,6 +163,7 @@ export default function ClientDetailPage({
   const [commitments, setCommitments] = useState<ClientCommitment[] | null>(
     null
   );
+  const [workflowRuns, setWorkflowRuns] = useState<WorkflowRun[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
@@ -163,6 +185,9 @@ export default function ClientDetailPage({
       .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
     listClientCommitments(clientId)
       .then(setCommitments)
+      .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
+    listClientWorkflowRuns(clientId)
+      .then(setWorkflowRuns)
       .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
   };
 
@@ -246,6 +271,12 @@ export default function ClientDetailPage({
         clientId={clientId}
         documents={documents}
         checklist={checklist}
+        onChange={refresh}
+      />
+
+      <WorkflowRunsCard
+        clientId={clientId}
+        runs={workflowRuns}
         onChange={refresh}
       />
 
@@ -1533,6 +1564,462 @@ function DocumentVaultCard({
       </div>
       )}
     </SectionCard>
+  );
+}
+
+// Icon shape carries the file-type signal (no added color - restrained
+// per the design system, §2/§6) so a PDF, spreadsheet, and image are
+// visually distinct at a glance instead of every output looking identical.
+function fileTypeIcon(filename: string) {
+  const ext = filename.split(".").pop()?.toLowerCase();
+  switch (ext) {
+    case "pdf":
+    case "txt":
+    case "md":
+      return FileText;
+    case "csv":
+    case "xlsx":
+    case "xls":
+      return FileSpreadsheet;
+    case "png":
+    case "jpg":
+    case "jpeg":
+    case "gif":
+    case "webp":
+    case "svg":
+      return FileImage;
+    case "json":
+      return FileJson;
+    default:
+      return File;
+  }
+}
+
+const workflowRunStatusVariant: Record<WorkflowRun["status"], "success" | "secondary" | "destructive"> = {
+  completed: "success",
+  running: "secondary",
+  queued: "secondary",
+  needs_review: "destructive",
+  failed: "destructive",
+};
+
+const workflowRunStatusLabels: Record<WorkflowRun["status"], string> = {
+  completed: "Completed",
+  running: "Running",
+  queued: "Queued",
+  needs_review: "Needs review",
+  failed: "Failed",
+};
+
+interface WorkflowGroup {
+  workflowId: number;
+  workflowName: string;
+  workflowArchived: boolean;
+  runs: WorkflowRun[];
+}
+
+function groupRunsByWorkflow(runs: WorkflowRun[]): WorkflowGroup[] {
+  const order: number[] = [];
+  const byId: Record<number, WorkflowGroup> = {};
+  for (const run of runs) {
+    if (!byId[run.workflow_id]) {
+      byId[run.workflow_id] = {
+        workflowId: run.workflow_id,
+        workflowName: run.workflow_name,
+        workflowArchived: run.workflow_archived,
+        runs: [],
+      };
+      order.push(run.workflow_id);
+    }
+    byId[run.workflow_id].runs.push(run);
+  }
+  // runs already arrive newest-first (API orders by created_at desc)
+  return order.map((id) => byId[id]);
+}
+
+function WorkflowRunsCard({
+  clientId,
+  runs,
+  onChange,
+}: {
+  clientId: number;
+  runs: WorkflowRun[] | null;
+  onChange: () => void;
+}) {
+  const [runningId, setRunningId] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [openWorkflowIds, setOpenWorkflowIds] = useState<number[]>([]);
+  const [liveWorkflowId, setLiveWorkflowId] = useState<number | null>(null);
+  const [liveWorkflowName, setLiveWorkflowName] = useState<string | null>(null);
+  const [liveTrace, setLiveTrace] = useState<TraceStep[] | null>(null);
+  // Refs, not state, for values the live-event handler only needs to read
+  // at event time - putting them in the effect's dependency array would
+  // tear down and reopen the SSE connection on every refetch/rerender.
+  const runsRef = useRef(runs);
+  const onChangeRef = useRef(onChange);
+  useEffect(() => {
+    runsRef.current = runs;
+    onChangeRef.current = onChange;
+  });
+
+  const groups = useMemo(() => (runs ? groupRunsByWorkflow(runs) : []), [runs]);
+
+  // A run already in progress when this page loads (e.g. it was kicked
+  // off before this tab was open) has no SSE history to reconstruct - its
+  // liveWorkflowId never gets set, since that only happens on a
+  // workflow_run_started event this tab actually witnessed. Auto-opening
+  // its group the first time we see it means it's never silently invisible
+  // just because of when the tab happened to load (the "Running" badge
+  // itself falls back to the persisted status too - see isLive below),
+  // even though the live step-by-step trace genuinely can't be
+  // reconstructed after the fact. Adjusting state during render (not in
+  // an effect) is the documented pattern for a one-time sync like this -
+  // see https://react.dev/learn/you-might-not-need-an-effect.
+  const [autoOpenedRunning, setAutoOpenedRunning] = useState(false);
+  if (runs && !autoOpenedRunning) {
+    setAutoOpenedRunning(true);
+    const runningIds = groups.filter((g) => g.runs[0]?.status === "running").map((g) => g.workflowId);
+    if (runningIds.length > 0) {
+      setOpenWorkflowIds((prev) => Array.from(new Set([...prev, ...runningIds])));
+    }
+  }
+
+  // Live progress for this client's workflow runs, over the same per-org
+  // SSE bus the email pipeline already streams its own live activity on
+  // (see event_broadcast.py) - workflow_agent.py's on_event calls are
+  // tagged with this client's id, same as handle_incoming_email's.
+  useEffect(() => {
+    const unsubscribe = subscribeToEmailLogStream(
+      (event) => {
+        if (event.client_id !== clientId) return;
+        switch (event.type) {
+          case "workflow_run_started": {
+            const workflowId = event.workflow_id as number;
+            const name =
+              runsRef.current?.find((r) => r.workflow_id === workflowId)?.workflow_name ?? "Workflow";
+            setLiveWorkflowId(workflowId);
+            setLiveWorkflowName(name);
+            setLiveTrace([]);
+            setOpenWorkflowIds((prev) => (prev.includes(workflowId) ? prev : [...prev, workflowId]));
+            break;
+          }
+          case "tool_call_started":
+            setLiveTrace((prev) => [
+              ...(prev ?? []),
+              { round: event.round as number, tool: event.tool as string, arguments: event.arguments as Record<string, unknown> },
+            ]);
+            break;
+          case "tool_call_result":
+            setLiveTrace((prev) => {
+              if (!prev) return prev;
+              const idx = prev.findIndex(
+                (s) => s.round === event.round && s.tool === event.tool && s.result == null
+              );
+              if (idx === -1) return prev;
+              return prev.map((s, i) => (i === idx ? { ...s, result: event.result as string } : s));
+            });
+            break;
+          case "output_produced":
+            setLiveTrace((prev) => [
+              ...(prev ?? []),
+              { round: event.round as number, tool: "code_interpreter", result: `Produced ${event.filename}` },
+            ]);
+            break;
+          case "workflow_run_finished":
+            setLiveWorkflowId(null);
+            setLiveWorkflowName(null);
+            setLiveTrace(null);
+            onChangeRef.current();
+            break;
+          default:
+            break;
+        }
+      },
+      (err) => {
+        console.error("workflow run stream error", err);
+      }
+    );
+    return unsubscribe;
+  }, [clientId]);
+
+  const onRunNow = async (runId: number) => {
+    setRunningId(runId);
+    setError(null);
+    try {
+      await runQueuedWorkflowRun(clientId, runId);
+      onChange();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setRunningId(null);
+    }
+  };
+
+  const onRerun = async (runId: number) => {
+    setRunningId(runId);
+    setError(null);
+    try {
+      await rerunWorkflowRun(clientId, runId);
+      onChange();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setRunningId(null);
+    }
+  };
+
+  // A brand-new workflow's very first run has no persisted history yet to
+  // group under - give it a synthetic group so its live activity still has
+  // somewhere to render instead of being dropped until the run finishes.
+  const displayGroups: WorkflowGroup[] =
+    liveWorkflowId !== null && !groups.some((g) => g.workflowId === liveWorkflowId)
+      ? [{ workflowId: liveWorkflowId, workflowName: liveWorkflowName ?? "Workflow", workflowArchived: false, runs: [] }, ...groups]
+      : groups;
+
+  return (
+    <SectionCard
+      title="Workflows"
+      subtitle="Work assigned to this client that runs once their checklist is complete."
+      action={
+        <AssignWorkflowDialog
+          clientIds={[clientId]}
+          onAssigned={onChange}
+          trigger={
+            <Button variant="outline" size="sm">
+              <Plus />
+              Assign workflow
+            </Button>
+          }
+        />
+      }
+    >
+      {runs === null ? (
+        <div className="flex flex-col gap-2">
+          <Skeleton className="h-4 w-2/3" />
+          <Skeleton className="h-4 w-1/2" />
+        </div>
+      ) : displayGroups.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          No workflow activity yet - a run appears here once an assigned
+          workflow fires (or is ready to run) for this client.
+        </p>
+      ) : (
+        <Accordion
+          value={openWorkflowIds}
+          onValueChange={(v) => setOpenWorkflowIds(v as number[])}
+          multiple
+          className="animate-blur-in-sm gap-3"
+          style={{ animationDelay: "280ms" }}
+        >
+          {displayGroups.map((group) => {
+            const latest = group.runs[0];
+            const isLive = group.workflowId === liveWorkflowId || latest?.status === "running";
+            const isOpen = openWorkflowIds.includes(group.workflowId);
+            return (
+              <AccordionItem
+                key={group.workflowId}
+                value={group.workflowId}
+                className="rounded-xl bg-card ring-1 ring-foreground/10 not-last:border-b-0 overflow-hidden"
+              >
+                <div className="flex items-center justify-between gap-3 px-4 py-3">
+                  <AccordionTrigger className="min-w-0 flex-1 gap-3 py-0 hover:no-underline">
+                    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 text-sm">
+                      <span className="font-medium text-foreground/90">{group.workflowName}</span>
+                      {isLive && (
+                        <Badge variant="secondary">
+                          <Loader2 className="animate-spin" />
+                          Running
+                        </Badge>
+                      )}
+                      {group.workflowArchived && <Badge variant="outline">Workflow deleted</Badge>}
+                      {!isLive && latest?.workflow_assignment_id == null && (
+                        <Badge variant="outline">Not assigned</Badge>
+                      )}
+                      {group.runs.length > 0 && (
+                        <span className="text-xs font-normal text-muted-foreground">
+                          {group.runs.length} run{group.runs.length === 1 ? "" : "s"} · latest{" "}
+                          {new Date(group.runs[0].created_at).toLocaleDateString()}
+                        </span>
+                      )}
+                    </div>
+                  </AccordionTrigger>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    {!isLive && !group.workflowArchived && latest?.status === "queued" && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => onRunNow(latest.id)}
+                        disabled={runningId === latest.id}
+                      >
+                        {runningId === latest.id ? <Loader2 className="animate-spin" /> : <Play />}
+                        Run now
+                      </Button>
+                    )}
+                    {!isLive &&
+                      !group.workflowArchived &&
+                      latest &&
+                      (latest.status === "completed" ||
+                        latest.status === "needs_review" ||
+                        latest.status === "failed") && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => onRerun(latest.id)}
+                        disabled={runningId === latest.id}
+                      >
+                        {runningId === latest.id ? <Loader2 className="animate-spin" /> : <RotateCcw />}
+                        Rerun
+                      </Button>
+                    )}
+                    {!isLive && latest?.workflow_assignment_id != null && (
+                      <RemoveWorkflowButton
+                        clientId={clientId}
+                        workflowId={group.workflowId}
+                        workflowName={group.workflowName}
+                        onRemoved={onChange}
+                      />
+                    )}
+                  </div>
+                </div>
+                <AccordionContent className="px-4 pb-0">
+                  <div
+                    className={cn(
+                      "flex flex-col gap-2 pb-3.5",
+                      isOpen && "border-t border-border/60 pt-3"
+                    )}
+                  >
+                    {isLive && liveTrace !== null && (
+                      <div className="rounded-lg bg-muted/40 px-3 py-2">
+                        <AgentActivityDisclosure trajectory={liveTrace} defaultOpen />
+                      </div>
+                    )}
+                    {group.runs.map((run) => (
+                      <WorkflowRunRow key={run.id} run={run} />
+                    ))}
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            );
+          })}
+        </Accordion>
+      )}
+      {error && <p className="text-sm text-destructive">{error}</p>}
+    </SectionCard>
+  );
+}
+
+function WorkflowRunRow({ run }: { run: WorkflowRun }) {
+  return (
+    <div className="flex flex-col gap-2 rounded-lg bg-muted/40 px-3 py-2.5 text-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge variant={workflowRunStatusVariant[run.status]}>
+          {workflowRunStatusLabels[run.status]}
+        </Badge>
+        <span className="text-xs text-muted-foreground">
+          {new Date(run.created_at).toLocaleString()}
+        </span>
+      </div>
+
+      {run.summary && <p className="text-xs text-muted-foreground">{run.summary}</p>}
+
+      {run.status === "completed" && run.outputs.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {run.outputs.map((output) => {
+            if (!output.download_url) return null;
+            const FileIcon = fileTypeIcon(output.filename);
+            return (
+              <Button
+                key={output.id}
+                variant="ghost"
+                size="sm"
+                nativeButton={false}
+                render={<a href={output.download_url} target="_blank" rel="noreferrer" />}
+              >
+                <FileIcon />
+                {output.filename}
+              </Button>
+            );
+          })}
+        </div>
+      )}
+
+      {run.review_reason && (
+        <Accordion>
+          <AccordionItem value="review-reason" className="border-none">
+            <AccordionTrigger className="py-0 text-xs font-medium text-destructive hover:no-underline [&_svg]:text-destructive">
+              Why this needs review
+            </AccordionTrigger>
+            <AccordionContent className="pt-1.5 pb-0">
+              <p className="text-xs text-destructive/90">{run.review_reason}</p>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
+      )}
+    </div>
+  );
+}
+
+function RemoveWorkflowButton({
+  clientId,
+  workflowId,
+  workflowName,
+  onRemoved,
+}: {
+  clientId: number;
+  workflowId: number;
+  workflowName: string;
+  onRemoved: () => void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const onRemove = async () => {
+    setRemoving(true);
+    setError(null);
+    try {
+      await unassignWorkflowFromClient(workflowId, clientId);
+      setConfirming(false);
+      onRemoved();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setRemoving(false);
+    }
+  };
+
+  return (
+    <>
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => setConfirming(true)}
+        className="text-muted-foreground hover:text-destructive"
+      >
+        <Trash2 />
+        Remove
+      </Button>
+      <Dialog open={confirming} onOpenChange={(open) => !removing && setConfirming(open)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Remove {workflowName}?</DialogTitle>
+            <DialogDescription>
+              It stops running for this client going forward. Past runs and
+              their outputs stay in this client&apos;s history.
+            </DialogDescription>
+          </DialogHeader>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirming(false)} disabled={removing}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={onRemove} disabled={removing}>
+              {removing ? "Removing…" : "Remove"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
