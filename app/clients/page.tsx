@@ -120,6 +120,8 @@ export default function ClientsPage() {
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [companyName, setCompanyName] = useState("");
   const [status, setStatus] = useState<ClientStatus>("pending");
   const [submitting, setSubmitting] = useState(false);
 
@@ -302,9 +304,17 @@ export default function ClientsPage() {
     setSubmitting(true);
     setError(null);
     try {
-      await createClient({ name, email, status });
+      await createClient({
+        name,
+        email,
+        phone: phone.trim() || undefined,
+        company_name: companyName.trim() || undefined,
+        status,
+      });
       setName("");
       setEmail("");
+      setPhone("");
+      setCompanyName("");
       setStatus("pending");
       setOpen(false);
       mutateClients();
@@ -422,6 +432,25 @@ export default function ClientsPage() {
                     placeholder="jane@example.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="client-phone">Phone number</Label>
+                  <Input
+                    id="client-phone"
+                    type="tel"
+                    placeholder="Optional..."
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="client-company">Company name</Label>
+                  <Input
+                    id="client-company"
+                    placeholder="Optional..."
+                    value={companyName}
+                    onChange={(e) => setCompanyName(e.target.value)}
                   />
                 </div>
                 <div className="flex flex-col gap-1.5">

@@ -411,7 +411,13 @@ export const executeClientImport = (clients: ClientImportRowIn[]) =>
 
 export const updateClient = (
   clientId: number,
-  input: { name?: string; email?: string; status?: ClientStatus }
+  input: {
+    name?: string;
+    email?: string;
+    phone?: string | null;
+    company_name?: string | null;
+    status?: ClientStatus;
+  }
 ) => request<Client>(`/clients/${clientId}`, json("PATCH", input));
 
 export const deleteClient = (clientId: number) =>

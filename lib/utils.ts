@@ -59,3 +59,25 @@ const compactNumberFormatter = new Intl.NumberFormat("en-US", {
 export function formatCompactNumber(value: number): string {
   return compactNumberFormatter.format(value)
 }
+
+// Phone numbers aren't validated/normalized on input yet (no enforcement -
+// see clients edit form), so this is purely a display-time formatter. A
+// number that already contains a dash is assumed to be pre-formatted and
+// passed through untouched. Otherwise: 10 raw digits -> "647-621-1844",
+// 11 raw digits starting with a leading "1" extension -> "1-647-621-1844".
+// Anything else (unexpected length, letters, etc.) is returned as-is.
+export function formatPhoneNumber(phone: string): string {
+  if (phone.includes("-")) return phone
+
+  const digits = phone.replace(/\D/g, "")
+
+  if (digits.length === 10) {
+    return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`
+  }
+
+  if (digits.length === 11 && digits.startsWith("1")) {
+    return `${digits[0]}-${digits.slice(1, 4)}-${digits.slice(4, 7)}-${digits.slice(7)}`
+  }
+
+  return phone
+}

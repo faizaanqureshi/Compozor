@@ -48,7 +48,7 @@ import {
   uploadDocument,
   waiveChecklistItem,
 } from "@/lib/api";
-import { cn } from "@/lib/utils";
+import { cn, formatPhoneNumber } from "@/lib/utils";
 import { AgentActivityDisclosure } from "@/components/agent-activity-disclosure";
 import { Linkify } from "@/components/linkify";
 import { Button } from "@/components/ui/button";
@@ -203,8 +203,28 @@ export default function ClientDetailPage({
             <h1 className="text-4xl font-thin tracking-tight [font-family:var(--font-denton)] sm:text-5xl md:text-6xl">
               {client.name}
             </h1>
-            <p className="text-sm text-muted-foreground">
-              {client.email} · {client.status}
+            <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm text-muted-foreground">
+              {[
+                client.email,
+                client.phone ? formatPhoneNumber(client.phone) : null,
+                client.company_name ? `Company: ${client.company_name}` : null,
+              ]
+                .filter((part): part is string => Boolean(part))
+                .map((part, i) => (
+                  <span key={i} className="inline-flex items-center gap-1.5">
+                    {part}
+                    <span aria-hidden>·</span>
+                  </span>
+                ))}
+              <span className="inline-flex items-center gap-1.5">
+                <span
+                  className={cn(
+                    "size-1.5 rounded-full",
+                    client.status === "active" ? "bg-accent" : "bg-muted-foreground/40"
+                  )}
+                />
+                {client.status.charAt(0).toUpperCase() + client.status.slice(1)}
+              </span>
             </p>
             <p className="text-xs text-muted-foreground/70">
               Last reminder sent:{" "}
@@ -268,6 +288,8 @@ function EditClientButton({
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(client.name);
   const [email, setEmail] = useState(client.email);
+  const [phone, setPhone] = useState(client.phone ?? "");
+  const [companyName, setCompanyName] = useState(client.company_name ?? "");
   const [status, setStatus] = useState<ClientStatus>(client.status);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -275,6 +297,8 @@ function EditClientButton({
   const openDialog = () => {
     setName(client.name);
     setEmail(client.email);
+    setPhone(client.phone ?? "");
+    setCompanyName(client.company_name ?? "");
     setStatus(client.status);
     setError(null);
     setEditing(true);
@@ -285,7 +309,13 @@ function EditClientButton({
     setSubmitting(true);
     setError(null);
     try {
-      await updateClient(client.id, { name, email, status });
+      await updateClient(client.id, {
+        name,
+        email,
+        phone: phone.trim() || null,
+        company_name: companyName.trim() || null,
+        status,
+      });
       setEditing(false);
       onUpdated();
     } catch (e) {
@@ -334,6 +364,23 @@ function EditClientButton({
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="edit-client-phone">Phone number</Label>
+                <Input
+                  id="edit-client-phone"
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="edit-client-company">Company name</Label>
+                <Input
+                  id="edit-client-company"
+                  value={companyName}
+                  onChange={(e) => setCompanyName(e.target.value)}
                 />
               </div>
               <div className="flex flex-col gap-1.5">
