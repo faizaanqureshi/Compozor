@@ -94,9 +94,7 @@ function deriveWorkflowStatus(
     if (summary.missing > 0) return { label: "Awaiting docs", tone: "warning" };
     return { label: "Complete", tone: "positive" };
   }
-  return client.status === "pending"
-    ? { label: "Pending", tone: "neutral" }
-    : { label: "Active", tone: "positive" };
+  return { label: "Active", tone: "positive" };
 }
 
 export default function ClientsPage() {
@@ -122,7 +120,7 @@ export default function ClientsPage() {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [companyName, setCompanyName] = useState("");
-  const [status, setStatus] = useState<ClientStatus>("pending");
+  const [status, setStatus] = useState<ClientStatus>("active");
   const [submitting, setSubmitting] = useState(false);
 
   const [reminderState, setReminderState] = useState<
@@ -249,12 +247,11 @@ export default function ClientsPage() {
   };
 
   const stats = useMemo(() => {
-    const counts = { active: 0, pending: 0, inactive: 0 };
+    const counts = { active: 0, inactive: 0 };
     for (const c of clients ?? []) counts[c.status]++;
     return {
       total: clients?.length ?? 0,
       active: counts.active,
-      pending: counts.pending,
       inactive: counts.inactive,
     };
   }, [clients]);
@@ -315,7 +312,7 @@ export default function ClientsPage() {
       setEmail("");
       setPhone("");
       setCompanyName("");
-      setStatus("pending");
+      setStatus("active");
       setOpen(false);
       mutateClients();
       mutateEmailLog();
@@ -461,7 +458,6 @@ export default function ClientsPage() {
                     onChange={(e) => setStatus(e.target.value as ClientStatus)}
                     className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                   >
-                    <option value="pending">Pending</option>
                     <option value="active">Active</option>
                     <option value="inactive">Inactive</option>
                   </select>

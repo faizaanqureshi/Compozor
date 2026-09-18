@@ -391,7 +391,6 @@ function EditClientButton({
                   onChange={(e) => setStatus(e.target.value as ClientStatus)}
                   className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                 >
-                  <option value="pending">Pending</option>
                   <option value="active">Active</option>
                   <option value="inactive">Inactive</option>
                 </select>

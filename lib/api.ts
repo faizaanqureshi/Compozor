@@ -75,7 +75,7 @@ function json(method: string, body: unknown): RequestInit {
 
 // ---------- Types ----------
 
-export type ClientStatus = "active" | "inactive" | "pending";
+export type ClientStatus = "active" | "inactive";
 export type ChecklistItemStatus = "missing" | "received" | "wrong";
 export type EmailDirection = "inbound" | "outbound";
 export type EmailStatus = "received" | "draft" | "sent" | "needs_human_attention";
