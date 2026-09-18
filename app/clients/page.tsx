@@ -351,7 +351,7 @@ export default function ClientsPage() {
   };
 
   return (
-    <div className="flex w-full flex-col gap-8">
+    <div className="relative isolate flex min-h-full w-full flex-col gap-8">
       {gmailBanner && (
         <div
           className={cn(

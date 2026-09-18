@@ -7,7 +7,19 @@ interface GridPatternProps extends React.SVGProps<SVGSVGElement> {
   width?: number;
   height?: number;
   className?: string;
+  /**
+   * "hero" (default) fades out ~60% down a tall viewport-height box - right
+   * for a hero/full-screen backdrop. "panel" covers the whole box edge to
+   * edge, for shorter content boxes (dashboard pages) where a hero-style
+   * fade would visibly cut off before reaching the bottom of the box.
+   */
+  maskVariant?: "hero" | "panel";
 }
+
+const maskByVariant: Record<NonNullable<GridPatternProps["maskVariant"]>, string> = {
+  hero: "radial-gradient(ellipse 65% 55% at 50% 35%, black 40%, transparent 85%)",
+  panel: "radial-gradient(ellipse 90% 90% at 50% 40%, black 50%, transparent 100%)",
+};
 
 /**
  * A softly faded line grid - radial-mask keeps it from reading as a harsh
@@ -18,9 +30,11 @@ export function GridPattern({
   width = 48,
   height = 48,
   className,
+  maskVariant = "hero",
   ...props
 }: GridPatternProps) {
   const id = useId();
+  const mask = maskByVariant[maskVariant];
 
   return (
     <svg
@@ -30,10 +44,8 @@ export function GridPattern({
         className
       )}
       style={{
-        maskImage:
-          "radial-gradient(ellipse 65% 55% at 50% 35%, black 40%, transparent 85%)",
-        WebkitMaskImage:
-          "radial-gradient(ellipse 65% 55% at 50% 35%, black 40%, transparent 85%)",
+        maskImage: mask,
+        WebkitMaskImage: mask,
       }}
       {...props}
     >
