@@ -274,7 +274,7 @@ function TriageActions({
       await createClientFromUnmatchedInboundEmail(email.id, {
         name: newName,
         email: email.from_email,
-        status: "pending" as ClientStatus,
+        status: "active" as ClientStatus,
       });
       onResolved();
     } catch (e) {

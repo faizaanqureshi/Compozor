@@ -136,9 +136,7 @@ function deriveWorkflowStatus(
     if (summary.missing > 0) return { label: "Awaiting docs", tone: "warning" };
     return { label: "Complete", tone: "success" };
   }
-  return client.status === "pending"
-    ? { label: "Pending", tone: "neutral" }
-    : { label: "Active", tone: "success" };
+  return { label: "Active", tone: "success" };
 }
 
 export default function ClientsPage() {
@@ -162,7 +160,9 @@ export default function ClientsPage() {
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [status, setStatus] = useState<ClientStatus>("pending");
+  const [phone, setPhone] = useState("");
+  const [companyName, setCompanyName] = useState("");
+  const [status, setStatus] = useState<ClientStatus>("active");
   const [submitting, setSubmitting] = useState(false);
 
   const [reminderState, setReminderState] = useState<
@@ -303,12 +303,11 @@ export default function ClientsPage() {
   };
 
   const stats = useMemo(() => {
-    const counts = { active: 0, pending: 0, inactive: 0 };
+    const counts = { active: 0, inactive: 0 };
     for (const c of clients ?? []) counts[c.status]++;
     return {
       total: clients?.length ?? 0,
       active: counts.active,
-      pending: counts.pending,
       inactive: counts.inactive,
     };
   }, [clients]);
@@ -363,10 +362,18 @@ export default function ClientsPage() {
     setSubmitting(true);
     setError(null);
     try {
-      await createClient({ name, email, status });
+      await createClient({
+        name,
+        email,
+        phone: phone.trim() || undefined,
+        company_name: companyName.trim() || undefined,
+        status,
+      });
       setName("");
       setEmail("");
-      setStatus("pending");
+      setPhone("");
+      setCompanyName("");
+      setStatus("active");
       setOpen(false);
       mutateClients();
       mutateEmailLog();
@@ -487,6 +494,25 @@ export default function ClientsPage() {
                   />
                 </div>
                 <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="client-phone">Phone number</Label>
+                  <Input
+                    id="client-phone"
+                    type="tel"
+                    placeholder="Optional..."
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="client-company">Company name</Label>
+                  <Input
+                    id="client-company"
+                    placeholder="Optional..."
+                    value={companyName}
+                    onChange={(e) => setCompanyName(e.target.value)}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
                   <Label htmlFor="client-status">Status</Label>
                   <select
                     id="client-status"
@@ -494,7 +520,6 @@ export default function ClientsPage() {
                     onChange={(e) => setStatus(e.target.value as ClientStatus)}
                     className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                   >
-                    <option value="pending">Pending</option>
                     <option value="active">Active</option>
                     <option value="inactive">Inactive</option>
                   </select>
