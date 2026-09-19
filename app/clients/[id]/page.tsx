@@ -1917,7 +1917,7 @@ function WorkflowRunRow({ run }: { run: WorkflowRun }) {
           {workflowRunStatusLabels[run.status]}
         </Badge>
         <span className="text-xs text-muted-foreground">
-          {new Date(run.created_at).toLocaleString()}
+          {run.started_at ? "Attempt started " : "Created "}{new Date(run.started_at ?? run.created_at).toLocaleString()}
         </span>
       </div>
 
@@ -1943,7 +1943,7 @@ function WorkflowRunRow({ run }: { run: WorkflowRun }) {
       )}
       {run.summary && <p className="text-xs text-muted-foreground">{run.summary}</p>}
       {run.tool_trajectory && run.tool_trajectory.length > 0 && (
-        <AgentActivityDisclosure trajectory={run.tool_trajectory.map((step, i) => ({ ...step, round: step.round ?? i + 1 }))} defaultOpen={run.status === "running"} />
+        <AgentActivityDisclosure trajectory={run.tool_trajectory.map((step, i) => ({ ...step, round: step.round ?? i + 1 }))} defaultOpen={run.status === "running"} attemptStartedAt={run.started_at} running={run.status === "running"} />
       )}
 
       {run.status === "completed" && run.outputs.length > 0 && (

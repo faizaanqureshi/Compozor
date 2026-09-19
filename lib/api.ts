@@ -791,7 +791,7 @@ export interface WorkflowRun {
   step_results: Record<string, string>;
   verification: { passed: boolean; checks: { criterion_id: string; passed: boolean; evidence: string }[]; issues: string[]; method: string } | null;
   can_resume: boolean;
-  tool_trajectory: { round?: number; tool: string; arguments?: Record<string, unknown>; result?: string }[] | null;
+  tool_trajectory: { round?: number; tool: string; arguments?: Record<string, unknown>; result?: string; started_at?: string; completed_at?: string }[] | null;
   id: number;
   workflow_id: number;
   workflow_name: string;
