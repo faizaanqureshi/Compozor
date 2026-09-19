@@ -52,6 +52,7 @@ import {
 } from "@/components/ui/dialog";
 import { ClientImportModal } from "@/components/client-import-modal";
 import { WorkflowFormDialog } from "@/components/workflow-form-dialog";
+import { PackageFormDialog } from "@/components/package-form-dialog";
 import { AssignWorkflowDialog } from "@/components/assign-workflow-dialog";
 import { AssignPackageDialog } from "@/components/assign-package-dialog";
 
@@ -459,6 +460,7 @@ export default function ClientsPage() {
         </div>
         <div className="flex items-center gap-2">
         <WorkflowFormDialog onSaved={() => {}} variant="outline" />
+        <PackageFormDialog onSaved={() => {}} variant="outline" />
         <ClientImportModal onImported={() => mutateClients()} />
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger render={<Button />}>
