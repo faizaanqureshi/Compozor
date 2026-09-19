@@ -3,17 +3,11 @@
 import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createSnapshotRefresh } from "@/lib/snapshot-refresh";
 import Link from "next/link";
-import useSWR from "swr";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   ChevronDown,
   Download,
-  File,
-  FileImage,
-  FileJson,
-  FileSpreadsheet,
-  FileText,
   Loader2,
   MoreHorizontal,
   Pencil,
@@ -45,7 +39,6 @@ import {
   downloadClientDocumentsZip,
   extractChecklistItems,
   getClient,
-  getClientWorkflowRun,
   listChecklistItems,
   listClientCommitments,
   listClientDocuments,
@@ -67,15 +60,12 @@ import {
 import { cn, formatPhoneNumber } from "@/lib/utils";
 import { ResumeWorkflowDialog } from "@/components/resume-workflow-dialog";
 import { AgentActivityDisclosure } from "@/components/agent-activity-disclosure";
+import { ClientWorkflowActivity } from "@/components/client-workflow-activity";
 import { AssignWorkflowDialog } from "@/components/assign-workflow-dialog";
 import { Linkify } from "@/components/linkify";
 import {
   Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
 } from "@/components/ui/accordion";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -1637,50 +1627,6 @@ function DocumentVaultCard({
   );
 }
 
-// Icon shape carries the file-type signal (no added color - restrained
-// per the design system, §2/§6) so a PDF, spreadsheet, and image are
-// visually distinct at a glance instead of every output looking identical.
-function fileTypeIcon(filename: string) {
-  const ext = filename.split(".").pop()?.toLowerCase();
-  switch (ext) {
-    case "pdf":
-    case "txt":
-    case "md":
-      return FileText;
-    case "csv":
-    case "xlsx":
-    case "xls":
-      return FileSpreadsheet;
-    case "png":
-    case "jpg":
-    case "jpeg":
-    case "gif":
-    case "webp":
-    case "svg":
-      return FileImage;
-    case "json":
-      return FileJson;
-    default:
-      return File;
-  }
-}
-
-const workflowRunStatusVariant: Record<WorkflowRun["status"], "success" | "secondary" | "destructive"> = {
-  completed: "success",
-  running: "secondary",
-  queued: "secondary",
-  needs_review: "destructive",
-  failed: "destructive",
-};
-
-const workflowRunStatusLabels: Record<WorkflowRun["status"], string> = {
-  completed: "Completed",
-  running: "Running",
-  queued: "Queued",
-  needs_review: "Needs review",
-  failed: "Failed",
-};
-
 interface WorkflowGroup {
   workflowId: number;
   workflowName: string;
@@ -1795,7 +1741,7 @@ function WorkflowRunsCard({
   return (
     <SectionCard
       title="Workflows"
-      subtitle="Work assigned to this client that runs once their checklist is complete."
+      subtitle={<span className="text-[0.8125rem]">From collected documents to finished work.</span>}
       action={
         <AssignWorkflowDialog
           clientIds={[clientId]}
@@ -1824,45 +1770,22 @@ function WorkflowRunsCard({
           value={openWorkflowIds}
           onValueChange={(v) => setOpenWorkflowIds(v as number[])}
           multiple
-          className="animate-blur-in-sm gap-3"
-          style={{ animationDelay: "280ms" }}
+          className="border-t border-border/70"
         >
           {displayGroups.map((group) => {
             const latest = group.runs[0];
             const isLive = latest?.status === "running";
-            const isOpen = openWorkflowIds.includes(group.workflowId);
             return (
-              <AccordionItem
+              <ClientWorkflowActivity
                 key={group.workflowId}
-                value={group.workflowId}
-                className="rounded-xl bg-card ring-1 ring-foreground/10 not-last:border-b-0 overflow-hidden"
-              >
-                <div className="flex items-center justify-between gap-3 px-4 py-3">
-                  <AccordionTrigger className="min-w-0 flex-1 gap-3 py-0 hover:no-underline">
-                    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 text-sm">
-                      <span className="font-medium text-foreground/90">{group.workflowName}</span>
-                      {isLive && (
-                        <Badge variant="secondary">
-                          <Loader2 className="animate-spin" />
-                          Running
-                        </Badge>
-                      )}
-                      {group.workflowArchived && <Badge variant="outline">Workflow deleted</Badge>}
-                      {!isLive && latest?.workflow_assignment_id == null && (
-                        <Badge variant="outline">Not assigned</Badge>
-                      )}
-                      {group.runs.length > 0 && (
-                        <span className="text-xs font-normal text-muted-foreground">
-                          {group.runs.length} run{group.runs.length === 1 ? "" : "s"} · latest{" "}
-                          {new Date(group.runs[0].created_at).toLocaleDateString()}
-                        </span>
-                      )}
-                    </div>
-                  </AccordionTrigger>
-                  <div className="flex shrink-0 items-center gap-1.5">
+                workflowId={group.workflowId}
+                name={group.workflowName}
+                archived={group.workflowArchived}
+                runs={group.runs}
+                actions={<>
                     {!isLive && !group.workflowArchived && latest?.status === "queued" && (
                       <Button
-                        variant="secondary"
+                        variant="outline"
                         size="sm"
                         onClick={() => onRunNow(latest.id)}
                         disabled={runningId === latest.id}
@@ -1879,7 +1802,7 @@ function WorkflowRunsCard({
                         latest.status === "needs_review" ||
                         latest.status === "failed") && (
                       <Button
-                        variant="secondary"
+                        variant="outline"
                         size="sm"
                         onClick={() => onRerun(latest.id)}
                         disabled={runningId === latest.id}
@@ -1896,123 +1819,14 @@ function WorkflowRunsCard({
                         onRemoved={onChange}
                       />
                     )}
-                  </div>
-                </div>
-                <AccordionContent className="px-4 pb-0">
-                  <div
-                    className={cn(
-                      "flex flex-col gap-2 pb-3.5",
-                      isOpen && "border-t border-border/60 pt-3"
-                    )}
-                  >
-                    {group.runs.map((run) => (
-                      <WorkflowRunRow key={run.id} run={run} />
-                    ))}
-                  </div>
-                </AccordionContent>
-              </AccordionItem>
+                </>}
+              />
             );
           })}
         </Accordion>
       )}
       {error && <p className="text-sm text-destructive">{error}</p>}
     </SectionCard>
-  );
-}
-
-function WorkflowRunRow({ run }: { run: WorkflowRun }) {
-  const [expanded, setExpanded] = useState(false);
-  const historical = run.details_loaded === false;
-  const { data, error, isLoading, mutate } = useSWR(
-    historical && expanded ? ["workflow-run", run.client_id, run.id, run.started_at, run.completed_at, run.status] : null,
-    () => getClientWorkflowRun(run.client_id, run.id),
-    { revalidateOnFocus: false },
-  );
-  const detail = historical ? (expanded ? data : undefined) : run;
-  return (
-    <div className="flex flex-col gap-2 rounded-lg bg-muted/40 px-3 py-2.5 text-sm">
-      <div className="flex flex-wrap items-center gap-2">
-        <Badge variant={workflowRunStatusVariant[run.status]}>
-          {workflowRunStatusLabels[run.status]}
-        </Badge>
-        <span className="text-xs text-muted-foreground">
-          {run.started_at ? "Attempt started " : "Created "}{new Date(run.started_at ?? run.created_at).toLocaleString()}
-        </span>
-      </div>
-
-      {historical && (
-        <div className="flex flex-col items-start gap-2">
-          <Button variant="ghost" size="sm" onClick={() => setExpanded(value => !value)} aria-expanded={expanded}>
-            {isLoading && <Loader2 className="animate-spin" />}
-            {expanded ? "Hide run details" : "Show run details"}
-          </Button>
-          {expanded && error && (
-            <div className="flex items-center gap-2 text-xs text-destructive">
-              Could not load run details.
-              <Button variant="ghost" size="sm" onClick={() => void mutate()}>Retry</Button>
-            </div>
-          )}
-        </div>
-      )}
-      {detail?.execution_plan && (
-        <Accordion>
-          <AccordionItem value="execution-plan" className="border-none">
-            <AccordionTrigger className="py-0 text-xs font-medium hover:no-underline">Workflow plan and checks</AccordionTrigger>
-            <AccordionContent className="pt-2 pb-0 text-xs">
-              <p className="mb-2 text-muted-foreground">{detail.execution_plan.objective}</p>
-              <ol className="list-decimal space-y-1 pl-4">
-                {detail.execution_plan.steps.map((step, i) => <li key={i}>{step}
-                  {detail.step_results?.[String(i + 1)] && <p className="text-muted-foreground">{detail.step_results[String(i + 1)]}</p>}
-                </li>)}
-              </ol>
-              {detail.verification && <div className="mt-3 space-y-1">
-                <p className="font-medium">{detail.verification.passed ? "Completion checks passed" : "Completion checks need attention"}</p>
-                {detail.verification.checks.map(check => <p key={check.criterion_id} className={check.passed ? "text-muted-foreground" : "text-destructive"}>{check.evidence}</p>)}
-                {detail.verification.issues.map((issue, i) => <p key={i} className="text-destructive">{issue}</p>)}
-              </div>}
-            </AccordionContent>
-          </AccordionItem>
-        </Accordion>
-      )}
-      {run.summary && <p className="text-xs text-muted-foreground">{run.summary}</p>}
-      {detail?.tool_trajectory && detail.tool_trajectory.length > 0 && (
-        <AgentActivityDisclosure trajectory={detail.tool_trajectory.map((step, i) => ({ ...step, round: step.round ?? i + 1 }))} defaultOpen={run.status === "running"} attemptStartedAt={run.started_at} running={run.status === "running"} />
-      )}
-
-      {run.status === "completed" && run.outputs.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          {run.outputs.map((output) => {
-            if (!output.download_url) return null;
-            const FileIcon = fileTypeIcon(output.filename);
-            return (
-              <Button
-                key={output.id}
-                variant="ghost"
-                size="sm"
-                nativeButton={false}
-                render={<a href={output.download_url} target="_blank" rel="noreferrer" />}
-              >
-                <FileIcon />
-                {output.filename}
-              </Button>
-            );
-          })}
-        </div>
-      )}
-
-      {run.review_reason && (
-        <Accordion>
-          <AccordionItem value="review-reason" className="border-none">
-            <AccordionTrigger className="py-0 text-xs font-medium text-destructive hover:no-underline [&_svg]:text-destructive">
-              Why this needs review
-            </AccordionTrigger>
-            <AccordionContent className="pt-1.5 pb-0">
-              <p className="text-xs text-destructive/90">{run.review_reason}</p>
-            </AccordionContent>
-          </AccordionItem>
-        </Accordion>
-      )}
-    </div>
   );
 }
 
@@ -2047,15 +1861,16 @@ function RemoveWorkflowButton({
 
   return (
     <>
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={() => setConfirming(true)}
-        className="text-muted-foreground hover:text-destructive"
-      >
-        <Trash2 />
-        Remove
-      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label={`Options for ${workflowName}`} className="text-muted-foreground" />}>
+          <MoreHorizontal />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem variant="destructive" onClick={() => setConfirming(true)}>
+            <Trash2 /> Remove workflow
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
       <Dialog open={confirming} onOpenChange={(open) => !removing && setConfirming(open)}>
         <DialogContent>
           <DialogHeader>
