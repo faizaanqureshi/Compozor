@@ -125,6 +125,7 @@ export interface ChecklistItem {
   description: string | null;
   wrong_attempt_count: number;
   last_wrong_doc_type: string | null;
+  package_name: string | null;
 }
 
 export interface ChecklistSummary {
@@ -150,6 +151,7 @@ export interface ClientWithChecklistSummary extends Client {
 
 export interface ClientDetail extends Client {
   checklist_items: ChecklistItem[];
+  assigned_package_ids: number[];
 }
 
 export interface DocumentOut {
