@@ -886,3 +886,74 @@ export const resumeWorkflowRun = (clientId: number, runId: number, context: stri
     `/clients/${clientId}/workflow-runs/${runId}/resume`,
     json("POST", { context })
   );
+
+// ---------- Packages ----------
+
+export interface PackageDocument {
+  id: number;
+  doc_type_needed: string;
+  description: string | null;
+  is_required: boolean;
+  position: number;
+}
+
+export interface PackageDocumentInput {
+  doc_type_needed: string;
+  description?: string | null;
+  is_required?: boolean;
+}
+
+export interface Package {
+  id: number;
+  organization_id: number;
+  name: string;
+  archived_at: string | null;
+  created_at: string;
+  documents: PackageDocument[];
+}
+
+export interface PackageWithAssignmentCount extends Package {
+  assigned_client_count: number;
+}
+
+export interface PackageAssignmentWithClient {
+  id: number;
+  package_id: number;
+  client_id: number;
+  client_name: string;
+  created_at: string;
+}
+
+export const listPackages = () => request<PackageWithAssignmentCount[]>("/packages");
+
+export const getPackage = (packageId: number) => request<Package>(`/packages/${packageId}`);
+
+export const createPackage = (input: { name: string; documents: PackageDocumentInput[] }) =>
+  request<Package>("/packages", json("POST", input));
+
+export const updatePackage = (
+  packageId: number,
+  input: { name?: string; documents?: PackageDocumentInput[] }
+) => request<Package>(`/packages/${packageId}`, json("PATCH", input));
+
+export const archivePackage = (packageId: number) =>
+  request<void>(`/packages/${packageId}`, { method: "DELETE" });
+
+export const listPackageAssignments = (packageId: number) =>
+  request<PackageAssignmentWithClient[]>(`/packages/${packageId}/assignments`);
+
+// documentIds: which of the package's documents to actually create as
+// checklist items - the assign dialog defaults this to the required ones
+// and lets the CPA toggle optional ones on (or required ones off) first.
+export const assignPackageToClients = (
+  packageId: number,
+  clientIds: number[],
+  documentIds: number[]
+) =>
+  request<PackageAssignmentWithClient[]>(
+    `/packages/${packageId}/assignments`,
+    json("POST", { client_ids: clientIds, document_ids: documentIds })
+  );
+
+export const unassignPackageFromClient = (packageId: number, clientId: number) =>
+  request<void>(`/packages/${packageId}/assignments/${clientId}`, { method: "DELETE" });

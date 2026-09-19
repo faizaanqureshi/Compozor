@@ -31,13 +31,12 @@ import {
   DocumentOut,
   DocumentUploadResult,
   EmailThread,
-  ExtractedChecklistItem,
+  Package,
   WorkflowRun,
   createChecklistItem,
   deleteClient,
   deleteClientMemoryNote,
   downloadClientDocumentsZip,
-  extractChecklistItems,
   getClient,
   listChecklistItems,
   listClientCommitments,
@@ -45,6 +44,7 @@ import {
   listClientMemoryNotes,
   listClientWorkflowRuns,
   listEmailThreads,
+  listPackages,
   resolveClientCommitment,
   rerunWorkflowRun,
   runQueuedWorkflowRun,
@@ -62,6 +62,8 @@ import { ResumeWorkflowDialog } from "@/components/resume-workflow-dialog";
 import { AgentActivityDisclosure } from "@/components/agent-activity-disclosure";
 import { ClientWorkflowActivity } from "@/components/client-workflow-activity";
 import { AssignWorkflowDialog } from "@/components/assign-workflow-dialog";
+import { AssignPackageDialog } from "@/components/assign-package-dialog";
+import { PackageFormDialog } from "@/components/package-form-dialog";
 import { Linkify } from "@/components/linkify";
 import {
   Accordion,
@@ -70,7 +72,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
@@ -278,7 +279,7 @@ export default function ClientDetailPage({
       {error && <p className="text-sm text-destructive">{error}</p>}
 
       {client !== null && (
-        <QuickAddPanel clientId={clientId} onChange={refresh} />
+        <PackageQuickAssignRow clientId={clientId} onAssigned={refresh} />
       )}
 
       <ChecklistCard
@@ -738,177 +739,125 @@ function ChecklistCard({
   );
 }
 
-function QuickAddPanel({
+const PACKAGE_ROW_VISIBLE_COUNT = 3;
+
+function PackageAssignCard({
+  pkg,
   clientId,
-  onChange,
+  onAssigned,
+}: {
+  pkg: Package;
+  clientId: number;
+  onAssigned: () => void;
+}) {
+  return (
+    <AssignPackageDialog
+      clientIds={[clientId]}
+      initialPackage={pkg}
+      onAssigned={onAssigned}
+      trigger={
+        <button
+          type="button"
+          className="flex h-full flex-col gap-2 rounded-xl border border-border/60 bg-background p-3.5 text-left transition-colors hover:border-accent/40 hover:bg-muted/60"
+        >
+          <span className="text-sm font-medium">{pkg.name}</span>
+          <ul className="flex flex-col gap-0.5 text-xs text-muted-foreground">
+            {pkg.documents.slice(0, 4).map((doc) => (
+              <li key={doc.id} className="truncate">
+                {doc.doc_type_needed}
+                {!doc.is_required && " (optional)"}
+              </li>
+            ))}
+            {pkg.documents.length > 4 && <li>+{pkg.documents.length - 4} more</li>}
+          </ul>
+        </button>
+      }
+    />
+  );
+}
+
+function PackageQuickAssignRow({
+  clientId,
+  onAssigned,
 }: {
   clientId: number;
-  onChange: () => void;
+  onAssigned: () => void;
 }) {
-  const [instruction, setInstruction] = useState("");
-  const [extracting, setExtracting] = useState(false);
-  const [items, setItems] = useState<ExtractedChecklistItem[] | null>(null);
-  const [sendReminder, setSendReminder] = useState(false);
-  const [confirming, setConfirming] = useState(false);
+  const [packages, setPackages] = useState<Package[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [justAdded, setJustAdded] = useState(false);
+  const [showMore, setShowMore] = useState(false);
 
-  const reset = () => {
-    setInstruction("");
-    setItems(null);
-    setSendReminder(false);
-    setError(null);
+  const refreshPackages = () => {
+    listPackages()
+      .then(setPackages)
+      .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
   };
 
-  const onExtract = async () => {
-    if (!instruction.trim()) return;
-    setExtracting(true);
-    setError(null);
-    setJustAdded(false);
-    try {
-      const result = await extractChecklistItems(clientId, instruction);
-      setItems(result.items);
-      setSendReminder(result.suggested_send_reminder);
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : String(e));
-    } finally {
-      setExtracting(false);
-    }
-  };
+  useEffect(refreshPackages, []);
 
-  const updateItem = (i: number, patch: Partial<ExtractedChecklistItem>) => {
-    setItems((prev) => prev?.map((item, idx) => (idx === i ? { ...item, ...patch } : item)) ?? null);
-  };
-
-  const removeItem = (i: number) => {
-    setItems((prev) => prev?.filter((_, idx) => idx !== i) ?? null);
-  };
-
-  const onConfirm = async () => {
-    if (!items || items.length === 0) return;
-    setConfirming(true);
-    setError(null);
-    try {
-      for (const item of items) {
-        await createChecklistItem(clientId, {
-          doc_type_needed: item.doc_type_needed,
-          description: item.description || undefined,
-          expected_date_range_start: item.expected_date_range_start || undefined,
-          expected_date_range_end: item.expected_date_range_end || undefined,
-        });
-      }
-      if (sendReminder) {
-        await sendChecklistReminder(clientId);
-      }
-      onChange();
-      reset();
-      setJustAdded(true);
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : String(e));
-    } finally {
-      setConfirming(false);
-    }
-  };
+  const visible = packages?.slice(0, PACKAGE_ROW_VISIBLE_COUNT) ?? [];
+  const remaining = packages?.slice(PACKAGE_ROW_VISIBLE_COUNT) ?? [];
 
   return (
     <SectionCard
-      title="Quick add"
-      subtitle="Describe what this client needs in plain language."
-    >
-      {!items ? (
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-          <Textarea
-            placeholder={`e.g. "get his T4s for 2024 and ask for last year's NOA"`}
-            value={instruction}
-            onChange={(e) => {
-              setInstruction(e.target.value);
-              setJustAdded(false);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) onExtract();
-            }}
-            rows={2}
-            className="flex-1"
-          />
-          <Button onClick={onExtract} disabled={extracting || !instruction.trim()}>
-            {extracting ? "Reading…" : "Add"}
-          </Button>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-2.5">
-          {items.length === 0 && (
-            <p className="text-sm text-muted-foreground">
-              Nothing extracted - go back and try rephrasing.
-            </p>
+      title="Assign a package"
+      subtitle="Click a package to add its documents to this client."
+      action={
+        <div className="flex items-center gap-1.5">
+          {remaining.length > 0 && (
+            <Button variant="ghost" size="sm" onClick={() => setShowMore(true)}>
+              Show more
+            </Button>
           )}
-          {items.map((item, i) => (
-            <div
-              key={i}
-              className="flex items-start gap-2 rounded-lg border border-border/60 bg-background p-2.5"
-            >
-              <div className="flex flex-1 flex-col gap-1.5">
-                <Input
-                  value={item.doc_type_needed}
-                  onChange={(e) => updateItem(i, { doc_type_needed: e.target.value })}
-                  placeholder="Doc type"
-                />
-                <Input
-                  value={item.description ?? ""}
-                  onChange={(e) => updateItem(i, { description: e.target.value || null })}
-                  placeholder="Description (optional)"
-                />
-                {(item.expected_date_range_start !== null || item.expected_date_range_end !== null) && (
-                  <div className="flex items-center gap-1.5">
-                    <Input
-                      type="date"
-                      value={item.expected_date_range_start ?? ""}
-                      onChange={(e) =>
-                        updateItem(i, { expected_date_range_start: e.target.value || null })
-                      }
-                      className="h-8 text-xs"
-                    />
-                    <span className="text-xs text-muted-foreground">to</span>
-                    <Input
-                      type="date"
-                      value={item.expected_date_range_end ?? ""}
-                      onChange={(e) =>
-                        updateItem(i, { expected_date_range_end: e.target.value || null })
-                      }
-                      className="h-8 text-xs"
-                    />
-                  </div>
-                )}
-              </div>
-              <Button type="button" variant="ghost" size="icon-sm" onClick={() => removeItem(i)}>
-                <X />
-              </Button>
-            </div>
+          <PackageFormDialog
+            onSaved={refreshPackages}
+            variant="outline"
+          />
+        </div>
+      }
+    >
+      {packages === null ? (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} className="h-28 w-full rounded-xl" />
           ))}
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={sendReminder}
-                onChange={(e) => setSendReminder(e.target.checked)}
-                className="size-3.5 accent-foreground"
-              />
-              Also send a reminder email now
-            </label>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => setItems(null)} disabled={confirming}>
-                Back
-              </Button>
-              <Button size="sm" onClick={onConfirm} disabled={confirming || items.length === 0}>
-                {confirming
-                  ? "Adding…"
-                  : `Add ${items.length} requirement${items.length === 1 ? "" : "s"}${sendReminder ? " & send" : ""}`}
-              </Button>
-            </div>
-          </div>
+        </div>
+      ) : packages.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          No packages yet - use &quot;Create New Package&quot; above to create one.
+        </p>
+      ) : (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {visible.map((pkg) => (
+            <PackageAssignCard key={pkg.id} pkg={pkg} clientId={clientId} onAssigned={onAssigned} />
+          ))}
         </div>
       )}
       {error && <p className="text-sm text-destructive">{error}</p>}
-      {justAdded && <p className="text-sm text-muted-foreground">Done — checklist updated below.</p>}
+
+      <Dialog open={showMore} onOpenChange={setShowMore}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>More packages</DialogTitle>
+            <DialogDescription>
+              Click a package to add its documents to this client.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid max-h-[60vh] grid-cols-1 gap-3 overflow-y-auto sm:grid-cols-2">
+            {remaining.map((pkg) => (
+              <PackageAssignCard
+                key={pkg.id}
+                pkg={pkg}
+                clientId={clientId}
+                onAssigned={() => {
+                  setShowMore(false);
+                  onAssigned();
+                }}
+              />
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
     </SectionCard>
   );
 }
