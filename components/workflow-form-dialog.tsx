@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Loader2, Plus, Sparkles } from "lucide-react";
 import {
   ApiError,
@@ -15,6 +15,7 @@ import type { VariantProps } from "class-variance-authority";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import {
   Dialog,
   DialogContent,
@@ -32,8 +33,10 @@ export function WorkflowFormDialog({
   workflow,
   onSaved,
   variant = "default",
+  trigger,
 }: {
   workflow?: Workflow;
+  trigger?: React.ReactElement<{ children?: React.ReactNode }>;
   onSaved: (workflow: Workflow) => void;
   /** Trigger button style for create mode, so callers can keep this from
    * competing with a page's own primary CTA (e.g. "outline" next to
@@ -42,6 +45,7 @@ export function WorkflowFormDialog({
   variant?: VariantProps<typeof buttonVariants>["variant"];
 }) {
   const isEdit = workflow !== undefined;
+  const fieldId = useId();
   const [open, setOpen] = useState(false);
   const [description, setDescription] = useState("");
   const [building, setBuilding] = useState(false);
@@ -95,11 +99,11 @@ export function WorkflowFormDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !submitting && (o ? openDialog() : setOpen(false))}>
+    <Dialog open={open} onOpenChange={(o) => !submitting && !building && (o ? openDialog() : setOpen(false))}>
       <DialogTrigger
-        render={isEdit ? <Button variant="ghost" size="sm" /> : <Button variant={variant} />}
+        render={trigger ?? (isEdit ? <Button variant="ghost" size="sm" /> : <Button variant={variant} />)}
       >
-        {isEdit ? (
+        {trigger ? trigger.props.children : isEdit ? (
           "Edit"
         ) : (
           <>
@@ -108,82 +112,100 @@ export function WorkflowFormDialog({
           </>
         )}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-lg">
-        <form onSubmit={onSubmit} className="flex flex-col gap-4">
-          <DialogHeader>
-            <DialogTitle>{isEdit ? `Edit ${workflow.name}` : "New workflow"}</DialogTitle>
-            <DialogDescription>
-              Describe the work in plain language - what to look at, and what
-              it should produce. An assistant turns it into instructions you
-              can refine below.
+      <DialogContent className="flex w-[calc(100vw_-_2rem)] max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 sm:w-full sm:max-w-2xl [&>[data-slot=dialog-close]]:right-4 [&>[data-slot=dialog-close]]:top-4">
+        <form onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col">
+          <DialogHeader className="shrink-0 gap-2 px-5 pt-6 pb-5 pr-14 sm:px-7 sm:pr-14">
+            <DialogTitle className="text-lg font-medium leading-snug">{isEdit ? "Edit workflow" : "New workflow"}</DialogTitle>
+            <DialogDescription className="text-pretty text-[0.8125rem] leading-relaxed">
+              {isEdit ? "Refine the instructions and choose when this workflow runs." : "Set the instructions for work your firm can repeat across clients."}
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex flex-col gap-3">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="workflow-description">Describe what this workflow should do</Label>
-              <div className="flex gap-2">
-                <Textarea
-                  id="workflow-description"
-                  rows={2}
-                  placeholder="e.g. Compile every transaction from their bank and credit card statements into a CSV, one row per transaction."
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                />
-              </div>
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                className="self-start"
-                onClick={onGenerate}
-                disabled={building || !description.trim()}
-              >
-                {building ? <Loader2 className="animate-spin" /> : <Sparkles />}
-                {building ? "Generating…" : "Generate instructions"}
-              </Button>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="workflow-name">Name</Label>
+          <div className="flex min-h-0 flex-col gap-5 overflow-y-auto px-5 pb-6 sm:px-7">
+            <div className="flex flex-col gap-2">
+              <Label htmlFor={`${fieldId}-name`} className="text-xs font-medium">Workflow name</Label>
               <Input
-                id="workflow-name"
+                id={`${fieldId}-name`}
                 required
-                placeholder="Transaction CSV export"
+                placeholder="e.g. Client document review"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
+                disabled={building || submitting}
+                className="h-10 px-3 md:text-[0.8125rem]"
               />
             </div>
 
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="workflow-instructions">Instructions for the agent</Label>
+            <Accordion defaultValue={isEdit ? [] : ["draft"]}>
+              <AccordionItem value="draft" className="rounded-lg border border-border/70 px-3.5">
+                <AccordionTrigger className="items-center gap-3 py-3 text-xs font-normal text-muted-foreground hover:text-foreground hover:no-underline">
+                  <span className="flex items-center gap-2"><Sparkles className="size-3.5" />Draft instructions with AI</span>
+                </AccordionTrigger>
+                <AccordionContent className="pb-3.5">
+                  <div className="flex flex-col gap-3">
+                    <Label htmlFor={`${fieldId}-description`} className="text-xs font-normal text-muted-foreground">Describe the outcome you want.</Label>
+                    <Textarea
+                      id={`${fieldId}-description`}
+                      rows={3}
+                      placeholder="e.g. Review the submitted documents and prepare a report of key findings and missing information."
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      disabled={building || submitting}
+                      className="resize-none px-3 leading-relaxed md:text-[0.8125rem]"
+                    />
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <p className="!mb-0 text-xs text-muted-foreground">Generates a new name and instructions below.</p>
+                      <Button type="button" variant="outline" size="sm" onClick={onGenerate} disabled={building || submitting || !description.trim()}>
+                        {building && <Loader2 className="animate-spin" />}
+                        {building ? "Drafting…" : "Generate draft"}
+                      </Button>
+                    </div>
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+
+            <div className="flex flex-col gap-2">
+              <Label htmlFor={`${fieldId}-instructions`} className="text-xs font-medium">Instructions</Label>
+              <p id={`${fieldId}-instructions-hint`} className="text-xs leading-relaxed text-muted-foreground">Describe the work, the sources to use, and the expected output.</p>
               <Textarea
-                id="workflow-instructions"
+                id={`${fieldId}-instructions`}
+                aria-describedby={`${fieldId}-instructions-hint`}
                 required
-                rows={8}
-                placeholder="Generated instructions will appear here - edit freely before saving."
+                rows={10}
+                placeholder="Write your instructions here, or use AI to prepare a first draft."
                 value={instructions}
                 onChange={(e) => setInstructions(e.target.value)}
+                disabled={building || submitting}
+                className="min-h-48 resize-y px-3.5 py-3 leading-relaxed md:text-[0.8125rem]"
               />
             </div>
 
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="workflow-mode">When should it run?</Label>
+            <div className="flex flex-col gap-3 border-t border-border/70 pt-5 sm:flex-row sm:items-center sm:justify-between sm:gap-5">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor={`${fieldId}-mode`} className="text-xs font-medium">Execution</Label>
+                <p id={`${fieldId}-mode-hint`} className="text-xs leading-relaxed text-muted-foreground">
+                  {executionMode === "auto" ? "Starts when the client’s checklist is complete." : "Your team chooses when to start the run."}
+                </p>
+              </div>
               <select
-                id="workflow-mode"
+                id={`${fieldId}-mode`}
+                aria-describedby={`${fieldId}-mode-hint`}
                 value={executionMode}
                 onChange={(e) => setExecutionMode(e.target.value as WorkflowExecutionMode)}
-                className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                disabled={building || submitting}
+                className="h-10 w-full shrink-0 rounded-lg border border-input bg-transparent px-3 text-base outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50 sm:w-40 md:text-[0.8125rem]"
               >
-                <option value="manual">Manual - a bookkeeper clicks &quot;run&quot;</option>
-                <option value="auto">Automatic - runs the moment a client&apos;s checklist is complete</option>
+                <option value="manual">Manual</option>
+                <option value="auto">Automatic</option>
               </select>
             </div>
+            {error && <p role="alert" className="text-[0.8125rem] text-destructive">{error}</p>}
           </div>
 
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          <DialogFooter>
-            <Button type="submit" disabled={submitting}>
+          <DialogFooter className="m-0 shrink-0 flex-row justify-end gap-2 bg-transparent px-5 py-4 sm:px-7">
+            <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)} disabled={submitting || building}>Cancel</Button>
+            <Button type="submit" size="sm" disabled={submitting || building}>
+              {submitting && <Loader2 className="animate-spin" />}
               {submitting ? "Saving…" : isEdit ? "Save changes" : "Create workflow"}
             </Button>
           </DialogFooter>
