@@ -863,6 +863,7 @@ export const rerunWorkflowRun = (clientId: number, runId: number) =>
   request<WorkflowRun>(`/clients/${clientId}/workflow-runs/${runId}/rerun`, { method: "POST" });
 
 export const resumeWorkflowRun = (clientId: number, runId: number, context: string) =>
-  request<WorkflowRun>(`/clients/${clientId}/workflow-runs/${runId}/resume`, {
-    method: "POST", body: JSON.stringify({ context }),
-  });
+  request<WorkflowRun>(
+    `/clients/${clientId}/workflow-runs/${runId}/resume`,
+    json("POST", { context })
+  );
