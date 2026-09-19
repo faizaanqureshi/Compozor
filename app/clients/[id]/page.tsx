@@ -589,7 +589,7 @@ function ChecklistCard({
   const otherCount = checklist ? checklist.items.filter((i) => !i.package_name).length : 0;
   const packageSummary =
     packageNames.length > 0
-      ? `${joinWithAnd(packageNames)}${
+      ? `${joinWithAnd(packageNames.map((name) => `${name} Package`))}${
           otherCount > 0 ? ` and ${otherCount} other requirement${otherCount === 1 ? "" : "s"}` : ""
         }`
       : null;
