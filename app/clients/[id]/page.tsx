@@ -51,6 +51,7 @@ import {
   sendChecklistItemReminder,
   sendChecklistReminder,
   subscribeToEmailLogStream,
+  unassignPackageFromClient,
   unassignWorkflowFromClient,
   updateChecklistItem,
   updateClient,
@@ -102,7 +103,7 @@ function SectionCard({
   return (
     <section className="flex flex-col gap-5 rounded-2xl bg-card p-6 ring-1 ring-foreground/10">
       <div className="flex items-start justify-between gap-4">
-        <div className="flex flex-col gap-2">
+        <div className="flex min-w-0 flex-1 flex-col gap-2">
           <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
             {title}
           </h2>
@@ -160,6 +161,11 @@ export default function ClientDetailPage({
   );
   const [workflowRuns, setWorkflowRuns] = useState<WorkflowRun[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // null = no manual override yet, so visibility just follows whether a
+  // package has been assigned - once one has, the row collapses to keep
+  // the checklist front and center, and "Edit package"/"Done" toggle it
+  // back open on demand.
+  const [packageRowOverride, setPackageRowOverride] = useState<boolean | null>(null);
   const router = useRouter();
   const workflowRefreshRef = useRef<ReturnType<typeof createSnapshotRefresh<WorkflowRun[]>> | null>(null);
 
@@ -207,6 +213,9 @@ export default function ClientDetailPage({
     refreshWorkflowRuns();
   };
   useEffect(refreshClient, [refreshClient]);
+
+  const hasPackageItems = checklist?.items.some((i) => i.package_name) ?? false;
+  const showPackageRow = packageRowOverride ?? !hasPackageItems;
 
   if (error && !client) return <p className="text-sm text-destructive">{error}</p>;
 
@@ -278,8 +287,17 @@ export default function ClientDetailPage({
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
-      {client !== null && (
-        <PackageQuickAssignRow clientId={clientId} onAssigned={refresh} />
+      {client !== null && showPackageRow && (
+        <PackageQuickAssignRow
+          clientId={clientId}
+          assignedPackageIds={client.assigned_package_ids}
+          checklist={checklist}
+          onAssigned={() => {
+            refresh();
+            setPackageRowOverride(false);
+          }}
+          onDone={hasPackageItems ? () => setPackageRowOverride(false) : undefined}
+        />
       )}
 
       <ChecklistCard
@@ -287,6 +305,7 @@ export default function ClientDetailPage({
         checklist={checklist}
         documents={documents}
         onChange={refresh}
+        onEditPackage={() => setPackageRowOverride(true)}
       />
 
       <WaitingOnCard
@@ -526,11 +545,13 @@ function ChecklistCard({
   checklist,
   documents,
   onChange,
+  onEditPackage,
 }: {
   clientId: number;
   checklist: ChecklistSummary | null;
   documents: DocumentOut[] | null;
   onChange: () => void;
+  onEditPackage: () => void;
 }) {
   const [showAddForm, setShowAddForm] = useState(false);
   const [docTypeNeeded, setDocTypeNeeded] = useState("");
@@ -538,8 +559,45 @@ function ChecklistCard({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
+  const [deselecting, setDeselecting] = useState(false);
+  const [deselectOpen, setDeselectOpen] = useState(false);
 
   const actionRequired = checklist ? checklist.missing + checklist.wrong : 0;
+
+  // Which package(s) this client's items trace back to, plus how many were
+  // added outside any package (manually, via "Add requirement" below) -
+  // lets the checklist itself say "Standard T1 and 2 other requirements"
+  // instead of a flat undifferentiated list.
+  const assignedPackages = checklist
+    ? Array.from(
+        new Map(
+          checklist.items
+            .filter((i): i is typeof i & { package_id: number; package_name: string } =>
+              i.package_id !== null && i.package_name !== null
+            )
+            .map((i) => [i.package_id, { id: i.package_id, name: i.package_name }])
+        ).values()
+      )
+    : [];
+  const packageNames = assignedPackages.map((p) => p.name);
+  const otherCount = checklist ? checklist.items.filter((i) => !i.package_name).length : 0;
+  // Comma-separated (not "and") so it reads cleanly with several packages,
+  // capped at 2 shown + a "+N more" tail so the line stays roughly bounded
+  // no matter how many packages a client ends up with.
+  const MAX_PACKAGE_NAMES_SHOWN = 2;
+  const packageLabels = packageNames.map((name) => `${name} Package`);
+  const shownPackageLabels = packageLabels.slice(0, MAX_PACKAGE_NAMES_SHOWN);
+  const hiddenPackageCount = packageLabels.length - shownPackageLabels.length;
+  const packageNamesPart =
+    hiddenPackageCount > 0
+      ? `${shownPackageLabels.join(", ")} +${hiddenPackageCount} more package${hiddenPackageCount === 1 ? "" : "s"}`
+      : shownPackageLabels.join(", ");
+  const packageSummary =
+    packageNames.length > 0
+      ? `${packageNamesPart}${
+          otherCount > 0 ? ` and ${otherCount} other requirement${otherCount === 1 ? "" : "s"}` : ""
+        }`
+      : null;
 
   const onDownloadZip = async () => {
     setDownloading(true);
@@ -549,6 +607,19 @@ function ChecklistCard({
       setError(e instanceof ApiError ? e.message : String(e));
     } finally {
       setDownloading(false);
+    }
+  };
+
+  const onDeselectPackage = async (packageId: number) => {
+    setDeselecting(true);
+    setError(null);
+    try {
+      await unassignPackageFromClient(packageId, clientId);
+      onChange();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setDeselecting(false);
     }
   };
 
@@ -577,27 +648,53 @@ function ChecklistCard({
       title="Checklist requirements"
       subtitle={
         checklist && (
-          <div className="flex items-center gap-2">
-            <span>{checklist.total} total</span>
-            {actionRequired > 0 && (
-              <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-500/15 dark:text-amber-300">
-                {actionRequired} action required
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <span>{checklist.total} total</span>
+              {actionRequired > 0 && (
+                <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-500/15 dark:text-amber-300">
+                  {actionRequired} action required
+                </span>
+              )}
+            </div>
+            {packageSummary && (
+              <span className="block truncate" title={packageSummary}>
+                {packageSummary}
               </span>
             )}
           </div>
         )
       }
       action={
-        documents && documents.length > 0 ? (
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={downloading}
-            onClick={onDownloadZip}
-          >
-            {downloading ? <Loader2 className="animate-spin" /> : <Download />}
-            {downloading ? "Zipping…" : "Download all"}
-          </Button>
+        packageNames.length > 0 || (documents && documents.length > 0) ? (
+          <div className="flex items-center gap-1.5">
+            {packageNames.length > 0 && (
+              <Button variant="ghost" size="sm" onClick={onEditPackage}>
+                Edit package
+              </Button>
+            )}
+            {packageNames.length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground hover:text-destructive"
+                onClick={() => setDeselectOpen(true)}
+              >
+                Deselect package
+              </Button>
+            )}
+            {documents && documents.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={downloading}
+                onClick={onDownloadZip}
+              >
+                {downloading ? <Loader2 className="animate-spin" /> : <Download />}
+                {downloading ? "Zipping…" : "Download all"}
+              </Button>
+            )}
+          </div>
         ) : undefined
       }
     >
@@ -735,6 +832,42 @@ function ChecklistCard({
           Add requirement
         </button>
       )}
+
+      <Dialog open={deselectOpen} onOpenChange={setDeselectOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Deselect package</DialogTitle>
+            <DialogDescription>
+              Removes that package&apos;s documents from this client&apos;s
+              checklist (any already-received document is kept, just
+              detached). Manually-added requirements aren&apos;t affected.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-1">
+            {assignedPackages.map((pkg) => (
+              <div
+                key={pkg.id}
+                className="flex items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-sm"
+              >
+                <span>{pkg.name}</span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-destructive hover:bg-destructive/10"
+                  disabled={deselecting}
+                  onClick={() => onDeselectPackage(pkg.id)}
+                >
+                  Remove
+                </Button>
+              </div>
+            ))}
+            {assignedPackages.length === 0 && (
+              <p className="text-sm text-muted-foreground">No packages assigned.</p>
+            )}
+          </div>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+        </DialogContent>
+      </Dialog>
     </SectionCard>
   );
 }
@@ -744,21 +877,33 @@ const PACKAGE_ROW_VISIBLE_COUNT = 3;
 function PackageAssignCard({
   pkg,
   clientId,
+  isSelected,
+  currentDocumentIds,
   onAssigned,
 }: {
   pkg: Package;
   clientId: number;
+  isSelected?: boolean;
+  /** This client's already-checked document ids for this package, if it's
+   * already assigned - switches the dialog to "Save" instead of "Assign". */
+  currentDocumentIds?: number[];
   onAssigned: () => void;
 }) {
   return (
     <AssignPackageDialog
       clientIds={[clientId]}
       initialPackage={pkg}
+      currentDocumentIds={currentDocumentIds}
       onAssigned={onAssigned}
       trigger={
         <button
           type="button"
-          className="flex h-full flex-col gap-2 rounded-xl border border-border/60 bg-background p-3.5 text-left transition-colors hover:border-accent/40 hover:bg-muted/60"
+          className={cn(
+            "flex h-full flex-col gap-2 rounded-xl border p-3.5 text-left transition-colors",
+            isSelected
+              ? "border-accent/50 bg-accent/[0.06] ring-1 ring-accent/30"
+              : "border-border/60 bg-background hover:border-accent/40 hover:bg-muted/60"
+          )}
         >
           <span className="text-sm font-medium">{pkg.name}</span>
           <ul className="flex flex-col gap-0.5 text-xs text-muted-foreground">
@@ -778,10 +923,16 @@ function PackageAssignCard({
 
 function PackageQuickAssignRow({
   clientId,
+  assignedPackageIds,
+  checklist,
   onAssigned,
+  onDone,
 }: {
   clientId: number;
+  assignedPackageIds: number[];
+  checklist: ChecklistSummary | null;
   onAssigned: () => void;
+  onDone?: () => void;
 }) {
   const [packages, setPackages] = useState<Package[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -795,8 +946,26 @@ function PackageQuickAssignRow({
 
   useEffect(refreshPackages, []);
 
-  const visible = packages?.slice(0, PACKAGE_ROW_VISIBLE_COUNT) ?? [];
-  const remaining = packages?.slice(PACKAGE_ROW_VISIBLE_COUNT) ?? [];
+  // Which of this package's specific document lines are already checked
+  // for this client - lets a card for an already-assigned package open
+  // pre-populated with the real current state instead of just "required".
+  const currentDocIdsByPackage: Record<number, number[]> = {};
+  for (const item of checklist?.items ?? []) {
+    if (item.package_id !== null && item.package_document_id !== null) {
+      (currentDocIdsByPackage[item.package_id] ??= []).push(item.package_document_id);
+    }
+  }
+
+  // Assigned packages float to the front so "Edit package" always shows
+  // the client's current selection right away, without having to dig into
+  // "Show more" first.
+  const sorted = packages
+    ? [...packages].sort(
+        (a, b) => Number(assignedPackageIds.includes(b.id)) - Number(assignedPackageIds.includes(a.id))
+      )
+    : null;
+  const visible = sorted?.slice(0, PACKAGE_ROW_VISIBLE_COUNT) ?? [];
+  const remaining = sorted?.slice(PACKAGE_ROW_VISIBLE_COUNT) ?? [];
 
   return (
     <SectionCard
@@ -813,6 +982,11 @@ function PackageQuickAssignRow({
             onSaved={refreshPackages}
             variant="outline"
           />
+          {onDone && (
+            <Button variant="ghost" size="sm" onClick={onDone}>
+              Done
+            </Button>
+          )}
         </div>
       }
     >
@@ -829,7 +1003,14 @@ function PackageQuickAssignRow({
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {visible.map((pkg) => (
-            <PackageAssignCard key={pkg.id} pkg={pkg} clientId={clientId} onAssigned={onAssigned} />
+            <PackageAssignCard
+              key={pkg.id}
+              pkg={pkg}
+              clientId={clientId}
+              isSelected={assignedPackageIds.includes(pkg.id)}
+              currentDocumentIds={currentDocIdsByPackage[pkg.id]}
+              onAssigned={onAssigned}
+            />
           ))}
         </div>
       )}
@@ -849,6 +1030,8 @@ function PackageQuickAssignRow({
                 key={pkg.id}
                 pkg={pkg}
                 clientId={clientId}
+                isSelected={assignedPackageIds.includes(pkg.id)}
+                currentDocumentIds={currentDocIdsByPackage[pkg.id]}
                 onAssigned={() => {
                   setShowMore(false);
                   onAssigned();
