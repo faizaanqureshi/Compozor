@@ -4,7 +4,7 @@ import { useState } from "react";
 import { ChevronDown, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-import { isToolFailure, summarizeToolStep, splitAttempts, type TraceStep } from "@/lib/agent-activity";
+import { groupActivity, isToolFailure, summarizeToolStep, splitAttempts, type TraceStep } from "@/lib/agent-activity";
 export type { TraceStep } from "@/lib/agent-activity";
 
 // Renders either a finished trajectory (fetched after the fact) or a
@@ -26,7 +26,8 @@ export function AgentActivityDisclosure({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const { current, previous } = splitAttempts(trajectory, attemptStartedAt);
-  const visible = current.filter(step => !(step.tool === "execute_workflow" && step.result === "Workflow execution step received."));
+  const visible = groupActivity(current);
+  const earlier = groupActivity(previous);
 
   return (
     <div className="mt-2">
@@ -68,15 +69,21 @@ export function AgentActivityDisclosure({
                     interrupted ? "–" : "✓"
                   )}
                 </span>
-                <span className="min-w-0 break-words">{interrupted ? "Step stopped before completion" : summarizeToolStep(step)}</span>
+                <span className="min-w-0 break-words">
+                  {interrupted ? "Step stopped before completion" : summarizeToolStep(step)}
+                  {step.progressMessage && <span className="mt-0.5 block text-muted-foreground">{step.progressMessage}</span>}
+                </span>
               </li>
             );
           })}
         </ul>
         {previous.length > 0 && <details className="mt-2 text-xs text-muted-foreground">
-          <summary className="cursor-pointer">Earlier attempts ({previous.length} activity entries)</summary>
+          <summary className="cursor-pointer">Earlier attempts ({earlier.length} activity entries)</summary>
           <ul className="mt-1 space-y-1 pl-3">
-            {previous.map((step, i) => <li key={i} className="break-words">{step.result == null ? "Step stopped before completion" : summarizeToolStep(step)}</li>)}
+            {earlier.map((step, i) => <li key={i} className="break-words">
+              {step.result == null ? "Step stopped before completion" : summarizeToolStep(step)}
+              {step.progressMessage && <span className="block">{step.progressMessage}</span>}
+            </li>)}
           </ul>
         </details>}
         </>

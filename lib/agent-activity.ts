@@ -3,12 +3,60 @@
 // undefined between the tool_call_started and tool_call_result events, and
 // the component shows a pending state for it meanwhile.
 export interface TraceStep {
+  type?: string;
   round: number;
   tool: string;
   arguments?: Record<string, unknown>;
   result?: string;
   started_at?: string;
   completed_at?: string;
+  operationCount?: number;
+  progressMessage?: string;
+}
+
+// Presentation only: retain every original event in the saved audit trail.
+// The executor runs tools sequentially; nested verification and extraction
+// progress immediately follow their parent in that round's trajectory.
+export function groupActivity(trajectory: TraceStep[]): TraceStep[] {
+  const visible: TraceStep[] = [];
+  let finishIndex: number | undefined;
+  let extractionIndex: number | undefined;
+  let round: number | undefined;
+  for (const step of trajectory) {
+    if (step.round !== round || step.tool === "plan_workflow") {
+      finishIndex = extractionIndex = undefined;
+      round = step.round;
+    }
+    if (step.type === "stage_progress" && extractionIndex !== undefined) {
+      visible[extractionIndex] = { ...visible[extractionIndex], progressMessage: step.result };
+      continue;
+    }
+    if (step.tool === "verify_workflow" && finishIndex !== undefined) {
+      const parent = visible[finishIndex];
+      // Prefer the parent's final outcome, but never conceal a failed child.
+      const outcome = isToolFailure(step) || parent.result == null ? step : parent;
+      visible[finishIndex] = { ...parent, tool: outcome.tool, result: outcome.result,
+        completed_at: outcome.completed_at };
+      finishIndex = undefined;
+      continue;
+    }
+    if (step.tool === "execute_workflow" && step.result === "Workflow execution step received.") continue;
+    const last = visible.at(-1);
+    if (step.tool === "code_interpreter" && last?.tool === step.tool && last.round === step.round
+        && !isToolFailure(last) && !isToolFailure(step)) {
+      visible[visible.length - 1] = { ...last,
+        operationCount: (last.operationCount ?? 1) + 1,
+        result: last.result == null || step.result == null ? undefined : step.result,
+        completed_at: step.completed_at };
+      continue;
+    }
+    // Do not pair unrelated tools or another submission with an earlier parent.
+    finishIndex = extractionIndex = undefined;
+    visible.push({ ...step });
+    if (step.tool === "finish_workflow") finishIndex = visible.length - 1;
+    if (step.tool === "extract_transactions" || step.tool === "extract_records") extractionIndex = visible.length - 1;
+  }
+  return visible;
 }
 
 const TOOL_LABELS: Record<string, string> = {
@@ -79,7 +127,7 @@ export function summarizeToolStep(step: TraceStep): string {
     return "Paused for staff review";
   }
   if (step.tool === "execute_workflow") return "Preparing the next workflow step";
-  if (step.tool === "code_interpreter") return "Processed document data and draft files";
+  if (step.tool === "code_interpreter") return `Processed document data and draft files${step.operationCount ? ` (${step.operationCount} operations)` : ""}`;
   if (step.tool === "render_report") return typeof value?.pages === "number"
     ? `Built ${value.pages}-page PDF from saved data; completion checks still required`
     : "Built report from saved data";
