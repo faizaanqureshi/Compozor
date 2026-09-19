@@ -13,6 +13,7 @@ import {
   Download,
   Loader2,
   Mail,
+  Package as PackageIcon,
   Plus,
   Search,
   Workflow as WorkflowIcon,
@@ -52,6 +53,7 @@ import {
 import { ClientImportModal } from "@/components/client-import-modal";
 import { WorkflowFormDialog } from "@/components/workflow-form-dialog";
 import { AssignWorkflowDialog } from "@/components/assign-workflow-dialog";
+import { AssignPackageDialog } from "@/components/assign-package-dialog";
 
 type WorkflowTone = "success" | "warning" | "attention" | "neutral";
 type SortKey = "name" | "email" | "documents" | "activity" | "status";
@@ -676,6 +678,16 @@ export default function ClientsPage() {
               {selectedIds.size} client{selectedIds.size === 1 ? "" : "s"} selected
             </span>
             <div className="ml-auto flex items-center gap-1.5">
+              <AssignPackageDialog
+                clientIds={Array.from(selectedIds)}
+                onAssigned={() => setSelectedIds(new Set())}
+                trigger={
+                  <Button variant="secondary" size="sm">
+                    <PackageIcon />
+                    Assign package
+                  </Button>
+                }
+              />
               <AssignWorkflowDialog
                 clientIds={Array.from(selectedIds)}
                 onAssigned={() => setSelectedIds(new Set())}

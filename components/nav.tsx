@@ -11,6 +11,7 @@ import {
   LogOut,
   Mail,
   MailQuestion,
+  Package,
   Settings,
   Users,
   Workflow,
@@ -32,6 +33,7 @@ import { useMobileNav } from "@/components/mobile-nav-context";
 const links = [
   { href: "/clients", label: "Clients", icon: Users, tourId: "clients" },
   { href: "/workflows", label: "Workflows", icon: Workflow, tourId: "workflows" },
+  { href: "/packages", label: "Packages", icon: Package, tourId: "packages" },
   { href: "/email-log", label: "Email Log", icon: Mail, tourId: "email-log" },
   {
     href: "/unmatched-emails",

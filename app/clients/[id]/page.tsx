@@ -32,6 +32,7 @@ import {
   DocumentUploadResult,
   EmailThread,
   ExtractedChecklistItem,
+  Package,
   WorkflowRun,
   createChecklistItem,
   deleteClient,
@@ -45,6 +46,7 @@ import {
   listClientMemoryNotes,
   listClientWorkflowRuns,
   listEmailThreads,
+  listPackages,
   resolveClientCommitment,
   rerunWorkflowRun,
   runQueuedWorkflowRun,
@@ -62,6 +64,7 @@ import { ResumeWorkflowDialog } from "@/components/resume-workflow-dialog";
 import { AgentActivityDisclosure } from "@/components/agent-activity-disclosure";
 import { ClientWorkflowActivity } from "@/components/client-workflow-activity";
 import { AssignWorkflowDialog } from "@/components/assign-workflow-dialog";
+import { AssignPackageDialog } from "@/components/assign-package-dialog";
 import { Linkify } from "@/components/linkify";
 import {
   Accordion,
@@ -276,6 +279,10 @@ export default function ClientDetailPage({
       </div>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
+
+      {client !== null && (
+        <PackageQuickAssignRow clientId={clientId} onAssigned={refresh} />
+      )}
 
       {client !== null && (
         <QuickAddPanel clientId={clientId} onChange={refresh} />
@@ -734,6 +741,74 @@ function ChecklistCard({
           Add requirement
         </button>
       )}
+    </SectionCard>
+  );
+}
+
+function PackageQuickAssignRow({
+  clientId,
+  onAssigned,
+}: {
+  clientId: number;
+  onAssigned: () => void;
+}) {
+  const [packages, setPackages] = useState<Package[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    listPackages()
+      .then(setPackages)
+      .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
+  }, []);
+
+  // Nothing to show once loaded if the firm hasn't defined any packages yet
+  // - Quick add below still works either way, this row just doesn't add
+  // empty noise above it.
+  if (packages !== null && packages.length === 0) return null;
+
+  return (
+    <SectionCard
+      title="Assign a package"
+      subtitle="Click a package to add its documents to this client."
+    >
+      {packages === null ? (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} className="h-28 w-full rounded-xl" />
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {packages.map((pkg) => (
+            <AssignPackageDialog
+              key={pkg.id}
+              clientIds={[clientId]}
+              initialPackage={pkg}
+              onAssigned={onAssigned}
+              trigger={
+                <button
+                  type="button"
+                  className="flex h-full flex-col gap-2 rounded-xl border border-border/60 bg-background p-3.5 text-left transition-colors hover:border-accent/40 hover:bg-muted/60"
+                >
+                  <span className="text-sm font-medium">{pkg.name}</span>
+                  <ul className="flex flex-col gap-0.5 text-xs text-muted-foreground">
+                    {pkg.documents.slice(0, 4).map((doc) => (
+                      <li key={doc.id} className="truncate">
+                        {doc.doc_type_needed}
+                        {!doc.is_required && " (optional)"}
+                      </li>
+                    ))}
+                    {pkg.documents.length > 4 && (
+                      <li>+{pkg.documents.length - 4} more</li>
+                    )}
+                  </ul>
+                </button>
+              }
+            />
+          ))}
+        </div>
+      )}
+      {error && <p className="text-sm text-destructive">{error}</p>}
     </SectionCard>
   );
 }
