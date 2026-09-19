@@ -51,6 +51,7 @@ import {
   sendChecklistItemReminder,
   sendChecklistReminder,
   subscribeToEmailLogStream,
+  unassignPackageFromClient,
   unassignWorkflowFromClient,
   updateChecklistItem,
   updateClient,
@@ -563,6 +564,8 @@ function ChecklistCard({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
+  const [deselecting, setDeselecting] = useState(false);
+  const [deselectOpen, setDeselectOpen] = useState(false);
 
   const actionRequired = checklist ? checklist.missing + checklist.wrong : 0;
 
@@ -570,9 +573,18 @@ function ChecklistCard({
   // added outside any package (manually, via "Add requirement" below) -
   // lets the checklist itself say "Standard T1 and 2 other requirements"
   // instead of a flat undifferentiated list.
-  const packageNames = checklist
-    ? Array.from(new Set(checklist.items.flatMap((i) => (i.package_name ? [i.package_name] : []))))
+  const assignedPackages = checklist
+    ? Array.from(
+        new Map(
+          checklist.items
+            .filter((i): i is typeof i & { package_id: number; package_name: string } =>
+              i.package_id !== null && i.package_name !== null
+            )
+            .map((i) => [i.package_id, { id: i.package_id, name: i.package_name }])
+        ).values()
+      )
     : [];
+  const packageNames = assignedPackages.map((p) => p.name);
   const otherCount = checklist ? checklist.items.filter((i) => !i.package_name).length : 0;
   const packageSummary =
     packageNames.length > 0
@@ -589,6 +601,19 @@ function ChecklistCard({
       setError(e instanceof ApiError ? e.message : String(e));
     } finally {
       setDownloading(false);
+    }
+  };
+
+  const onDeselectPackage = async (packageId: number) => {
+    setDeselecting(true);
+    setError(null);
+    try {
+      await unassignPackageFromClient(packageId, clientId);
+      onChange();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setDeselecting(false);
     }
   };
 
@@ -636,6 +661,16 @@ function ChecklistCard({
             {packageNames.length > 0 && (
               <Button variant="ghost" size="sm" onClick={onEditPackage}>
                 Edit package
+              </Button>
+            )}
+            {packageNames.length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground hover:text-destructive"
+                onClick={() => setDeselectOpen(true)}
+              >
+                Deselect package
               </Button>
             )}
             {documents && documents.length > 0 && (
@@ -787,6 +822,42 @@ function ChecklistCard({
           Add requirement
         </button>
       )}
+
+      <Dialog open={deselectOpen} onOpenChange={setDeselectOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Deselect package</DialogTitle>
+            <DialogDescription>
+              Removes that package&apos;s documents from this client&apos;s
+              checklist (any already-received document is kept, just
+              detached). Manually-added requirements aren&apos;t affected.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-1">
+            {assignedPackages.map((pkg) => (
+              <div
+                key={pkg.id}
+                className="flex items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-sm"
+              >
+                <span>{pkg.name}</span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-destructive hover:bg-destructive/10"
+                  disabled={deselecting}
+                  onClick={() => onDeselectPackage(pkg.id)}
+                >
+                  Remove
+                </Button>
+              </div>
+            ))}
+            {assignedPackages.length === 0 && (
+              <p className="text-sm text-muted-foreground">No packages assigned.</p>
+            )}
+          </div>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+        </DialogContent>
+      </Dialog>
     </SectionCard>
   );
 }

@@ -125,6 +125,7 @@ export interface ChecklistItem {
   description: string | null;
   wrong_attempt_count: number;
   last_wrong_doc_type: string | null;
+  package_id: number | null;
   package_name: string | null;
 }
 
