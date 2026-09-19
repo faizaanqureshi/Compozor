@@ -160,6 +160,11 @@ export default function ClientDetailPage({
   );
   const [workflowRuns, setWorkflowRuns] = useState<WorkflowRun[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // null = no manual override yet, so visibility just follows whether a
+  // package has been assigned - once one has, the row collapses to keep
+  // the checklist front and center, and "Edit package"/"Done" toggle it
+  // back open on demand.
+  const [packageRowOverride, setPackageRowOverride] = useState<boolean | null>(null);
   const router = useRouter();
   const workflowRefreshRef = useRef<ReturnType<typeof createSnapshotRefresh<WorkflowRun[]>> | null>(null);
 
@@ -207,6 +212,9 @@ export default function ClientDetailPage({
     refreshWorkflowRuns();
   };
   useEffect(refreshClient, [refreshClient]);
+
+  const hasPackageItems = checklist?.items.some((i) => i.package_name) ?? false;
+  const showPackageRow = packageRowOverride ?? !hasPackageItems;
 
   if (error && !client) return <p className="text-sm text-destructive">{error}</p>;
 
@@ -278,8 +286,16 @@ export default function ClientDetailPage({
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
-      {client !== null && (
-        <PackageQuickAssignRow clientId={clientId} onAssigned={refresh} />
+      {client !== null && showPackageRow && (
+        <PackageQuickAssignRow
+          clientId={clientId}
+          assignedPackageIds={client.assigned_package_ids}
+          onAssigned={() => {
+            refresh();
+            setPackageRowOverride(false);
+          }}
+          onDone={hasPackageItems ? () => setPackageRowOverride(false) : undefined}
+        />
       )}
 
       <ChecklistCard
@@ -287,6 +303,7 @@ export default function ClientDetailPage({
         checklist={checklist}
         documents={documents}
         onChange={refresh}
+        onEditPackage={() => setPackageRowOverride(true)}
       />
 
       <WaitingOnCard
@@ -521,16 +538,24 @@ function DeleteClientButton({
   );
 }
 
+function joinWithAnd(items: string[]): string {
+  if (items.length === 0) return "";
+  if (items.length === 1) return items[0];
+  return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+}
+
 function ChecklistCard({
   clientId,
   checklist,
   documents,
   onChange,
+  onEditPackage,
 }: {
   clientId: number;
   checklist: ChecklistSummary | null;
   documents: DocumentOut[] | null;
   onChange: () => void;
+  onEditPackage: () => void;
 }) {
   const [showAddForm, setShowAddForm] = useState(false);
   const [docTypeNeeded, setDocTypeNeeded] = useState("");
@@ -540,6 +565,21 @@ function ChecklistCard({
   const [downloading, setDownloading] = useState(false);
 
   const actionRequired = checklist ? checklist.missing + checklist.wrong : 0;
+
+  // Which package(s) this client's items trace back to, plus how many were
+  // added outside any package (manually, via "Add requirement" below) -
+  // lets the checklist itself say "Standard T1 and 2 other requirements"
+  // instead of a flat undifferentiated list.
+  const packageNames = checklist
+    ? Array.from(new Set(checklist.items.flatMap((i) => (i.package_name ? [i.package_name] : []))))
+    : [];
+  const otherCount = checklist ? checklist.items.filter((i) => !i.package_name).length : 0;
+  const packageSummary =
+    packageNames.length > 0
+      ? `${joinWithAnd(packageNames)}${
+          otherCount > 0 ? ` and ${otherCount} other requirement${otherCount === 1 ? "" : "s"}` : ""
+        }`
+      : null;
 
   const onDownloadZip = async () => {
     setDownloading(true);
@@ -577,27 +617,39 @@ function ChecklistCard({
       title="Checklist requirements"
       subtitle={
         checklist && (
-          <div className="flex items-center gap-2">
-            <span>{checklist.total} total</span>
-            {actionRequired > 0 && (
-              <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-500/15 dark:text-amber-300">
-                {actionRequired} action required
-              </span>
-            )}
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <span>{checklist.total} total</span>
+              {actionRequired > 0 && (
+                <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-500/15 dark:text-amber-300">
+                  {actionRequired} action required
+                </span>
+              )}
+            </div>
+            {packageSummary && <span>{packageSummary}</span>}
           </div>
         )
       }
       action={
-        documents && documents.length > 0 ? (
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={downloading}
-            onClick={onDownloadZip}
-          >
-            {downloading ? <Loader2 className="animate-spin" /> : <Download />}
-            {downloading ? "Zipping…" : "Download all"}
-          </Button>
+        packageNames.length > 0 || (documents && documents.length > 0) ? (
+          <div className="flex items-center gap-1.5">
+            {packageNames.length > 0 && (
+              <Button variant="ghost" size="sm" onClick={onEditPackage}>
+                Edit package
+              </Button>
+            )}
+            {documents && documents.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={downloading}
+                onClick={onDownloadZip}
+              >
+                {downloading ? <Loader2 className="animate-spin" /> : <Download />}
+                {downloading ? "Zipping…" : "Download all"}
+              </Button>
+            )}
+          </div>
         ) : undefined
       }
     >
@@ -744,10 +796,12 @@ const PACKAGE_ROW_VISIBLE_COUNT = 3;
 function PackageAssignCard({
   pkg,
   clientId,
+  isSelected,
   onAssigned,
 }: {
   pkg: Package;
   clientId: number;
+  isSelected?: boolean;
   onAssigned: () => void;
 }) {
   return (
@@ -758,7 +812,12 @@ function PackageAssignCard({
       trigger={
         <button
           type="button"
-          className="flex h-full flex-col gap-2 rounded-xl border border-border/60 bg-background p-3.5 text-left transition-colors hover:border-accent/40 hover:bg-muted/60"
+          className={cn(
+            "flex h-full flex-col gap-2 rounded-xl border p-3.5 text-left transition-colors",
+            isSelected
+              ? "border-accent/50 bg-accent/[0.06] ring-1 ring-accent/30"
+              : "border-border/60 bg-background hover:border-accent/40 hover:bg-muted/60"
+          )}
         >
           <span className="text-sm font-medium">{pkg.name}</span>
           <ul className="flex flex-col gap-0.5 text-xs text-muted-foreground">
@@ -778,10 +837,14 @@ function PackageAssignCard({
 
 function PackageQuickAssignRow({
   clientId,
+  assignedPackageIds,
   onAssigned,
+  onDone,
 }: {
   clientId: number;
+  assignedPackageIds: number[];
   onAssigned: () => void;
+  onDone?: () => void;
 }) {
   const [packages, setPackages] = useState<Package[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -795,8 +858,16 @@ function PackageQuickAssignRow({
 
   useEffect(refreshPackages, []);
 
-  const visible = packages?.slice(0, PACKAGE_ROW_VISIBLE_COUNT) ?? [];
-  const remaining = packages?.slice(PACKAGE_ROW_VISIBLE_COUNT) ?? [];
+  // Assigned packages float to the front so "Edit package" always shows
+  // the client's current selection right away, without having to dig into
+  // "Show more" first.
+  const sorted = packages
+    ? [...packages].sort(
+        (a, b) => Number(assignedPackageIds.includes(b.id)) - Number(assignedPackageIds.includes(a.id))
+      )
+    : null;
+  const visible = sorted?.slice(0, PACKAGE_ROW_VISIBLE_COUNT) ?? [];
+  const remaining = sorted?.slice(PACKAGE_ROW_VISIBLE_COUNT) ?? [];
 
   return (
     <SectionCard
@@ -813,6 +884,11 @@ function PackageQuickAssignRow({
             onSaved={refreshPackages}
             variant="outline"
           />
+          {onDone && (
+            <Button variant="ghost" size="sm" onClick={onDone}>
+              Done
+            </Button>
+          )}
         </div>
       }
     >
@@ -829,7 +905,13 @@ function PackageQuickAssignRow({
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {visible.map((pkg) => (
-            <PackageAssignCard key={pkg.id} pkg={pkg} clientId={clientId} onAssigned={onAssigned} />
+            <PackageAssignCard
+              key={pkg.id}
+              pkg={pkg}
+              clientId={clientId}
+              isSelected={assignedPackageIds.includes(pkg.id)}
+              onAssigned={onAssigned}
+            />
           ))}
         </div>
       )}
@@ -849,6 +931,7 @@ function PackageQuickAssignRow({
                 key={pkg.id}
                 pkg={pkg}
                 clientId={clientId}
+                isSelected={assignedPackageIds.includes(pkg.id)}
                 onAssigned={() => {
                   setShowMore(false);
                   onAssigned();
