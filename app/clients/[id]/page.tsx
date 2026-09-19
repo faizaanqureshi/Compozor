@@ -6,7 +6,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
+  CheckCircle2,
   ChevronDown,
+  Copy,
   Download,
   Loader2,
   MoreHorizontal,
@@ -27,6 +29,7 @@ import {
   ClientDetail,
   ClientMemoryNote,
   ClientStatus,
+  ClientUploadLink,
   CommitmentStatus,
   DocumentOut,
   DocumentUploadResult,
@@ -38,6 +41,7 @@ import {
   deleteClientMemoryNote,
   downloadClientDocumentsZip,
   getClient,
+  getClientUploadLink,
   listChecklistItems,
   listClientCommitments,
   listClientDocuments,
@@ -45,6 +49,7 @@ import {
   listClientWorkflowRuns,
   listEmailThreads,
   listPackages,
+  regenerateClientUploadLink,
   resolveClientCommitment,
   rerunWorkflowRun,
   runQueuedWorkflowRun,
@@ -327,6 +332,8 @@ export default function ClientDetailPage({
         checklist={checklist}
         onChange={refresh}
       />
+
+      <UploadLinkCard clientId={clientId} />
 
       <WorkflowRunsCard
         clientId={clientId}
@@ -1754,6 +1761,107 @@ function DocumentVaultCard({
         </tbody>
       </table>
       </div>
+      )}
+    </SectionCard>
+  );
+}
+
+function UploadLinkCard({ clientId }: { clientId: number }) {
+  const [link, setLink] = useState<ClientUploadLink | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  // Only populated right after a create/regenerate response - the backend
+  // never returns the raw token again after that, so once the user
+  // navigates away (or this unmounts) it can only be replaced, not viewed.
+  const [revealedUrl, setRevealedUrl] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    getClientUploadLink(clientId)
+      .then((res) => {
+        setLink(res);
+        setLoaded(true);
+      })
+      .catch((e) => {
+        setError(e instanceof ApiError ? e.message : String(e));
+        setLoaded(true);
+      });
+  }, [clientId]);
+
+  const onRegenerate = async () => {
+    setBusy(true);
+    setError(null);
+    setCopied(false);
+    try {
+      const res = await regenerateClientUploadLink(clientId);
+      setLink({ is_active: res.is_active, created_at: res.created_at, last_used_at: res.last_used_at });
+      setRevealedUrl(res.upload_url);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onCopy = async () => {
+    if (!revealedUrl) return;
+    try {
+      await navigator.clipboard.writeText(revealedUrl);
+      setCopied(true);
+    } catch {
+      setError("Couldn't copy to clipboard.");
+    }
+  };
+
+  return (
+    <SectionCard
+      title="Client upload link"
+      subtitle="A permanent link this client can use to securely upload documents — no Compozor account needed."
+    >
+      {!loaded ? (
+        <Skeleton className="h-9 w-full" />
+      ) : (
+        <div className="flex flex-col gap-3">
+          {revealedUrl && (
+            <div className="flex flex-col gap-1.5 rounded-lg border border-border/60 bg-muted/30 p-3">
+              <p className="text-xs text-muted-foreground">
+                Copy this link now — for security it won&apos;t be shown again after you leave this page.
+              </p>
+              <div className="flex items-center gap-2">
+                <code className="min-w-0 flex-1 truncate text-sm">{revealedUrl}</code>
+                <Button variant="outline" size="sm" onClick={onCopy}>
+                  {copied ? <CheckCircle2 className="text-accent" /> : <Copy />}
+                  {copied ? "Copied" : "Copy"}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {link && !revealedUrl && (
+            <p className="text-sm text-muted-foreground">
+              Upload link is active. Last used:{" "}
+              {link.last_used_at ? new Date(link.last_used_at).toLocaleString() : "never"}.
+            </p>
+          )}
+
+          {!link && !revealedUrl && (
+            <p className="text-sm text-muted-foreground">No upload link has been created yet.</p>
+          )}
+
+          {error && <p className="text-sm text-destructive">{error}</p>}
+
+          <Button
+            variant={link ? "outline" : "default"}
+            size="sm"
+            disabled={busy}
+            onClick={onRegenerate}
+            className="self-start"
+          >
+            {busy ? <Loader2 className="animate-spin" /> : <RotateCcw />}
+            {link ? "Regenerate link" : "Create link"}
+          </Button>
+        </div>
       )}
     </SectionCard>
   );

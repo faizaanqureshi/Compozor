@@ -182,6 +182,18 @@ export interface DocumentUploadResult {
   draft_email_created: boolean;
 }
 
+export interface ClientUploadLink {
+  is_active: boolean;
+  created_at: string;
+  last_used_at: string | null;
+}
+
+export interface ClientUploadLinkCreated extends ClientUploadLink {
+  // Only present on the response right after create/regenerate - the
+  // backend never returns the raw token again after this.
+  upload_url: string;
+}
+
 export interface EmailReplyResult {
   has_attachment: boolean;
   has_question: boolean;
@@ -565,6 +577,21 @@ export const downloadClientDocumentsZip = async (clientId: number) => {
   a.click();
   URL.revokeObjectURL(url);
 };
+
+// ---------- Client upload link ----------
+
+export const getClientUploadLink = (clientId: number) =>
+  request<ClientUploadLink | null>(`/clients/${clientId}/upload-link`);
+
+export const regenerateClientUploadLink = (clientId: number) =>
+  request<ClientUploadLinkCreated>(`/clients/${clientId}/upload-link/regenerate`, {
+    method: "POST",
+  });
+
+export const revokeClientUploadLink = (clientId: number) =>
+  request<ClientUploadLink>(`/clients/${clientId}/upload-link/revoke`, {
+    method: "POST",
+  });
 
 // ---------- Email replies ----------
 
