@@ -3,6 +3,7 @@
 import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createSnapshotRefresh } from "@/lib/snapshot-refresh";
 import Link from "next/link";
+import useSWR from "swr";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -44,6 +45,7 @@ import {
   downloadClientDocumentsZip,
   extractChecklistItems,
   getClient,
+  getClientWorkflowRun,
   listChecklistItems,
   listClientCommitments,
   listClientDocuments,
@@ -177,7 +179,7 @@ export default function ClientDetailPage({
       onError: (e) => setError(e instanceof ApiError ? e.message : String(e)),
     });
     workflowRefreshRef.current = controller;
-    controller.refresh();
+    controller.refresh({ immediate: true });
     return () => {
       controller.stop();
       workflowRefreshRef.current = null;
@@ -188,7 +190,7 @@ export default function ClientDetailPage({
     workflowRefreshRef.current?.refresh();
   }, []);
 
-  const refresh = () => {
+  const refreshClient = useCallback(() => {
     getClient(clientId)
       .then(setClient)
       .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
@@ -207,10 +209,13 @@ export default function ClientDetailPage({
     listClientCommitments(clientId)
       .then(setCommitments)
       .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
+  }, [clientId]);
+
+  const refresh = () => {
+    refreshClient();
     refreshWorkflowRuns();
   };
-
-  useEffect(refresh, [clientId, refreshWorkflowRuns]);
+  useEffect(refreshClient, [refreshClient]);
 
   if (error && !client) return <p className="text-sm text-destructive">{error}</p>;
 
@@ -1916,6 +1921,14 @@ function WorkflowRunsCard({
 }
 
 function WorkflowRunRow({ run }: { run: WorkflowRun }) {
+  const [expanded, setExpanded] = useState(false);
+  const historical = run.details_loaded === false;
+  const { data, error, isLoading, mutate } = useSWR(
+    historical && expanded ? ["workflow-run", run.client_id, run.id, run.started_at, run.completed_at, run.status] : null,
+    () => getClientWorkflowRun(run.client_id, run.id),
+    { revalidateOnFocus: false },
+  );
+  const detail = historical ? (expanded ? data : undefined) : run;
   return (
     <div className="flex flex-col gap-2 rounded-lg bg-muted/40 px-3 py-2.5 text-sm">
       <div className="flex flex-wrap items-center gap-2">
@@ -1927,29 +1940,43 @@ function WorkflowRunRow({ run }: { run: WorkflowRun }) {
         </span>
       </div>
 
-      {run.execution_plan && (
+      {historical && (
+        <div className="flex flex-col items-start gap-2">
+          <Button variant="ghost" size="sm" onClick={() => setExpanded(value => !value)} aria-expanded={expanded}>
+            {isLoading && <Loader2 className="animate-spin" />}
+            {expanded ? "Hide run details" : "Show run details"}
+          </Button>
+          {expanded && error && (
+            <div className="flex items-center gap-2 text-xs text-destructive">
+              Could not load run details.
+              <Button variant="ghost" size="sm" onClick={() => void mutate()}>Retry</Button>
+            </div>
+          )}
+        </div>
+      )}
+      {detail?.execution_plan && (
         <Accordion>
           <AccordionItem value="execution-plan" className="border-none">
             <AccordionTrigger className="py-0 text-xs font-medium hover:no-underline">Workflow plan and checks</AccordionTrigger>
             <AccordionContent className="pt-2 pb-0 text-xs">
-              <p className="mb-2 text-muted-foreground">{run.execution_plan.objective}</p>
+              <p className="mb-2 text-muted-foreground">{detail.execution_plan.objective}</p>
               <ol className="list-decimal space-y-1 pl-4">
-                {run.execution_plan.steps.map((step, i) => <li key={i}>{step}
-                  {run.step_results?.[String(i + 1)] && <p className="text-muted-foreground">{run.step_results[String(i + 1)]}</p>}
+                {detail.execution_plan.steps.map((step, i) => <li key={i}>{step}
+                  {detail.step_results?.[String(i + 1)] && <p className="text-muted-foreground">{detail.step_results[String(i + 1)]}</p>}
                 </li>)}
               </ol>
-              {run.verification && <div className="mt-3 space-y-1">
-                <p className="font-medium">{run.verification.passed ? "Completion checks passed" : "Completion checks need attention"}</p>
-                {run.verification.checks.map(check => <p key={check.criterion_id} className={check.passed ? "text-muted-foreground" : "text-destructive"}>{check.evidence}</p>)}
-                {run.verification.issues.map((issue, i) => <p key={i} className="text-destructive">{issue}</p>)}
+              {detail.verification && <div className="mt-3 space-y-1">
+                <p className="font-medium">{detail.verification.passed ? "Completion checks passed" : "Completion checks need attention"}</p>
+                {detail.verification.checks.map(check => <p key={check.criterion_id} className={check.passed ? "text-muted-foreground" : "text-destructive"}>{check.evidence}</p>)}
+                {detail.verification.issues.map((issue, i) => <p key={i} className="text-destructive">{issue}</p>)}
               </div>}
             </AccordionContent>
           </AccordionItem>
         </Accordion>
       )}
       {run.summary && <p className="text-xs text-muted-foreground">{run.summary}</p>}
-      {run.tool_trajectory && run.tool_trajectory.length > 0 && (
-        <AgentActivityDisclosure trajectory={run.tool_trajectory.map((step, i) => ({ ...step, round: step.round ?? i + 1 }))} defaultOpen={run.status === "running"} attemptStartedAt={run.started_at} running={run.status === "running"} />
+      {detail?.tool_trajectory && detail.tool_trajectory.length > 0 && (
+        <AgentActivityDisclosure trajectory={detail.tool_trajectory.map((step, i) => ({ ...step, round: step.round ?? i + 1 }))} defaultOpen={run.status === "running"} attemptStartedAt={run.started_at} running={run.status === "running"} />
       )}
 
       {run.status === "completed" && run.outputs.length > 0 && (

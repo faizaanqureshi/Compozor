@@ -86,3 +86,25 @@ test('a failed request does not wedge subsequent progress refreshes', async (t) 
   assert.deepEqual(errors, ['offline']);
   assert.deepEqual(values, [['reconnected']]);
 });
+
+test('initial fetch starts immediately while subsequent invalidations remain batched', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const requests = [];
+  const controller = createSnapshotRefresh({
+    read: () => { const request = deferred(); requests.push(request); return request.promise; },
+    onValue: () => {}, onError: assert.fail,
+  });
+  t.after(() => controller.stop());
+  controller.refresh({ immediate: true });
+  assert.equal(requests.length, 1, 'first load has no timer delay');
+  requests[0].resolve([]); await flush();
+  controller.refresh(); controller.refresh();
+  assert.equal(requests.length, 1);
+  t.mock.timers.tick(200);
+  assert.equal(requests.length, 2);
+  controller.refresh({ immediate: true });
+  assert.equal(requests.length, 2, 'immediate refresh cannot overlap an active read');
+  requests[1].resolve([]); await flush();
+  t.mock.timers.tick(200);
+  assert.equal(requests.length, 3);
+});

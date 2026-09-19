@@ -46,10 +46,16 @@ export function createSnapshotRefresh<T>({
   };
 
   return {
-    refresh() {
+    refresh({ immediate = false }: { immediate?: boolean } = {}) {
       if (stopped) return;
       pending = true;
-      schedule();
+      if (immediate && !inFlight) {
+        clearTimeout(timer);
+        timer = undefined;
+        void update();
+      } else {
+        schedule();
+      }
     },
     stop() {
       stopped = true;

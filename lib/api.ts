@@ -787,6 +787,7 @@ export interface WorkflowRunOutput {
 }
 
 export interface WorkflowRun {
+  details_loaded?: boolean;
   execution_plan: { objective: string; steps: string[]; criteria: { id: string; requirement: string }[] } | null;
   step_results: Record<string, string>;
   verification: { passed: boolean; checks: { criterion_id: string; passed: boolean; evidence: string }[]; issues: string[]; method: string } | null;
@@ -851,7 +852,10 @@ export const unassignWorkflowFromClient = (workflowId: number, clientId: number)
   request<void>(`/workflows/${workflowId}/assignments/${clientId}`, { method: "DELETE" });
 
 export const listClientWorkflowRuns = (clientId: number) =>
-  request<WorkflowRun[]>(`/clients/${clientId}/workflow-runs`);
+  request<WorkflowRun[]>(`/clients/${clientId}/workflow-runs?include_history_details=false`);
+
+export const getClientWorkflowRun = (clientId: number, runId: number) =>
+  request<WorkflowRun>(`/clients/${clientId}/workflow-runs/${runId}`);
 
 export const runQueuedWorkflowRun = (clientId: number, runId: number) =>
   request<WorkflowRun>(`/clients/${clientId}/workflow-runs/${runId}/run`, { method: "POST" });
