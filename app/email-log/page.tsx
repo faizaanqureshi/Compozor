@@ -47,6 +47,7 @@ const STAGE_LABELS: Record<string, string> = {
   intent_classification: "Reading the question…",
   document_processing: "Processing attachment(s)…",
   qa_answer: "Answering the question…",
+  answer_review: "Checking the answer against its sources…",
 };
 
 type LiveRun = {
@@ -714,12 +715,15 @@ function MessageCard({
           ))}
         </div>
       )}
+      {entry.status === "draft" && entry.autosend_error && (
+        <p className="text-xs text-muted-foreground">{entry.autosend_error}</p>
+      )}
       {entry.status === "draft" && (
         <div className="flex items-center gap-2">
           <Button size="sm" disabled={sending} onClick={onSend}>
-            {sending ? "Sending…" : "Send"}
+            {sending ? "Checking…" : entry.delivery_state === "uncertain" || entry.delivery_state === "sending" ? "Check delivery" : "Send"}
           </Button>
-          <Button size="sm" variant="outline" disabled={sending} onClick={onEdit}>
+          <Button size="sm" variant="outline" disabled={sending || entry.delivery_state === "uncertain" || entry.delivery_state === "sending"} onClick={onEdit}>
             <Pencil className="size-3.5" />
             Edit
           </Button>
@@ -843,7 +847,9 @@ function AutosendCell({ entry }: { entry: EmailLogEntry }) {
       {entry.autosend_threshold !== null && (
         <p>Threshold: {entry.autosend_threshold.toFixed(2)}</p>
       )}
-      {entry.autosend_error && <p>Error: {entry.autosend_error}</p>}
+      {entry.safety_checks && <p>Review: {entry.safety_checks.passed ? "Passed" : "Staff review required"}</p>}
+      {entry.safety_checks?.reason && <p>{entry.safety_checks.reason}</p>}
+      {entry.autosend_error && <p>Note: {entry.autosend_error}</p>}
     </>
   );
 
@@ -877,7 +883,7 @@ function AutosendCell({ entry }: { entry: EmailLogEntry }) {
         <Tooltip>
           <TooltipTrigger
             render={
-              <span className="inline-flex items-center text-amber-600 dark:text-amber-500" />
+              <span className="inline-flex items-center text-accent" />
             }
           >
             <AlertTriangle className="size-3.5" />

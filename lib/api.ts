@@ -1,3 +1,4 @@
+import { subscribeSSE } from "./sse";
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
@@ -205,6 +206,8 @@ export interface EmailLogEntry {
   automation_level_at_decision: AutomationLevel | null;
   autosent: boolean;
   autosend_error: string | null;
+  delivery_state?: "pending" | "sending" | "uncertain" | "failed" | "sent";
+  safety_checks?: { passed: boolean; category: string; reason?: string | null } | null;
   tool_trajectory: ToolTrajectoryStep[] | null;
   created_at: string;
   documents: DocumentOut[];
@@ -625,53 +628,11 @@ export const listActiveRuns = () => request<ActiveRun[]>("/email-log/active-runs
 // fetch() ReadableStream instead. Returns an unsubscribe function.
 export function subscribeToEmailLogStream(
   onEvent: (event: EmailLogStreamEvent) => void,
-  onError?: (err: unknown) => void
+  onError?: (err: unknown) => void,
+  onConnect?: () => void,
 ): () => void {
-  const controller = new AbortController();
-
-  (async () => {
-    try {
-      const token = await getAuthToken();
-      const headers = new Headers();
-      if (token) headers.set("Authorization", `Bearer ${token}`);
-      const res = await fetch(`${API_BASE_URL}/email-log/stream`, {
-        headers,
-        signal: controller.signal,
-      });
-      if (!res.ok || !res.body) {
-        throw new ApiError(res.status, `Failed to open email-log stream (${res.status})`);
-      }
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        let separatorIndex: number;
-        while ((separatorIndex = buffer.indexOf("\n\n")) !== -1) {
-          const rawEvent = buffer.slice(0, separatorIndex);
-          buffer = buffer.slice(separatorIndex + 2);
-          const dataLine = rawEvent
-            .split("\n")
-            .find((line) => line.startsWith("data:"));
-          if (!dataLine) continue;
-          try {
-            onEvent(JSON.parse(dataLine.slice("data:".length).trim()) as EmailLogStreamEvent);
-          } catch {
-            // Malformed frame - skip it rather than killing the whole stream.
-          }
-        }
-      }
-    } catch (err) {
-      if (controller.signal.aborted) return; // expected on unsubscribe
-      onError?.(err);
-    }
-  })();
-
-  return () => controller.abort();
+  return subscribeSSE(`${API_BASE_URL}/email-log/stream`, getAuthToken,
+    event => onEvent(event as EmailLogStreamEvent), onError, onConnect);
 }
 
 // ---------- Client memory notes ----------
@@ -826,6 +787,11 @@ export interface WorkflowRunOutput {
 }
 
 export interface WorkflowRun {
+  execution_plan: { objective: string; steps: string[]; criteria: { id: string; requirement: string }[] } | null;
+  step_results: Record<string, string>;
+  verification: { passed: boolean; checks: { criterion_id: string; passed: boolean; evidence: string }[]; issues: string[]; method: string } | null;
+  can_resume: boolean;
+  tool_trajectory: { round?: number; tool: string; arguments?: Record<string, unknown>; result?: string }[] | null;
   id: number;
   workflow_id: number;
   workflow_name: string;
@@ -895,3 +861,8 @@ export const runQueuedWorkflowRun = (clientId: number, runId: number) =>
 // instructions and wanting to try again against the same client.
 export const rerunWorkflowRun = (clientId: number, runId: number) =>
   request<WorkflowRun>(`/clients/${clientId}/workflow-runs/${runId}/rerun`, { method: "POST" });
+
+export const resumeWorkflowRun = (clientId: number, runId: number, context: string) =>
+  request<WorkflowRun>(`/clients/${clientId}/workflow-runs/${runId}/resume`, {
+    method: "POST", body: JSON.stringify({ context }),
+  });

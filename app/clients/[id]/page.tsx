@@ -62,7 +62,8 @@ import {
   waiveChecklistItem,
 } from "@/lib/api";
 import { cn, formatPhoneNumber } from "@/lib/utils";
-import { AgentActivityDisclosure, TraceStep } from "@/components/agent-activity-disclosure";
+import { ResumeWorkflowDialog } from "@/components/resume-workflow-dialog";
+import { AgentActivityDisclosure } from "@/components/agent-activity-disclosure";
 import { AssignWorkflowDialog } from "@/components/assign-workflow-dialog";
 import { Linkify } from "@/components/linkify";
 import {
@@ -1476,7 +1477,7 @@ function DocumentVaultCard({
         <input
           ref={fileInputRef}
           type="file"
-          accept="application/pdf,image/jpeg,image/png,image/gif,image/webp"
+          accept=".pdf,.csv,.tsv,.xls,.xlsx,.xlsm,.ods,.rtf,.docx,.odt,.pptx,.md,.txt,.json,.xml,.html,.htm,.png,.jpg,.jpeg,.gif,.webp,.tif,.tiff,.bmp"
           className="hidden"
           onChange={(e) => {
             const picked = e.target.files?.[0];
@@ -1695,9 +1696,6 @@ function WorkflowRunsCard({
   const [runningId, setRunningId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [openWorkflowIds, setOpenWorkflowIds] = useState<number[]>([]);
-  const [liveWorkflowId, setLiveWorkflowId] = useState<number | null>(null);
-  const [liveWorkflowName, setLiveWorkflowName] = useState<string | null>(null);
-  const [liveTrace, setLiveTrace] = useState<TraceStep[] | null>(null);
   // Refs, not state, for values the live-event handler only needs to read
   // at event time - putting them in the effect's dependency array would
   // tear down and reopen the SSE connection on every refetch/rerender.
@@ -1730,62 +1728,26 @@ function WorkflowRunsCard({
     }
   }
 
-  // Live progress for this client's workflow runs, over the same per-org
-  // SSE bus the email pipeline already streams its own live activity on
-  // (see event_broadcast.py) - workflow_agent.py's on_event calls are
-  // tagged with this client's id, same as handle_incoming_email's.
+  // Persisted per-run traces are authoritative. SSE invalidates snapshots;
+  // reconnects and polling repair missed events, including another worker's.
   useEffect(() => {
-    const unsubscribe = subscribeToEmailLogStream(
-      (event) => {
-        if (event.client_id !== clientId) return;
-        switch (event.type) {
-          case "workflow_run_started": {
-            const workflowId = event.workflow_id as number;
-            const name =
-              runsRef.current?.find((r) => r.workflow_id === workflowId)?.workflow_name ?? "Workflow";
-            setLiveWorkflowId(workflowId);
-            setLiveWorkflowName(name);
-            setLiveTrace([]);
-            setOpenWorkflowIds((prev) => (prev.includes(workflowId) ? prev : [...prev, workflowId]));
-            break;
-          }
-          case "tool_call_started":
-            setLiveTrace((prev) => [
-              ...(prev ?? []),
-              { round: event.round as number, tool: event.tool as string, arguments: event.arguments as Record<string, unknown> },
-            ]);
-            break;
-          case "tool_call_result":
-            setLiveTrace((prev) => {
-              if (!prev) return prev;
-              const idx = prev.findIndex(
-                (s) => s.round === event.round && s.tool === event.tool && s.result == null
-              );
-              if (idx === -1) return prev;
-              return prev.map((s, i) => (i === idx ? { ...s, result: event.result as string } : s));
-            });
-            break;
-          case "output_produced":
-            setLiveTrace((prev) => [
-              ...(prev ?? []),
-              { round: event.round as number, tool: "code_interpreter", result: `Produced ${event.filename}` },
-            ]);
-            break;
-          case "workflow_run_finished":
-            setLiveWorkflowId(null);
-            setLiveWorkflowName(null);
-            setLiveTrace(null);
-            onChangeRef.current();
-            break;
-          default:
-            break;
-        }
-      },
-      (err) => {
-        console.error("workflow run stream error", err);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const refresh = () => {
+      if (timer) return;
+      timer = setTimeout(() => { timer = undefined; onChangeRef.current(); }, 200);
+    };
+    const unsubscribe = subscribeToEmailLogStream(event => {
+      if (event.client_id !== clientId || typeof event.workflow_run_id !== "number") return;
+      if (event.type === "workflow_run_started" && typeof event.workflow_id === "number") {
+        const id = event.workflow_id;
+        setOpenWorkflowIds(prev => prev.includes(id) ? prev : [...prev, id]);
       }
-    );
-    return unsubscribe;
+      refresh();
+    }, () => {}, refresh);
+    const poll = setInterval(() => {
+      if (runsRef.current?.some(run => run.status === "running" || run.status === "queued")) refresh();
+    }, 5000);
+    return () => { unsubscribe(); clearInterval(poll); clearTimeout(timer); };
   }, [clientId]);
 
   const onRunNow = async (runId: number) => {
@@ -1817,10 +1779,7 @@ function WorkflowRunsCard({
   // A brand-new workflow's very first run has no persisted history yet to
   // group under - give it a synthetic group so its live activity still has
   // somewhere to render instead of being dropped until the run finishes.
-  const displayGroups: WorkflowGroup[] =
-    liveWorkflowId !== null && !groups.some((g) => g.workflowId === liveWorkflowId)
-      ? [{ workflowId: liveWorkflowId, workflowName: liveWorkflowName ?? "Workflow", workflowArchived: false, runs: [] }, ...groups]
-      : groups;
+  const displayGroups = groups;
 
   return (
     <SectionCard
@@ -1859,7 +1818,7 @@ function WorkflowRunsCard({
         >
           {displayGroups.map((group) => {
             const latest = group.runs[0];
-            const isLive = group.workflowId === liveWorkflowId || latest?.status === "running";
+            const isLive = latest?.status === "running";
             const isOpen = openWorkflowIds.includes(group.workflowId);
             return (
               <AccordionItem
@@ -1901,6 +1860,7 @@ function WorkflowRunsCard({
                         Run now
                       </Button>
                     )}
+                    {!isLive && latest?.can_resume && <ResumeWorkflowDialog run={latest} onResumed={onChange} />}
                     {!isLive &&
                       !group.workflowArchived &&
                       latest &&
@@ -1934,11 +1894,6 @@ function WorkflowRunsCard({
                       isOpen && "border-t border-border/60 pt-3"
                     )}
                   >
-                    {isLive && liveTrace !== null && (
-                      <div className="rounded-lg bg-muted/40 px-3 py-2">
-                        <AgentActivityDisclosure trajectory={liveTrace} defaultOpen />
-                      </div>
-                    )}
                     {group.runs.map((run) => (
                       <WorkflowRunRow key={run.id} run={run} />
                     ))}
@@ -1966,7 +1921,30 @@ function WorkflowRunRow({ run }: { run: WorkflowRun }) {
         </span>
       </div>
 
+      {run.execution_plan && (
+        <Accordion>
+          <AccordionItem value="execution-plan" className="border-none">
+            <AccordionTrigger className="py-0 text-xs font-medium hover:no-underline">Workflow plan and checks</AccordionTrigger>
+            <AccordionContent className="pt-2 pb-0 text-xs">
+              <p className="mb-2 text-muted-foreground">{run.execution_plan.objective}</p>
+              <ol className="list-decimal space-y-1 pl-4">
+                {run.execution_plan.steps.map((step, i) => <li key={i}>{step}
+                  {run.step_results?.[String(i + 1)] && <p className="text-muted-foreground">{run.step_results[String(i + 1)]}</p>}
+                </li>)}
+              </ol>
+              {run.verification && <div className="mt-3 space-y-1">
+                <p className="font-medium">{run.verification.passed ? "Completion checks passed" : "Completion checks need attention"}</p>
+                {run.verification.checks.map(check => <p key={check.criterion_id} className={check.passed ? "text-muted-foreground" : "text-destructive"}>{check.evidence}</p>)}
+                {run.verification.issues.map((issue, i) => <p key={i} className="text-destructive">{issue}</p>)}
+              </div>}
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
+      )}
       {run.summary && <p className="text-xs text-muted-foreground">{run.summary}</p>}
+      {run.tool_trajectory && run.tool_trajectory.length > 0 && (
+        <AgentActivityDisclosure trajectory={run.tool_trajectory.map((step, i) => ({ ...step, round: step.round ?? i + 1 }))} defaultOpen={run.status === "running"} />
+      )}
 
       {run.status === "completed" && run.outputs.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5">

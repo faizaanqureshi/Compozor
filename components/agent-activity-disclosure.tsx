@@ -16,9 +16,29 @@ export interface TraceStep {
 }
 
 const TOOL_LABELS: Record<string, string> = {
+  plan_workflow: "Planned workflow",
+  execute_workflow: "Worked on workflow",
+  verify_workflow: "Checked workflow requirements",
+  search_documents: "Searched documents",
+  prepare_documents: "Prepared source files",
+  extract_records: "Extracted requested information",
+  extract_transactions: "Extracted transaction data",
+  record_progress: "Saved workflow progress",
+  finish_workflow: "Completed workflow",
+  flag_for_review: "Requested staff review",
   list_client_documents: "Looked up documents on file",
   read_document: "Read a document",
   get_full_conversation_history: "Pulled full conversation history",
+  // Workflow pipeline stages (see workflow_agent.py) - each of these is a
+  // separate, independently-verifiable step rather than one big agent
+  // loop, so a bookkeeper reviewing a run can see exactly which document
+  // or step something went wrong at, not just a final pass/fail.
+  extract_document: "Extracted transactions from a document",
+  reconcile_document: "Checked a statement's totals reconcile",
+  categorize_transactions: "Categorized transactions",
+  extract_sources: "Read source documents",
+  generate_outputs: "Generated and verified files",
+  generate_response: "Worked on workflow",
 };
 
 function humanizeToolName(tool: string): string {
@@ -29,7 +49,12 @@ function humanizeToolName(tool: string): string {
 }
 
 function isToolFailure(step: TraceStep): boolean {
-  return !!step.result && /^(Unknown tool|Tool call '.*' failed)/.test(step.result);
+  if (!step.result) return false;
+  if (/^(Unknown tool|Tool call '.*' failed)/.test(step.result)) return true;
+  // reconcile_document/extract_document report their own outcome inline
+  // (✓/✗ prefix or "Failed to extract...") rather than raising a generic
+  // tool-call failure - still needs to render as a failure state.
+  return step.result.startsWith("✗") || step.result.startsWith("Failed to extract");
 }
 
 function summarizeToolStep(step: TraceStep): string {
@@ -49,6 +74,18 @@ function summarizeToolStep(step: TraceStep): string {
 
   if (step.tool === "get_full_conversation_history") {
     return "Pulled full conversation history";
+  }
+
+  if (
+    step.tool === "extract_document" ||
+    step.tool === "reconcile_document" ||
+    step.tool === "categorize_transactions"
+  ) {
+    // These already report a complete, human-readable outcome (e.g. "✓
+    // balances reconcile" or "Extracted 47 transactions from march.pdf
+    // (via table)") - shown as-is rather than prefixed with the tool
+    // label, which would just repeat itself.
+    return step.result;
   }
 
   const trimmed = step.result.length > 140 ? `${step.result.slice(0, 140)}…` : step.result;
