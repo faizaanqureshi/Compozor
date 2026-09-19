@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Loader2 } from "lucide-react";
 import { GmailIcon } from "@/components/icons/gmail";
+import { OutlookIcon } from "@/components/icons/outlook";
 import {
   ApiError,
   AutomationLevel,
@@ -349,6 +350,7 @@ export default function OnboardingPage() {
                     {connecting ? "Redirecting…" : "Connect Gmail"}
                   </Button>
                   <Button variant="outline" onClick={() => onConnectMailbox("outlook")} disabled={connecting}>
+                    <OutlookIcon className="size-4" />
                     {connecting ? "Redirecting…" : "Connect Outlook"}
                   </Button>
                 </div>

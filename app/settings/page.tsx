@@ -4,6 +4,7 @@ import { useState } from "react";
 import useSWR from "swr";
 import { Check } from "lucide-react";
 import { GmailIcon } from "@/components/icons/gmail";
+import { OutlookIcon } from "@/components/icons/outlook";
 import { inboxConnectionsKey, organizationKey } from "@/lib/swr-keys";
 import {
   ApiError,
@@ -241,6 +242,9 @@ function MailboxSection({
   onDelete: (id: number) => void;
 }) {
   const hasConnections = connections && connections.length > 0;
+  const missingProviders = connections === null ? [] : (["gmail", "outlook"] as const).filter(
+    (provider) => !connections.some((connection) => (connection.provider ?? "gmail") === provider)
+  );
 
   return (
     <SectionCard title="Mailbox connections">
@@ -259,7 +263,8 @@ function MailboxSection({
               className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
             >
               <div className="flex flex-wrap items-center gap-2.5">
-                <span className="text-sm font-medium">{conn.email_address}</span>
+                {conn.provider === "outlook" ? <OutlookIcon className="size-5 shrink-0 text-foreground" /> : <GmailIcon className="size-5 shrink-0" />}
+                <span className="break-all text-sm font-medium">{conn.email_address}</span>
                 <span className="text-xs text-muted-foreground">{conn.provider === "outlook" ? "Outlook" : "Gmail"}</span>
                 {conn.status === "needs_reauth" ? (
                   <span className="inline-flex items-center gap-1.5 text-xs font-medium text-accent">
@@ -273,6 +278,12 @@ function MailboxSection({
                   </span>
                 )}
               </div>
+              <div className="flex items-center gap-4">
+                {conn.status === "needs_reauth" && (
+                  <Button variant="ghost" size="sm" disabled={connecting} onClick={() => onConnect(conn.provider ?? "gmail")}>
+                    {connecting ? "Redirecting…" : "Reconnect"}
+                  </Button>
+                )}
               <button
                 onClick={() => onDelete(conn.id)}
                 disabled={deletingId === conn.id}
@@ -280,6 +291,7 @@ function MailboxSection({
               >
                 {deletingId === conn.id ? "Removing…" : "Disconnect"}
               </button>
+              </div>
             </div>
           ))}
         </div>
@@ -292,15 +304,17 @@ function MailboxSection({
 
         </div>
       )}
-      <div className="flex flex-wrap gap-3">
-        <Button variant="outline" onClick={() => onConnect("gmail")} disabled={connecting}>
-          <GmailIcon className="size-4" />{connecting ? "Redirecting…" : "Connect Gmail"}
-        </Button>
-        <Button variant="outline" onClick={() => onConnect("outlook")} disabled={connecting}>
-          {connecting ? "Redirecting…" : "Connect Outlook"}
-        </Button>
-      </div>
-      <p className="text-xs text-muted-foreground">Outlook supports Microsoft 365 work accounts and personal Outlook or Hotmail accounts.</p>
+      {missingProviders.length > 0 && (
+        <div className="flex flex-wrap gap-3">
+          {missingProviders.map((provider) => (
+            <Button key={provider} variant="outline" onClick={() => onConnect(provider)} disabled={connecting}>
+              {provider === "gmail" ? <GmailIcon className="size-4" /> : <OutlookIcon className="size-4" />}
+              {connecting ? "Redirecting…" : `Connect ${provider === "gmail" ? "Gmail" : "Outlook"}`}
+            </Button>
+          ))}
+        </div>
+      )}
+      {missingProviders.includes("outlook") && <p className="text-xs text-muted-foreground">Outlook supports Microsoft 365 work accounts and personal Outlook or Hotmail accounts.</p>}
     </SectionCard>
   );
 }
