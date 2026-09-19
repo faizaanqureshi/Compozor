@@ -824,7 +824,7 @@ function PackageQuickAssignRow({
         </div>
       ) : packages.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          No packages yet - use &quot;New package&quot; above to create one.
+          No packages yet - use &quot;Create New Package&quot; above to create one.
         </p>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">

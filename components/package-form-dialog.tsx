@@ -113,14 +113,14 @@ export function PackageFormDialog({
         ) : (
           <>
             <Plus />
-            New package
+            Create New Package
           </>
         )}
       </DialogTrigger>
       <DialogContent className="sm:max-w-lg">
         <form onSubmit={onSubmit} className="flex flex-col gap-4">
           <DialogHeader>
-            <DialogTitle>{isEdit ? `Edit ${pkg.name}` : "New package"}</DialogTitle>
+            <DialogTitle>{isEdit ? `Edit ${pkg.name}` : "Create New Package"}</DialogTitle>
             <DialogDescription>
               A reusable set of documents you can assign to any client in one
               action - mark each as required (checked by default when
