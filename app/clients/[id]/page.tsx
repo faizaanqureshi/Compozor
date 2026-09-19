@@ -761,15 +761,22 @@ function PackageQuickAssignRow({
       .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
   }, []);
 
-  // Nothing to show once loaded if the firm hasn't defined any packages yet
-  // - Quick add below still works either way, this row just doesn't add
-  // empty noise above it.
-  if (packages !== null && packages.length === 0) return null;
-
   return (
     <SectionCard
       title="Assign a package"
       subtitle="Click a package to add its documents to this client."
+      action={
+        <AssignPackageDialog
+          clientIds={[clientId]}
+          onAssigned={onAssigned}
+          trigger={
+            <Button variant="outline" size="sm">
+              <Plus />
+              Add package to client
+            </Button>
+          }
+        />
+      }
     >
       {packages === null ? (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -777,6 +784,11 @@ function PackageQuickAssignRow({
             <Skeleton key={i} className="h-28 w-full rounded-xl" />
           ))}
         </div>
+      ) : packages.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          No packages yet - create one from the Packages page, or use
+          &quot;Add package to client&quot; above.
+        </p>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {packages.map((pkg) => (
