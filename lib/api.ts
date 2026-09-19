@@ -146,9 +146,15 @@ export interface ClientWorkflowStatus {
   status: WorkflowRunStatus | null;
 }
 
+export interface ClientPackage {
+  package_id: number;
+  package_name: string;
+}
+
 export interface ClientWithChecklistSummary extends Client {
   checklist_summary: ChecklistSummary;
   workflow_statuses: ClientWorkflowStatus[];
+  assigned_packages: ClientPackage[];
 }
 
 export interface ClientDetail extends Client {
