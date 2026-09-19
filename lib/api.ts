@@ -127,6 +127,7 @@ export interface ChecklistItem {
   last_wrong_doc_type: string | null;
   package_id: number | null;
   package_name: string | null;
+  package_document_id: number | null;
 }
 
 export interface ChecklistSummary {
@@ -964,3 +965,17 @@ export const assignPackageToClients = (
 
 export const unassignPackageFromClient = (packageId: number, clientId: number) =>
   request<void>(`/packages/${packageId}/assignments/${clientId}`, { method: "DELETE" });
+
+// Reconciles one client's already-existing assignment to exactly this
+// document selection (adds what's newly checked, removes what got
+// unchecked) - for editing, as opposed to assignPackageToClients which
+// always adds fresh regardless of what's already there.
+export const updatePackageAssignmentDocuments = (
+  packageId: number,
+  clientId: number,
+  documentIds: number[]
+) =>
+  request<PackageAssignmentWithClient>(
+    `/packages/${packageId}/assignments/${clientId}`,
+    json("PATCH", { document_ids: documentIds })
+  );
