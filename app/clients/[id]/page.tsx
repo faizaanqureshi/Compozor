@@ -291,6 +291,7 @@ export default function ClientDetailPage({
         <PackageQuickAssignRow
           clientId={clientId}
           assignedPackageIds={client.assigned_package_ids}
+          checklist={checklist}
           onAssigned={() => {
             refresh();
             setPackageRowOverride(false);
@@ -868,17 +869,22 @@ function PackageAssignCard({
   pkg,
   clientId,
   isSelected,
+  currentDocumentIds,
   onAssigned,
 }: {
   pkg: Package;
   clientId: number;
   isSelected?: boolean;
+  /** This client's already-checked document ids for this package, if it's
+   * already assigned - switches the dialog to "Save" instead of "Assign". */
+  currentDocumentIds?: number[];
   onAssigned: () => void;
 }) {
   return (
     <AssignPackageDialog
       clientIds={[clientId]}
       initialPackage={pkg}
+      currentDocumentIds={currentDocumentIds}
       onAssigned={onAssigned}
       trigger={
         <button
@@ -909,11 +915,13 @@ function PackageAssignCard({
 function PackageQuickAssignRow({
   clientId,
   assignedPackageIds,
+  checklist,
   onAssigned,
   onDone,
 }: {
   clientId: number;
   assignedPackageIds: number[];
+  checklist: ChecklistSummary | null;
   onAssigned: () => void;
   onDone?: () => void;
 }) {
@@ -928,6 +936,16 @@ function PackageQuickAssignRow({
   };
 
   useEffect(refreshPackages, []);
+
+  // Which of this package's specific document lines are already checked
+  // for this client - lets a card for an already-assigned package open
+  // pre-populated with the real current state instead of just "required".
+  const currentDocIdsByPackage: Record<number, number[]> = {};
+  for (const item of checklist?.items ?? []) {
+    if (item.package_id !== null && item.package_document_id !== null) {
+      (currentDocIdsByPackage[item.package_id] ??= []).push(item.package_document_id);
+    }
+  }
 
   // Assigned packages float to the front so "Edit package" always shows
   // the client's current selection right away, without having to dig into
@@ -981,6 +999,7 @@ function PackageQuickAssignRow({
               pkg={pkg}
               clientId={clientId}
               isSelected={assignedPackageIds.includes(pkg.id)}
+              currentDocumentIds={currentDocIdsByPackage[pkg.id]}
               onAssigned={onAssigned}
             />
           ))}
@@ -1003,6 +1022,7 @@ function PackageQuickAssignRow({
                 pkg={pkg}
                 clientId={clientId}
                 isSelected={assignedPackageIds.includes(pkg.id)}
+                currentDocumentIds={currentDocIdsByPackage[pkg.id]}
                 onAssigned={() => {
                   setShowMore(false);
                   onAssigned();

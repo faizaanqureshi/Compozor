@@ -2,7 +2,13 @@
 
 import { cloneElement, isValidElement, useState, type ReactElement } from "react";
 import { Package as PackageIcon } from "lucide-react";
-import { ApiError, Package, assignPackageToClients, listPackages } from "@/lib/api";
+import {
+  ApiError,
+  Package,
+  assignPackageToClients,
+  listPackages,
+  updatePackageAssignmentDocuments,
+} from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -25,6 +31,7 @@ export function AssignPackageDialog({
   clientIds,
   trigger,
   initialPackage,
+  currentDocumentIds,
   onAssigned,
 }: {
   clientIds: number[];
@@ -32,6 +39,12 @@ export function AssignPackageDialog({
   /** Skip the picker step and go straight to the document-selection step
    * for this package - used when a package card itself is the trigger. */
   initialPackage?: Package;
+  /** This package's already-checked document ids for this client, when
+   * it's already assigned - switches the dialog to "Save" (reconcile the
+   * new selection against what's there) instead of "Assign" (always adds
+   * fresh). Only meaningful for a single client (clientIds.length === 1);
+   * the multi-select batch picker never passes this. */
+  currentDocumentIds?: number[];
   onAssigned: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -41,9 +54,13 @@ export function AssignPackageDialog({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const isEditing = currentDocumentIds !== undefined;
+
   const pickPackage = (pkg: Package) => {
     setSelectedPackage(pkg);
-    setSelectedDocIds(new Set(pkg.documents.filter((d) => d.is_required).map((d) => d.id)));
+    setSelectedDocIds(
+      new Set(currentDocumentIds ?? pkg.documents.filter((d) => d.is_required).map((d) => d.id))
+    );
   };
 
   const openDialog = async () => {
@@ -70,12 +87,18 @@ export function AssignPackageDialog({
     });
   };
 
-  const onAssign = async () => {
+  const onSubmit = async () => {
     if (!selectedPackage || selectedDocIds.size === 0) return;
     setSaving(true);
     setError(null);
     try {
-      await assignPackageToClients(selectedPackage.id, clientIds, Array.from(selectedDocIds));
+      if (isEditing) {
+        await updatePackageAssignmentDocuments(
+          selectedPackage.id, clientIds[0], Array.from(selectedDocIds)
+        );
+      } else {
+        await assignPackageToClients(selectedPackage.id, clientIds, Array.from(selectedDocIds));
+      }
       setOpen(false);
       onAssigned();
     } catch (e) {
@@ -99,7 +122,9 @@ export function AssignPackageDialog({
             </DialogTitle>
             <DialogDescription>
               {selectedPackage
-                ? `Choose which documents to add for ${clientIds.length} selected client${clientIds.length === 1 ? "" : "s"}.`
+                ? isEditing
+                  ? "Update which of this package's documents are on this client's checklist."
+                  : `Choose which documents to add for ${clientIds.length} selected client${clientIds.length === 1 ? "" : "s"}.`
                 : `Choose a package to assign to ${clientIds.length} selected client${clientIds.length === 1 ? "" : "s"}.`}
             </DialogDescription>
           </DialogHeader>
@@ -204,8 +229,14 @@ export function AssignPackageDialog({
               </Button>
             )}
             {selectedPackage && (
-              <Button onClick={onAssign} disabled={saving || selectedDocIds.size === 0}>
-                {saving ? "Assigning…" : `Assign ${selectedDocIds.size} document${selectedDocIds.size === 1 ? "" : "s"}`}
+              <Button onClick={onSubmit} disabled={saving || selectedDocIds.size === 0}>
+                {isEditing
+                  ? saving
+                    ? "Saving…"
+                    : "Save changes"
+                  : saving
+                    ? "Assigning…"
+                    : `Assign ${selectedDocIds.size} document${selectedDocIds.size === 1 ? "" : "s"}`}
               </Button>
             )}
           </DialogFooter>
