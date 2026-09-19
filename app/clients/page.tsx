@@ -52,6 +52,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ClientImportModal } from "@/components/client-import-modal";
 import { WorkflowFormDialog } from "@/components/workflow-form-dialog";
 import { PackageFormDialog } from "@/components/package-form-dialog";
@@ -981,9 +982,14 @@ function PackageStatusBadge({
 
   return (
     <span className="group/pkg inline-flex items-center gap-1.5">
-      <span className="max-w-40 truncate text-foreground/80" title={pkg.package_name}>
-        {pkg.package_name}
-      </span>
+      <Tooltip>
+        <TooltipTrigger
+          render={<span className="max-w-40 cursor-default truncate text-foreground/80" />}
+        >
+          {pkg.package_name}
+        </TooltipTrigger>
+        <TooltipContent>{pkg.package_name}</TooltipContent>
+      </Tooltip>
       <button
         type="button"
         onClick={onRemove}
