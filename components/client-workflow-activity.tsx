@@ -119,8 +119,9 @@ function RunHistory({ runs }: { runs: WorkflowRun[] }) {
 }
 
 /** A single workflow, with its latest result first and its audit history folded away. */
-export function ClientWorkflowActivity({ workflowId, name, archived, runs, actions }: {
+export function ClientWorkflowActivity({ workflowId, name, archived, runs, actions, assigned, awaitingFirstRun, executionMode, readiness }: {
   workflowId: number; name: string; archived: boolean; runs: WorkflowRun[]; actions: React.ReactNode;
+  assigned?: boolean; awaitingFirstRun?: boolean; executionMode?: "manual" | "auto"; readiness?: string;
 }) {
   const latest = runs[0];
   return <AccordionItem value={workflowId} className="min-w-0 border-border/70">
@@ -129,8 +130,10 @@ export function ClientWorkflowActivity({ workflowId, name, archived, runs, actio
         <span className="flex min-w-0 flex-col gap-2">
           <span className="break-words text-sm font-medium leading-snug text-foreground">{name}</span>
           <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-normal text-muted-foreground">
-            {latest && <RunStatus status={latest.status} />}
-            {archived ? <span>Workflow deleted</span> : latest?.workflow_assignment_id == null && <span>Not assigned</span>}
+            {latest && !awaitingFirstRun && <RunStatus status={latest.status} />}
+            {archived ? <span>Workflow deleted</span> : !(assigned ?? latest?.workflow_assignment_id != null) && <span>Not assigned</span>}
+            {executionMode && <span>{executionMode === "manual" ? "Manual" : "Automatic"}</span>}
+            {(!latest || awaitingFirstRun) && !archived && readiness && <span>{readiness}</span>}
             <span>{runs.length} run{runs.length === 1 ? "" : "s"}</span>
           </span>
         </span>
@@ -138,6 +141,7 @@ export function ClientWorkflowActivity({ workflowId, name, archived, runs, actio
       <div className="flex shrink-0 items-center gap-1 self-end sm:self-center">{actions}</div>
     </div>
     <AccordionContent className="pb-0 [&_p]:!mb-0">
+      {(!latest || awaitingFirstRun) && readiness && <p className="pb-5 text-[0.8125rem] text-muted-foreground">{readiness}</p>}
       {latest && <div className="flex min-w-0 flex-col gap-4 pb-5 pt-2 sm:pb-6">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Latest run</span>

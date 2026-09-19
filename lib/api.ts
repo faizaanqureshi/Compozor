@@ -809,6 +809,25 @@ export interface WorkflowAssignmentWithClient {
   created_at: string;
 }
 
+export interface ClientWorkflowAssignment {
+  id: number;
+  workflow_id: number;
+  client_id: number;
+  workflow_name: string;
+  execution_mode: WorkflowExecutionMode;
+  workflow_archived: boolean;
+  checklist_total: number;
+  checklist_remaining: number;
+  ready: boolean;
+  created_at: string;
+}
+
+export const listClientWorkflowAssignments = (clientId: number) =>
+  request<ClientWorkflowAssignment[]>(`/clients/${clientId}/workflow-assignments`);
+
+export const startAssignedWorkflow = (clientId: number, assignmentId: number) =>
+  request<WorkflowRun>(`/clients/${clientId}/workflow-assignments/${assignmentId}/run`, { method: "POST" });
+
 export interface WorkflowRunOutput {
   id: number;
   filename: string;

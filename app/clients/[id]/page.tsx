@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { groupClientWorkflows, assignmentReadiness } from "@/lib/client-workflows";
 import { createSnapshotRefresh } from "@/lib/snapshot-refresh";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -33,6 +34,9 @@ import {
   EmailThread,
   Package,
   WorkflowRun,
+  ClientWorkflowAssignment,
+  listClientWorkflowAssignments,
+  startAssignedWorkflow,
   createChecklistItem,
   deleteClient,
   deleteClientMemoryNote,
@@ -159,6 +163,8 @@ export default function ClientDetailPage({
   const [commitments, setCommitments] = useState<ClientCommitment[] | null>(
     null
   );
+  const [workflowAssignments, setWorkflowAssignments] = useState<ClientWorkflowAssignment[] | null>(null);
+  const [workflowError, setWorkflowError] = useState<string | null>(null);
   const [workflowRuns, setWorkflowRuns] = useState<WorkflowRun[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   // null = no manual override yet, so visibility just follows whether a
@@ -167,13 +173,23 @@ export default function ClientDetailPage({
   // back open on demand.
   const [packageRowOverride, setPackageRowOverride] = useState<boolean | null>(null);
   const router = useRouter();
-  const workflowRefreshRef = useRef<ReturnType<typeof createSnapshotRefresh<WorkflowRun[]>> | null>(null);
+  const workflowRefreshRef = useRef<ReturnType<typeof createSnapshotRefresh<[WorkflowRun[], ClientWorkflowAssignment[]]>> | null>(null);
 
   useEffect(() => {
     const controller = createSnapshotRefresh({
-      read: () => listClientWorkflowRuns(clientId),
-      onValue: setWorkflowRuns,
-      onError: (e) => setError(e instanceof ApiError ? e.message : String(e)),
+      read: async (): Promise<[WorkflowRun[], ClientWorkflowAssignment[]]> => {
+        const snapshot: [WorkflowRun[], ClientWorkflowAssignment[]] = await Promise.all([
+          listClientWorkflowRuns(clientId), listClientWorkflowAssignments(clientId),
+        ]);
+        setWorkflowError(null);
+        return snapshot;
+      },
+      onValue: ([runs, assignments]) => {
+        setWorkflowRuns(runs);
+        setWorkflowAssignments(assignments);
+        setWorkflowError(null);
+      },
+      onError: (e) => setWorkflowError(e instanceof ApiError ? e.message : String(e)),
     });
     workflowRefreshRef.current = controller;
     controller.refresh({ immediate: true });
@@ -331,6 +347,8 @@ export default function ClientDetailPage({
       <WorkflowRunsCard
         clientId={clientId}
         runs={workflowRuns}
+        assignments={workflowAssignments}
+        loadError={workflowError}
         onChange={refreshWorkflowRuns}
       />
 
@@ -1759,39 +1777,17 @@ function DocumentVaultCard({
   );
 }
 
-interface WorkflowGroup {
-  workflowId: number;
-  workflowName: string;
-  workflowArchived: boolean;
-  runs: WorkflowRun[];
-}
-
-function groupRunsByWorkflow(runs: WorkflowRun[]): WorkflowGroup[] {
-  const order: number[] = [];
-  const byId: Record<number, WorkflowGroup> = {};
-  for (const run of runs) {
-    if (!byId[run.workflow_id]) {
-      byId[run.workflow_id] = {
-        workflowId: run.workflow_id,
-        workflowName: run.workflow_name,
-        workflowArchived: run.workflow_archived,
-        runs: [],
-      };
-      order.push(run.workflow_id);
-    }
-    byId[run.workflow_id].runs.push(run);
-  }
-  // runs already arrive newest-first (API orders by created_at desc)
-  return order.map((id) => byId[id]);
-}
-
 function WorkflowRunsCard({
   clientId,
   runs,
+  assignments,
+  loadError,
   onChange,
 }: {
   clientId: number;
   runs: WorkflowRun[] | null;
+  assignments: ClientWorkflowAssignment[] | null;
+  loadError: string | null;
   onChange: () => void;
 }) {
   const [runningId, setRunningId] = useState<number | null>(null);
@@ -1807,7 +1803,7 @@ function WorkflowRunsCard({
     onChangeRef.current = onChange;
   });
 
-  const groups = useMemo(() => (runs ? groupRunsByWorkflow(runs) : []), [runs]);
+  const groups = useMemo(() => groupClientWorkflows(runs ?? [], assignments ?? []), [runs, assignments]);
 
   // Open an already-running workflow on first load. Its persisted trace
   // supplies the progress even if this tab missed the original SSE events.
@@ -1833,10 +1829,14 @@ function WorkflowRunsCard({
       }
       refresh();
     }, () => {}, refresh);
+    let ticks = 0;
     const poll = setInterval(() => {
-      if (runsRef.current?.some(run => run.status === "running" || run.status === "queued")) refresh();
+      ticks += 1;
+      if (document.visibilityState !== "visible") return;
+      if (ticks % 6 === 0 || runsRef.current?.some(run => run.status === "running" || run.status === "queued")) refresh();
     }, 5000);
-    return () => { unsubscribe(); clearInterval(poll); };
+    window.addEventListener("focus", refresh);
+    return () => { unsubscribe(); clearInterval(poll); window.removeEventListener("focus", refresh); };
   }, [clientId]);
 
   const onRunNow = async (runId: number) => {
@@ -1865,9 +1865,19 @@ function WorkflowRunsCard({
     }
   };
 
-  // A brand-new workflow's very first run has no persisted history yet to
-  // group under - give it a synthetic group so its live activity still has
-  // somewhere to render instead of being dropped until the run finishes.
+  const [startingId, setStartingId] = useState<number | null>(null);
+  const onStart = async (assignmentId: number) => {
+    setStartingId(assignmentId);
+    setError(null);
+    try {
+      await startAssignedWorkflow(clientId, assignmentId);
+      onChange();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setStartingId(null);
+    }
+  };
   const displayGroups = groups;
 
   return (
@@ -1887,15 +1897,16 @@ function WorkflowRunsCard({
         />
       }
     >
-      {runs === null ? (
+      {loadError ? (
+        <p role="alert" className="text-sm text-destructive">Could not load workflows. {loadError} <Button variant="ghost" size="sm" onClick={onChange}>Retry</Button></p>
+      ) : runs === null || assignments === null ? (
         <div className="flex flex-col gap-2">
           <Skeleton className="h-4 w-2/3" />
           <Skeleton className="h-4 w-1/2" />
         </div>
       ) : displayGroups.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          No workflow activity yet - a run appears here once an assigned
-          workflow fires (or is ready to run) for this client.
+          No workflows assigned. Assign a workflow to define what happens after document collection.
         </p>
       ) : (
         <Accordion
@@ -1907,6 +1918,7 @@ function WorkflowRunsCard({
           {displayGroups.map((group) => {
             const latest = group.runs[0];
             const isLive = latest?.status === "running";
+            const awaitingFirstRun = Boolean(group.assignment && !group.runs.some(run => run.workflow_assignment_id === group.assignment!.id));
             return (
               <ClientWorkflowActivity
                 key={group.workflowId}
@@ -1914,8 +1926,20 @@ function WorkflowRunsCard({
                 name={group.workflowName}
                 archived={group.workflowArchived}
                 runs={group.runs}
+                assigned={Boolean(group.assignment)}
+                awaitingFirstRun={awaitingFirstRun}
+                executionMode={group.assignment?.execution_mode}
+                readiness={group.assignment ? assignmentReadiness(group.assignment) : undefined}
                 actions={<>
-                    {!isLive && !group.workflowArchived && latest?.status === "queued" && (
+                    {awaitingFirstRun && group.assignment && !group.workflowArchived && (
+                      <Button variant="outline" size="sm"
+                        disabled={!group.assignment.ready || startingId === group.assignment.id}
+                        onClick={() => onStart(group.assignment!.id)}>
+                        {startingId === group.assignment.id ? <Loader2 className="animate-spin" /> : <Play />}
+                        Run now
+                      </Button>
+                    )}
+                    {!awaitingFirstRun && !isLive && !group.workflowArchived && latest?.status === "queued" && (
                       <Button
                         variant="outline"
                         size="sm"
@@ -1926,8 +1950,8 @@ function WorkflowRunsCard({
                         Run now
                       </Button>
                     )}
-                    {!isLive && latest?.can_resume && <ResumeWorkflowDialog run={latest} onResumed={onChange} />}
-                    {!isLive &&
+                    {!awaitingFirstRun && !isLive && latest?.can_resume && <ResumeWorkflowDialog run={latest} onResumed={onChange} />}
+                    {!awaitingFirstRun && !isLive &&
                       !group.workflowArchived &&
                       latest &&
                       (latest.status === "completed" ||
@@ -1943,7 +1967,7 @@ function WorkflowRunsCard({
                         Rerun
                       </Button>
                     )}
-                    {!isLive && latest?.workflow_assignment_id != null && (
+                    {!isLive && group.assignment && (
                       <RemoveWorkflowButton
                         clientId={clientId}
                         workflowId={group.workflowId}
