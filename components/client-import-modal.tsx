@@ -11,10 +11,10 @@ import {
   executeClientImport,
   parseClientImportFile,
 } from "@/lib/api";
+import { type EditableRow, missingFields, reviewImportRows, initialImportReviewOrder } from "@/lib/client-import-review";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -32,25 +32,7 @@ const ACCEPT_ATTR =
 type Stage = "upload" | "processing" | "failed" | "review" | "importing" | "done";
 const PAGE_SIZE = 50;
 const JOB_STORAGE_KEY = "client-import-job";
-
-interface EditableRow {
-  name: string;
-  email: string;
-  phone: string;
-  company_name: string;
-  is_duplicate: boolean;
-  duplicate_reason: string | null;
-  included: boolean;
-  source: string | null;
-  email_error: boolean;
-}
-
-function missingFields(row: EditableRow): string[] {
-  const missing: string[] = [];
-  if (!row.name.trim()) missing.push("name");
-  if (row.email_error || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email.trim())) missing.push("email");
-  return missing;
-}
+const REVIEW_INPUT_CLASS = "h-9 rounded-md border-transparent bg-transparent px-2 text-sm shadow-none hover:border-border hover:bg-background focus-visible:bg-background focus-visible:ring-2 aria-invalid:border-destructive/30 aria-invalid:bg-destructive/5 aria-invalid:text-destructive aria-invalid:ring-0 aria-invalid:placeholder:text-destructive/70";
 
 function hasValidExtension(filename: string) {
   const lower = filename.toLowerCase();
@@ -63,6 +45,7 @@ export function ClientImportModal({ onImported }: { onImported: () => void }) {
   const [dragActive, setDragActive] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rows, setRows] = useState<EditableRow[]>([]);
+  const [reviewOrder, setReviewOrder] = useState<number[]>([]);
   const [importSummary, setImportSummary] = useState<{
     createdCount: number;
     skipped: { name: string | null; email: string | null; reason: string }[];
@@ -88,6 +71,7 @@ export function ClientImportModal({ onImported }: { onImported: () => void }) {
     setDragActive(false);
     setError(null);
     setRows([]);
+    setReviewOrder([]);
     setImportSummary(null);
   };
 
@@ -114,12 +98,14 @@ export function ClientImportModal({ onImported }: { onImported: () => void }) {
       return;
     }
     setExistingEmails(result.existing_emails);
-    setRows(result.rows.map((r) => ({
+    const parsedRows = result.rows.map((r) => ({
       name: r.name ?? "", email: r.email ?? "", phone: r.phone ?? "",
       company_name: r.company_name ?? "", source: r.source,
       email_error: r.validation_errors.includes("Invalid email address"),
       is_duplicate: r.is_duplicate, duplicate_reason: r.duplicate_reason, included: true,
-    })));
+    }));
+    setRows(parsedRows);
+    setReviewOrder(initialImportReviewOrder(parsedRows, result.existing_emails));
     setPage(0);
     setStage("review");
     setError(null);
@@ -178,18 +164,12 @@ export function ClientImportModal({ onImported }: { onImported: () => void }) {
     setRows((prev) => prev.map((r, i) => (i === index ? { ...r, ...patch } : r)));
   };
 
-  const reviewRows = useMemo(() => {
-    const existing = new Set(existingEmails.map((email) => email.trim().toLowerCase()));
-    const seen = new Set<string>();
-    return rows.map((row) => {
-      const email = row.email.trim().toLowerCase();
-      const reason = existing.has(email) ? "A client with this email already exists"
-        : seen.has(email) ? "Duplicate email within this file" : null;
-      if (row.included && missingFields(row).length === 0) seen.add(email);
-      return { ...row, is_duplicate: !!reason, duplicate_reason: reason };
-    });
-  }, [rows, existingEmails]);
+  const reviewRows = useMemo(() => reviewImportRows(rows, existingEmails), [rows, existingEmails]);
   const includableCount = reviewRows.filter((r) => r.included && !r.is_duplicate && missingFields(r).length === 0).length;
+
+  const duplicateCount = reviewRows.filter((row) => row.is_duplicate).length;
+  const incompleteCount = reviewRows.filter((row) => !row.is_duplicate && missingFields(row).length > 0).length;
+  const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
 
   const onConfirm = async () => {
     const payload: ClientImportRowIn[] = reviewRows
@@ -227,12 +207,21 @@ export function ClientImportModal({ onImported }: { onImported: () => void }) {
         <UploadCloud />
         Import clients
       </DialogTrigger>
-      <DialogContent className="sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Import clients</DialogTitle>
-          <DialogDescription>
-            Upload a client list. We&apos;ll recognize its columns automatically
-            and show the records for review before anything is added.
+      <DialogContent className={cn(
+        "max-h-[90dvh] w-[calc(100%-2rem)] gap-6 overflow-y-auto bg-card p-6 font-sans sm:p-8 [&>[data-slot=dialog-close]]:text-sidebar-foreground [&>[data-slot=dialog-close]]:hover:bg-sidebar-accent",
+        stage === "review" ? "sm:max-w-5xl" : "sm:max-w-xl"
+      )}>
+        <DialogHeader className="-mx-6 -mt-6 gap-3 rounded-t-xl border-b border-sidebar-primary/50 bg-sidebar px-6 py-7 pr-12 text-sidebar-foreground sm:-mx-8 sm:-mt-8 sm:px-8 sm:py-8 sm:pr-14">
+          <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-sidebar-primary">Client import</p>
+          <DialogTitle className="font-sans text-3xl font-light tracking-tight sm:text-4xl">
+            {stage === "review" ? "A final look before adding." : stage === "done" ? "Your clients are ready." : "Bring your clients together."}
+          </DialogTitle>
+          <DialogDescription className="max-w-xl font-sans text-sm leading-relaxed text-sidebar-foreground/70">
+            {stage === "review"
+              ? "Your columns are matched. Rows needing attention are listed first. Select any field to edit."
+              : stage === "done"
+                ? "Your import is complete."
+                : "Upload your list. We’ll match the columns and prepare your clients for review."}
           </DialogDescription>
         </DialogHeader>
 
@@ -242,7 +231,7 @@ export function ClientImportModal({ onImported }: { onImported: () => void }) {
             tabIndex={0}
             onClick={() => fileInputRef.current?.click()}
             onKeyDown={(e) => {
-              if (e.key === "Enter") fileInputRef.current?.click();
+              if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileInputRef.current?.click(); }
             }}
             onDragOver={(e) => {
               e.preventDefault();
@@ -251,21 +240,22 @@ export function ClientImportModal({ onImported }: { onImported: () => void }) {
             onDragLeave={() => setDragActive(false)}
             onDrop={onDrop}
             className={cn(
-              "flex cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border border-dashed px-6 py-12 text-center transition-colors",
+              "flex cursor-pointer flex-col items-center justify-center gap-5 rounded-lg border border-dashed px-6 py-16 text-center outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
               dragActive
                 ? "border-accent bg-accent/[0.06]"
                 : "border-border hover:bg-muted/40"
             )}
           >
-            <UploadCloud className="size-8 text-muted-foreground" />
+            <UploadCloud className="size-6 text-accent" strokeWidth={1.25} />
             <div className="flex flex-col gap-1">
               <p className="text-sm font-medium">
-                Drag and drop your client list here, or click to browse
+                Drop your client list here
               </p>
               <p className="text-xs text-muted-foreground">
-                Accepts .xlsx, .pdf, and .docx · Up to 20 MB
+                Excel, PDF or Word · Up to 20 MB
               </p>
             </div>
+            <span className="text-xs font-medium underline decoration-border underline-offset-4">Browse files</span>
             <input
               ref={fileInputRef}
               type="file"
@@ -290,114 +280,116 @@ export function ClientImportModal({ onImported }: { onImported: () => void }) {
         )}
 
         {stage === "review" && (
-          <div className="flex min-w-0 flex-col gap-3">
-            <div className="max-h-[45vh] overflow-auto rounded-lg ring-1 ring-foreground/10">
-              <table className="w-full min-w-[560px] border-collapse text-sm">
-                <thead className="sticky top-0 bg-card">
-                  <tr className="text-left">
-                    <th className="w-8 border-b border-border/70 py-2 pl-3" />
-                    <th className="border-b border-border/70 py-2 pr-3 text-[11px] font-medium tracking-wide text-muted-foreground/70 uppercase">
-                      Name
-                    </th>
-                    <th className="border-b border-border/70 py-2 pr-3 text-[11px] font-medium tracking-wide text-muted-foreground/70 uppercase">
-                      Email
-                    </th>
-                    <th className="border-b border-border/70 py-2 pr-3 text-[11px] font-medium tracking-wide text-muted-foreground/70 uppercase">
-                      Phone
-                    </th>
-                    <th className="border-b border-border/70 py-2 pr-3 text-[11px] font-medium tracking-wide text-muted-foreground/70 uppercase">
-                      Company
-                    </th>
+          <div className="flex min-w-0 flex-col">
+            <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2 pb-4 text-xs text-muted-foreground" aria-live="polite">
+              <span><span className="mr-1.5 text-xl font-medium tabular-nums text-accent dark:text-primary">{includableCount.toLocaleString()}</span>ready to add</span>
+              <span>{rows.length.toLocaleString()} source rows</span>
+              {duplicateCount > 0 && <span>{duplicateCount.toLocaleString()} {duplicateCount === 1 ? "duplicate" : "duplicates"} skipped</span>}
+              {incompleteCount > 0 && <span className="text-destructive">{incompleteCount.toLocaleString()} need attention</span>}
+            </div>
+            <div className="max-h-[30dvh] min-h-0 sm:max-h-[44dvh] overflow-auto rounded-lg border border-border/70" role="region" aria-label="Client details, scroll to review more rows" tabIndex={0}>
+              <table className="w-full min-w-[850px] table-fixed border-collapse text-sm">
+                <colgroup>
+                  <col className="w-10" />
+                  <col className="w-[24%]" />
+                  <col className="w-[30%]" />
+                  <col className="w-[21%]" />
+                  <col />
+                </colgroup>
+                <thead className="sticky top-0 z-10 bg-popover">
+                  <tr className="border-b border-border/70 text-left text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+                    <th className="py-3"><span className="sr-only">Include</span></th>
+                    <th scope="col" className="px-2 py-3 font-medium">Name</th>
+                    <th scope="col" className="px-2 py-3 font-medium">Email</th>
+                    <th scope="col" className="px-2 py-3 font-medium">Phone</th>
+                    <th scope="col" className="px-2 py-3 font-medium">Company</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {reviewRows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map((row, index) => {
-                    const i = page * PAGE_SIZE + index;
+                  {reviewOrder.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map((i) => {
+                    const row = reviewRows[i];
                     const missing = missingFields(row);
-                    const includable = missing.length === 0;
+                    const includable = missing.length === 0 && !row.is_duplicate;
                     return (
-                      <tr key={i} className="align-top">
-                        <td className="border-b border-border/50 py-2 pl-3">
+                      <tr key={i} className={cn("border-b border-border/50 align-top last:border-0 transition-colors hover:bg-muted/20", row.is_duplicate && "bg-muted/30")}>
+                        <td className="py-3 text-center">
                           <input
                             type="checkbox"
                             aria-label={`Include row ${i + 1}`}
                             checked={row.included && includable}
                             disabled={!includable}
-                            onChange={(e) =>
-                              updateRow(i, { included: e.target.checked })
-                            }
-                            className="mt-1.5 size-3.5 accent-accent disabled:opacity-30"
+                            onChange={(e) => updateRow(i, { included: e.target.checked })}
+                            className="mt-3 size-3.5 cursor-pointer accent-accent dark:accent-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-default disabled:opacity-30"
                           />
                         </td>
-                        <td className="border-b border-border/50 py-1.5 pr-3">
+                        <td className="py-3 pr-2">
                           <Input
                             aria-label={`Name, row ${i + 1}`}
                             value={row.name}
+                            title={row.name}
                             onChange={(e) => updateRow(i, { name: e.target.value })}
                             aria-invalid={missing.includes("name")}
-                            placeholder="Required"
-                            className="h-7 text-sm aria-invalid:text-destructive aria-invalid:placeholder:text-destructive/70"
+                            placeholder="Name required"
+                            className={cn(REVIEW_INPUT_CLASS, "font-medium")}
                           />
-                          {row.source && <span className="text-[11px] text-muted-foreground">{row.source}</span>}
+                          {row.source && <span title={row.source} className="block truncate px-2 text-[10px] leading-4 text-muted-foreground">{row.source}</span>}
                         </td>
-                        <td className="border-b border-border/50 py-1.5 pr-3">
+                        <td className="py-3 pr-2">
                           <Input
                             aria-label={`Email, row ${i + 1}`}
                             value={row.email}
+                            title={row.email}
                             onChange={(e) => updateRow(i, { email: e.target.value })}
                             aria-invalid={missing.includes("email")}
-                            placeholder="Required"
-                            className="h-7 text-sm aria-invalid:text-destructive aria-invalid:placeholder:text-destructive/70"
+                            placeholder="Email required"
+                            className={REVIEW_INPUT_CLASS}
                           />
-                          {row.is_duplicate && (
-                            <Badge variant="secondary" className="mt-1">
-                              {row.duplicate_reason ?? "Duplicate"} — will be skipped
-                            </Badge>
+                          {row.is_duplicate ? (
+                            <p title={row.duplicate_reason ?? "Duplicate"} className="px-2 text-[10px] leading-4 text-muted-foreground">
+                              {row.duplicate_reason === "A client with this email already exists" ? "Already a client · skipped" : "Duplicate in file · skipped"}
+                            </p>
+                          ) : missing.includes("email") && row.email && (
+                            <p className="px-2 text-[10px] leading-4 text-destructive">Enter a valid email</p>
                           )}
                         </td>
-                        <td className="border-b border-border/50 py-1.5 pr-3">
+                        <td className="py-3 pr-2">
                           <Input
                             aria-label={`Phone, row ${i + 1}`}
                             value={row.phone}
+                            title={row.phone}
+                            placeholder="—"
                             onChange={(e) => updateRow(i, { phone: e.target.value })}
-                            className="h-7 text-sm"
+                            className={REVIEW_INPUT_CLASS}
                           />
                         </td>
-                        <td className="border-b border-border/50 py-1.5 pr-3">
+                        <td className="py-3 pr-3">
                           <Input
                             aria-label={`Company, row ${i + 1}`}
                             value={row.company_name}
-                            onChange={(e) =>
-                              updateRow(i, { company_name: e.target.value })
-                            }
-                            className="h-7 text-sm"
+                            title={row.company_name}
+                            placeholder="—"
+                            onChange={(e) => updateRow(i, { company_name: e.target.value })}
+                            className={REVIEW_INPUT_CLASS}
                           />
                         </td>
                       </tr>
                     );
                   })}
                   {rows.length === 0 && (
-                    <tr>
-                      <td colSpan={5} className="py-8 text-center text-muted-foreground">
-                        No clients found in this file.
-                      </td>
-                    </tr>
+                    <tr><td colSpan={5} className="py-12 text-center text-muted-foreground">No clients found in this file.</td></tr>
                   )}
                 </tbody>
               </table>
             </div>
-            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-              <span>{rows.length} source rows · {includableCount} ready to add</span>
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(page - 1)}>Previous</Button>
-                <span>{page + 1} / {Math.max(1, Math.ceil(rows.length / PAGE_SIZE))}</span>
-                <Button variant="outline" size="sm" disabled={(page + 1) * PAGE_SIZE >= rows.length} onClick={() => setPage(page + 1)}>Next</Button>
-              </div>
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-3 text-xs text-muted-foreground">
+              <span className="tabular-nums">{rows.length ? page * PAGE_SIZE + 1 : 0}–{Math.min((page + 1) * PAGE_SIZE, rows.length)} of {rows.length.toLocaleString()} rows</span>
+              <nav className="flex items-center gap-2" aria-label="Import review pages">
+                <Button variant="ghost" size="sm" disabled={page === 0} onClick={() => setPage(page - 1)}>Previous</Button>
+                <span className="px-1 tabular-nums">{page + 1} / {pageCount}</span>
+                <Button variant="ghost" size="sm" disabled={page + 1 >= pageCount} onClick={() => setPage(page + 1)}>Next</Button>
+              </nav>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Rows in red need a name or valid email — fill them in or leave them
-              unchecked to skip.
-            </p>
+            {incompleteCount > 0 && <p className="mt-3 text-xs leading-relaxed text-muted-foreground">Fill in the highlighted details to include those rows. Unresolved rows will be skipped.</p>}
           </div>
         )}
 
@@ -448,15 +440,16 @@ export function ClientImportModal({ onImported }: { onImported: () => void }) {
         {error && <p className="text-sm text-destructive">{error}</p>}
 
         {stage === "review" && (
-          <DialogFooter>
-            <Button onClick={onConfirm} disabled={includableCount === 0}>
-              Confirm &amp; add {includableCount} client
+          <DialogFooter className="-mx-6 -mb-6 items-center gap-4 bg-transparent px-6 py-5 sm:-mx-8 sm:-mb-8 sm:justify-between sm:px-8">
+            <p className="text-xs text-muted-foreground">Only selected, valid clients will be added.</p>
+            <Button className="w-full sm:w-auto" onClick={onConfirm} disabled={includableCount === 0}>
+              Add {includableCount.toLocaleString()} client
               {includableCount === 1 ? "" : "s"}
             </Button>
           </DialogFooter>
         )}
         {stage === "done" && (
-          <DialogFooter>
+          <DialogFooter className="-mx-6 -mb-6 bg-transparent px-6 py-5 sm:-mx-8 sm:-mb-8 sm:px-8">
             <Button onClick={() => handleOpenChange(false)}>Done</Button>
           </DialogFooter>
         )}
