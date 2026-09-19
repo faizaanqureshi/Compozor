@@ -1,6 +1,7 @@
 "use client";
 
-import { use, useEffect, useMemo, useRef, useState } from "react";
+import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createSnapshotRefresh } from "@/lib/snapshot-refresh";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -167,6 +168,25 @@ export default function ClientDetailPage({
   const [workflowRuns, setWorkflowRuns] = useState<WorkflowRun[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+  const workflowRefreshRef = useRef<ReturnType<typeof createSnapshotRefresh<WorkflowRun[]>> | null>(null);
+
+  useEffect(() => {
+    const controller = createSnapshotRefresh({
+      read: () => listClientWorkflowRuns(clientId),
+      onValue: setWorkflowRuns,
+      onError: (e) => setError(e instanceof ApiError ? e.message : String(e)),
+    });
+    workflowRefreshRef.current = controller;
+    controller.refresh();
+    return () => {
+      controller.stop();
+      workflowRefreshRef.current = null;
+    };
+  }, [clientId]);
+
+  const refreshWorkflowRuns = useCallback(() => {
+    workflowRefreshRef.current?.refresh();
+  }, []);
 
   const refresh = () => {
     getClient(clientId)
@@ -187,12 +207,10 @@ export default function ClientDetailPage({
     listClientCommitments(clientId)
       .then(setCommitments)
       .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
-    listClientWorkflowRuns(clientId)
-      .then(setWorkflowRuns)
-      .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
+    refreshWorkflowRuns();
   };
 
-  useEffect(refresh, [clientId]);
+  useEffect(refresh, [clientId, refreshWorkflowRuns]);
 
   if (error && !client) return <p className="text-sm text-destructive">{error}</p>;
 
@@ -298,7 +316,7 @@ export default function ClientDetailPage({
       <WorkflowRunsCard
         clientId={clientId}
         runs={workflowRuns}
-        onChange={refresh}
+        onChange={refreshWorkflowRuns}
       />
 
       <MemoryNotesCard
@@ -1708,17 +1726,8 @@ function WorkflowRunsCard({
 
   const groups = useMemo(() => (runs ? groupRunsByWorkflow(runs) : []), [runs]);
 
-  // A run already in progress when this page loads (e.g. it was kicked
-  // off before this tab was open) has no SSE history to reconstruct - its
-  // liveWorkflowId never gets set, since that only happens on a
-  // workflow_run_started event this tab actually witnessed. Auto-opening
-  // its group the first time we see it means it's never silently invisible
-  // just because of when the tab happened to load (the "Running" badge
-  // itself falls back to the persisted status too - see isLive below),
-  // even though the live step-by-step trace genuinely can't be
-  // reconstructed after the fact. Adjusting state during render (not in
-  // an effect) is the documented pattern for a one-time sync like this -
-  // see https://react.dev/learn/you-might-not-need-an-effect.
+  // Open an already-running workflow on first load. Its persisted trace
+  // supplies the progress even if this tab missed the original SSE events.
   const [autoOpenedRunning, setAutoOpenedRunning] = useState(false);
   if (runs && !autoOpenedRunning) {
     setAutoOpenedRunning(true);
@@ -1731,11 +1740,8 @@ function WorkflowRunsCard({
   // Persisted per-run traces are authoritative. SSE invalidates snapshots;
   // reconnects and polling repair missed events, including another worker's.
   useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const refresh = () => {
-      if (timer) return;
-      timer = setTimeout(() => { timer = undefined; onChangeRef.current(); }, 200);
-    };
+    // All triggers share the parent's serialized workflow-only refresh.
+    const refresh = () => onChangeRef.current();
     const unsubscribe = subscribeToEmailLogStream(event => {
       if (event.client_id !== clientId || typeof event.workflow_run_id !== "number") return;
       if (event.type === "workflow_run_started" && typeof event.workflow_id === "number") {
@@ -1747,7 +1753,7 @@ function WorkflowRunsCard({
     const poll = setInterval(() => {
       if (runsRef.current?.some(run => run.status === "running" || run.status === "queued")) refresh();
     }, 5000);
-    return () => { unsubscribe(); clearInterval(poll); clearTimeout(timer); };
+    return () => { unsubscribe(); clearInterval(poll); };
   }, [clientId]);
 
   const onRunNow = async (runId: number) => {
