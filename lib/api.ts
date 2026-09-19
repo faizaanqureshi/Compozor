@@ -125,6 +125,9 @@ export interface ChecklistItem {
   description: string | null;
   wrong_attempt_count: number;
   last_wrong_doc_type: string | null;
+  package_id: number | null;
+  package_name: string | null;
+  package_document_id: number | null;
 }
 
 export interface ChecklistSummary {
@@ -143,13 +146,20 @@ export interface ClientWorkflowStatus {
   status: WorkflowRunStatus | null;
 }
 
+export interface ClientPackage {
+  package_id: number;
+  package_name: string;
+}
+
 export interface ClientWithChecklistSummary extends Client {
   checklist_summary: ChecklistSummary;
   workflow_statuses: ClientWorkflowStatus[];
+  assigned_packages: ClientPackage[];
 }
 
 export interface ClientDetail extends Client {
   checklist_items: ChecklistItem[];
+  assigned_package_ids: number[];
 }
 
 export interface DocumentOut {
@@ -942,3 +952,17 @@ export const assignPackageToClients = (
 
 export const unassignPackageFromClient = (packageId: number, clientId: number) =>
   request<void>(`/packages/${packageId}/assignments/${clientId}`, { method: "DELETE" });
+
+// Reconciles one client's already-existing assignment to exactly this
+// document selection (adds what's newly checked, removes what got
+// unchecked) - for editing, as opposed to assignPackageToClients which
+// always adds fresh regardless of what's already there.
+export const updatePackageAssignmentDocuments = (
+  packageId: number,
+  clientId: number,
+  documentIds: number[]
+) =>
+  request<PackageAssignmentWithClient>(
+    `/packages/${packageId}/assignments/${clientId}`,
+    json("PATCH", { document_ids: documentIds })
+  );

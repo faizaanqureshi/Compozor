@@ -23,6 +23,7 @@ import {
   ApiError,
   ChecklistSummary,
   Client,
+  ClientPackage,
   ClientStatus,
   ClientWorkflowStatus,
   EmailLogEntry,
@@ -33,6 +34,7 @@ import {
   listEmailLog,
   listInboxConnections,
   sendChecklistReminder,
+  unassignPackageFromClient,
   unassignWorkflowFromClient,
   watchInboxConnection,
 } from "@/lib/api";
@@ -50,6 +52,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ClientImportModal } from "@/components/client-import-modal";
 import { WorkflowFormDialog } from "@/components/workflow-form-dialog";
 import { PackageFormDialog } from "@/components/package-form-dialog";
@@ -744,13 +747,16 @@ export default function ClientsPage() {
                 <th className="border-b border-border/70 py-2 pr-4 text-[11px] font-medium tracking-wide text-muted-foreground/70">
                   Workflow
                 </th>
+                <th className="border-b border-border/70 py-2 pr-4 text-[11px] font-medium tracking-wide text-muted-foreground/70">
+                  Package(s)
+                </th>
               </tr>
             </thead>
             <tbody>
               {loading &&
                 Array.from({ length: 6 }).map((_, i) => (
                   <tr key={i}>
-                    <td colSpan={7} className="border-b border-border/50 py-3 pr-4">
+                    <td colSpan={8} className="border-b border-border/50 py-3 pr-4">
                       <Skeleton className="h-4 w-full" />
                     </td>
                   </tr>
@@ -829,12 +835,19 @@ export default function ClientsPage() {
                           onRemoved={() => mutateClients()}
                         />
                       </td>
+                      <td className="border-b border-border/50 py-3 pr-4">
+                        <PackageStatusCell
+                          clientId={c.id}
+                          assignedPackages={c.assigned_packages}
+                          onRemoved={() => mutateClients()}
+                        />
+                      </td>
                     </tr>
                   );
                 })}
               {!loading && rows.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="animate-blur-in-sm py-8 text-center text-muted-foreground">
+                  <td colSpan={8} className="animate-blur-in-sm py-8 text-center text-muted-foreground">
                     {clients?.length === 0 ? "No clients yet." : "No clients match your search."}
                   </td>
                 </tr>
@@ -913,6 +926,75 @@ function WorkflowStatusBadge({
         disabled={removing}
         title={`Remove ${workflowStatus.workflow_name}`}
         className="hidden shrink-0 rounded-full p-0.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive group-hover/wf:inline-flex disabled:opacity-50"
+      >
+        <XIcon className="size-3" />
+      </button>
+    </span>
+  );
+}
+
+function PackageStatusCell({
+  clientId,
+  assignedPackages,
+  onRemoved,
+}: {
+  clientId: number;
+  assignedPackages: ClientPackage[];
+  onRemoved: () => void;
+}) {
+  if (assignedPackages.length === 0) {
+    return <span className="text-foreground/40">—</span>;
+  }
+  return (
+    <div className="flex flex-col gap-1">
+      {assignedPackages.map((p) => (
+        <PackageStatusBadge key={p.package_id} clientId={clientId} pkg={p} onRemoved={onRemoved} />
+      ))}
+    </div>
+  );
+}
+
+// Same hover-reveals-remove-"x" pattern as WorkflowStatusBadge - packages
+// don't have a run status to show, so this is just the name plus removal.
+function PackageStatusBadge({
+  clientId,
+  pkg,
+  onRemoved,
+}: {
+  clientId: number;
+  pkg: ClientPackage;
+  onRemoved: () => void;
+}) {
+  const [removing, setRemoving] = useState(false);
+
+  const onRemove = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setRemoving(true);
+    try {
+      await unassignPackageFromClient(pkg.package_id, clientId);
+      onRemoved();
+    } catch {
+      setRemoving(false);
+    }
+  };
+
+  return (
+    <span className="group/pkg inline-flex items-center gap-1.5">
+      <Tooltip>
+        <TooltipTrigger
+          render={<span className="max-w-40 cursor-default truncate text-foreground/80" />}
+        >
+          {pkg.package_name}
+        </TooltipTrigger>
+        <TooltipContent>{pkg.package_name}</TooltipContent>
+      </Tooltip>
+      <button
+        type="button"
+        onClick={onRemove}
+        disabled={removing}
+        title={`Remove ${pkg.package_name}`}
+        className="hidden shrink-0 rounded-full p-0.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive group-hover/pkg:inline-flex disabled:opacity-50"
       >
         <XIcon className="size-3" />
       </button>
