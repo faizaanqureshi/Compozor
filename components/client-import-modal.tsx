@@ -1,9 +1,12 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, Loader2, UploadCloud } from "lucide-react";
 import {
   ApiError,
+  ClientImportParseResult,
+  getClientImport,
+  retryClientImport,
   ClientImportRowIn,
   executeClientImport,
   parseClientImportFile,
@@ -26,7 +29,9 @@ const ACCEPTED_EXTENSIONS = [".xlsx", ".pdf", ".docx"];
 const ACCEPT_ATTR =
   ".xlsx,.pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
-type Stage = "upload" | "processing" | "review" | "importing" | "done";
+type Stage = "upload" | "processing" | "failed" | "review" | "importing" | "done";
+const PAGE_SIZE = 50;
+const JOB_STORAGE_KEY = "client-import-job";
 
 interface EditableRow {
   name: string;
@@ -36,12 +41,14 @@ interface EditableRow {
   is_duplicate: boolean;
   duplicate_reason: string | null;
   included: boolean;
+  source: string | null;
+  email_error: boolean;
 }
 
 function missingFields(row: EditableRow): string[] {
   const missing: string[] = [];
   if (!row.name.trim()) missing.push("name");
-  if (!row.email.trim()) missing.push("email");
+  if (row.email_error || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email.trim())) missing.push("email");
   return missing;
 }
 
@@ -60,9 +67,23 @@ export function ClientImportModal({ onImported }: { onImported: () => void }) {
     createdCount: number;
     skipped: { name: string | null; email: string | null; reason: string }[];
   } | null>(null);
+  const [page, setPage] = useState(0);
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [progress, setProgress] = useState({ completed: 0, total: 0 });
+  const [warnings, setWarnings] = useState<string[]>([]);
+  const [existingEmails, setExistingEmails] = useState<string[]>([]);
+  const requestVersion = useRef(0);
+  const executeKey = useRef<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const reset = () => {
+    requestVersion.current += 1;
+    setPage(0);
+    setProgress({ completed: 0, total: 0 });
+    setJobId(null);
+    setWarnings([]);
+    executeKey.current = null;
+    sessionStorage.removeItem(JOB_STORAGE_KEY);
     setStage("upload");
     setDragActive(false);
     setError(null);
@@ -72,31 +93,73 @@ export function ClientImportModal({ onImported }: { onImported: () => void }) {
 
   const handleOpenChange = (next: boolean) => {
     setOpen(next);
-    if (!next) reset();
+    if (next && stage === "upload") {
+      const saved = sessionStorage.getItem(JOB_STORAGE_KEY);
+      if (saved) { setJobId(saved); setStage("processing"); }
+    }
+    if (!next && !["processing", "importing", "failed"].includes(stage)) reset();
   };
 
-  const handleFile = async (file: File) => {
-    if (!hasValidExtension(file.name)) {
-      setError("Unsupported file type — please upload a .xlsx, .pdf, or .docx file.");
+  const acceptResult = useCallback((result: ClientImportParseResult) => {
+    setProgress({ completed: result.completed_batches, total: result.total_batches });
+    setWarnings(result.warnings);
+    if (result.job_id) {
+      setJobId(result.job_id);
+      sessionStorage.setItem(JOB_STORAGE_KEY, result.job_id);
+    }
+    if (result.status === "processing") { setStage("processing"); return; }
+    if (result.status === "failed") {
+      setError(`${result.failed_batches} section(s) could not be processed. Completed sections are saved.`);
+      setStage("failed");
       return;
     }
+    setExistingEmails(result.existing_emails);
+    setRows(result.rows.map((r) => ({
+      name: r.name ?? "", email: r.email ?? "", phone: r.phone ?? "",
+      company_name: r.company_name ?? "", source: r.source,
+      email_error: r.validation_errors.includes("Invalid email address"),
+      is_duplicate: r.is_duplicate, duplicate_reason: r.duplicate_reason, included: true,
+    })));
+    setPage(0);
+    setStage("review");
+    setError(null);
+  }, []);
+
+  useEffect(() => {
+    if (!jobId || stage !== "processing") return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      try {
+        const result = await getClientImport(jobId);
+        if (cancelled) return;
+        acceptResult(result);
+        if (result.status === "processing") timer = setTimeout(poll, 1500);
+      } catch (e) {
+        if (cancelled) return;
+        setError(e instanceof Error ? e.message : String(e));
+        setStage("failed");
+      }
+    };
+    void poll();
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [jobId, stage, acceptResult]);
+
+  const handleFile = async (file: File) => {
+    if (!hasValidExtension(file.name) || file.size > 20 * 1024 * 1024) {
+      setError("Upload a .xlsx, .pdf, or .docx file up to 20 MB.");
+      return;
+    }
+    const version = ++requestVersion.current;
+    setProgress({ completed: 0, total: 0 });
+    setJobId(null);
     setError(null);
     setStage("processing");
     try {
       const result = await parseClientImportFile(file);
-      setRows(
-        result.rows.map((r) => ({
-          name: r.name ?? "",
-          email: r.email ?? "",
-          phone: r.phone ?? "",
-          company_name: r.company_name ?? "",
-          is_duplicate: r.is_duplicate,
-          duplicate_reason: r.duplicate_reason,
-          included: true,
-        }))
-      );
-      setStage("review");
+      if (requestVersion.current === version) acceptResult(result);
     } catch (e) {
+      if (requestVersion.current !== version) return;
       setError(e instanceof ApiError ? e.message : String(e));
       setStage("upload");
     }
@@ -110,16 +173,27 @@ export function ClientImportModal({ onImported }: { onImported: () => void }) {
   };
 
   const updateRow = (index: number, patch: Partial<EditableRow>) => {
+    executeKey.current = null;
+    if (patch.email !== undefined) patch.email_error = false;
     setRows((prev) => prev.map((r, i) => (i === index ? { ...r, ...patch } : r)));
   };
 
-  const includableCount = rows.filter(
-    (r) => r.included && missingFields(r).length === 0
-  ).length;
+  const reviewRows = useMemo(() => {
+    const existing = new Set(existingEmails.map((email) => email.trim().toLowerCase()));
+    const seen = new Set<string>();
+    return rows.map((row) => {
+      const email = row.email.trim().toLowerCase();
+      const reason = existing.has(email) ? "A client with this email already exists"
+        : seen.has(email) ? "Duplicate email within this file" : null;
+      if (row.included && missingFields(row).length === 0) seen.add(email);
+      return { ...row, is_duplicate: !!reason, duplicate_reason: reason };
+    });
+  }, [rows, existingEmails]);
+  const includableCount = reviewRows.filter((r) => r.included && !r.is_duplicate && missingFields(r).length === 0).length;
 
   const onConfirm = async () => {
-    const payload: ClientImportRowIn[] = rows
-      .filter((r) => r.included && missingFields(r).length === 0)
+    const payload: ClientImportRowIn[] = reviewRows
+      .filter((r) => r.included && !r.is_duplicate && missingFields(r).length === 0)
       .map((r) => ({
         name: r.name.trim(),
         email: r.email.trim(),
@@ -131,7 +205,10 @@ export function ClientImportModal({ onImported }: { onImported: () => void }) {
     setStage("importing");
     setError(null);
     try {
-      const result = await executeClientImport(payload);
+      executeKey.current ??= crypto.randomUUID();
+      const result = await executeClientImport(payload, executeKey.current);
+      sessionStorage.removeItem(JOB_STORAGE_KEY);
+      setPage(0);
       setImportSummary({
         createdCount: result.created.length,
         skipped: result.skipped,
@@ -154,8 +231,8 @@ export function ClientImportModal({ onImported }: { onImported: () => void }) {
         <DialogHeader>
           <DialogTitle>Import clients</DialogTitle>
           <DialogDescription>
-            Upload a client list and we&apos;ll extract the records for you to
-            review before anything is added.
+            Upload a client list. We&apos;ll recognize its columns automatically
+            and show the records for review before anything is added.
           </DialogDescription>
         </DialogHeader>
 
@@ -186,7 +263,7 @@ export function ClientImportModal({ onImported }: { onImported: () => void }) {
                 Drag and drop your client list here, or click to browse
               </p>
               <p className="text-xs text-muted-foreground">
-                Accepts .xlsx, .pdf, and .docx
+                Accepts .xlsx, .pdf, and .docx · Up to 20 MB
               </p>
             </div>
             <input
@@ -207,13 +284,13 @@ export function ClientImportModal({ onImported }: { onImported: () => void }) {
           <div className="flex flex-col items-center justify-center gap-3 py-12 text-center">
             <Loader2 className="size-6 animate-spin text-muted-foreground" />
             <p className="text-sm text-muted-foreground">
-              We&apos;re parsing your client list…
+              {progress.total > 0 ? `Processed ${progress.completed} of ${progress.total} sections…` : "Reading your client list…"}
             </p>
           </div>
         )}
 
         {stage === "review" && (
-          <div className="flex flex-col gap-3">
+          <div className="flex min-w-0 flex-col gap-3">
             <div className="max-h-[45vh] overflow-auto rounded-lg ring-1 ring-foreground/10">
               <table className="w-full min-w-[560px] border-collapse text-sm">
                 <thead className="sticky top-0 bg-card">
@@ -234,7 +311,8 @@ export function ClientImportModal({ onImported }: { onImported: () => void }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((row, i) => {
+                  {reviewRows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map((row, index) => {
+                    const i = page * PAGE_SIZE + index;
                     const missing = missingFields(row);
                     const includable = missing.length === 0;
                     return (
@@ -242,6 +320,7 @@ export function ClientImportModal({ onImported }: { onImported: () => void }) {
                         <td className="border-b border-border/50 py-2 pl-3">
                           <input
                             type="checkbox"
+                            aria-label={`Include row ${i + 1}`}
                             checked={row.included && includable}
                             disabled={!includable}
                             onChange={(e) =>
@@ -252,15 +331,18 @@ export function ClientImportModal({ onImported }: { onImported: () => void }) {
                         </td>
                         <td className="border-b border-border/50 py-1.5 pr-3">
                           <Input
+                            aria-label={`Name, row ${i + 1}`}
                             value={row.name}
                             onChange={(e) => updateRow(i, { name: e.target.value })}
                             aria-invalid={missing.includes("name")}
                             placeholder="Required"
                             className="h-7 text-sm aria-invalid:text-destructive aria-invalid:placeholder:text-destructive/70"
                           />
+                          {row.source && <span className="text-[11px] text-muted-foreground">{row.source}</span>}
                         </td>
                         <td className="border-b border-border/50 py-1.5 pr-3">
                           <Input
+                            aria-label={`Email, row ${i + 1}`}
                             value={row.email}
                             onChange={(e) => updateRow(i, { email: e.target.value })}
                             aria-invalid={missing.includes("email")}
@@ -275,6 +357,7 @@ export function ClientImportModal({ onImported }: { onImported: () => void }) {
                         </td>
                         <td className="border-b border-border/50 py-1.5 pr-3">
                           <Input
+                            aria-label={`Phone, row ${i + 1}`}
                             value={row.phone}
                             onChange={(e) => updateRow(i, { phone: e.target.value })}
                             className="h-7 text-sm"
@@ -282,6 +365,7 @@ export function ClientImportModal({ onImported }: { onImported: () => void }) {
                         </td>
                         <td className="border-b border-border/50 py-1.5 pr-3">
                           <Input
+                            aria-label={`Company, row ${i + 1}`}
                             value={row.company_name}
                             onChange={(e) =>
                               updateRow(i, { company_name: e.target.value })
@@ -302,8 +386,16 @@ export function ClientImportModal({ onImported }: { onImported: () => void }) {
                 </tbody>
               </table>
             </div>
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+              <span>{rows.length} source rows · {includableCount} ready to add</span>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(page - 1)}>Previous</Button>
+                <span>{page + 1} / {Math.max(1, Math.ceil(rows.length / PAGE_SIZE))}</span>
+                <Button variant="outline" size="sm" disabled={(page + 1) * PAGE_SIZE >= rows.length} onClick={() => setPage(page + 1)}>Next</Button>
+              </div>
+            </div>
             <p className="text-xs text-muted-foreground">
-              Rows in red are missing a required field — fill them in or leave them
+              Rows in red need a name or valid email — fill them in or leave them
               unchecked to skip.
             </p>
           </div>
@@ -328,7 +420,7 @@ export function ClientImportModal({ onImported }: { onImported: () => void }) {
                 <span className="font-medium text-foreground/80">
                   Skipped {importSummary.skipped.length}:
                 </span>
-                {importSummary.skipped.map((s, i) => (
+                {importSummary.skipped.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map((s, i) => (
                   <span key={i}>
                     {s.name || s.email || "Unnamed row"} — {s.reason}
                   </span>
@@ -338,6 +430,21 @@ export function ClientImportModal({ onImported }: { onImported: () => void }) {
           </div>
         )}
 
+        {stage === "failed" && <div className="flex flex-wrap gap-2">
+          <Button onClick={async () => {
+            if (!jobId) return;
+            setError(null);
+            try { acceptResult(await retryClientImport(jobId)); }
+            catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+          }}>Retry unfinished sections</Button>
+          <Button variant="outline" onClick={reset}>Start another import</Button>
+        </div>}
+        {stage === "done" && importSummary && importSummary.skipped.length > PAGE_SIZE && <div className="flex items-center gap-2">
+          <Button variant="outline" disabled={page === 0} onClick={() => setPage(page - 1)}>Previous</Button>
+          <span className="text-xs">{page + 1} / {Math.ceil(importSummary.skipped.length / PAGE_SIZE)}</span>
+          <Button variant="outline" disabled={(page + 1) * PAGE_SIZE >= importSummary.skipped.length} onClick={() => setPage(page + 1)}>Next</Button>
+        </div>}
+        {warnings.map((warning) => <p key={warning} className="text-xs text-muted-foreground">{warning}</p>)}
         {error && <p className="text-sm text-destructive">{error}</p>}
 
         {stage === "review" && (

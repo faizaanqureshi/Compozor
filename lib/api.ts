@@ -378,10 +378,19 @@ export interface ImportedClientRow {
   missing_fields: string[];
   is_duplicate: boolean;
   duplicate_reason: string | null;
+  source: string | null;
+  validation_errors: string[];
 }
 
 export interface ClientImportParseResult {
   rows: ImportedClientRow[];
+  status: "completed" | "processing" | "failed";
+  job_id: string | null;
+  completed_batches: number;
+  total_batches: number;
+  failed_batches: number;
+  warnings: string[];
+  existing_emails: string[];
 }
 
 export interface ClientImportRowIn {
@@ -415,10 +424,16 @@ export const parseClientImportFile = (file: File) => {
   });
 };
 
-export const executeClientImport = (clients: ClientImportRowIn[]) =>
+export const getClientImport = (jobId: string) =>
+  request<ClientImportParseResult>(`/clients/import/jobs/${jobId}`);
+
+export const retryClientImport = (jobId: string) =>
+  request<ClientImportParseResult>(`/clients/import/jobs/${jobId}/retry`, { method: "POST" });
+
+export const executeClientImport = (clients: ClientImportRowIn[], idempotencyKey: string) =>
   request<ClientImportExecuteResult>(
     "/clients/import/execute",
-    json("POST", { clients })
+    { ...json("POST", { clients }), headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey } }
   );
 
 export const updateClient = (
