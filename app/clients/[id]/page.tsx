@@ -745,6 +745,43 @@ function ChecklistCard({
   );
 }
 
+const PACKAGE_ROW_VISIBLE_COUNT = 3;
+
+function PackageAssignCard({
+  pkg,
+  clientId,
+  onAssigned,
+}: {
+  pkg: Package;
+  clientId: number;
+  onAssigned: () => void;
+}) {
+  return (
+    <AssignPackageDialog
+      clientIds={[clientId]}
+      initialPackage={pkg}
+      onAssigned={onAssigned}
+      trigger={
+        <button
+          type="button"
+          className="flex h-full flex-col gap-2 rounded-xl border border-border/60 bg-background p-3.5 text-left transition-colors hover:border-accent/40 hover:bg-muted/60"
+        >
+          <span className="text-sm font-medium">{pkg.name}</span>
+          <ul className="flex flex-col gap-0.5 text-xs text-muted-foreground">
+            {pkg.documents.slice(0, 4).map((doc) => (
+              <li key={doc.id} className="truncate">
+                {doc.doc_type_needed}
+                {!doc.is_required && " (optional)"}
+              </li>
+            ))}
+            {pkg.documents.length > 4 && <li>+{pkg.documents.length - 4} more</li>}
+          </ul>
+        </button>
+      }
+    />
+  );
+}
+
 function PackageQuickAssignRow({
   clientId,
   onAssigned,
@@ -754,6 +791,7 @@ function PackageQuickAssignRow({
 }) {
   const [packages, setPackages] = useState<Package[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showMore, setShowMore] = useState(false);
 
   useEffect(() => {
     listPackages()
@@ -761,21 +799,31 @@ function PackageQuickAssignRow({
       .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
   }, []);
 
+  const visible = packages?.slice(0, PACKAGE_ROW_VISIBLE_COUNT) ?? [];
+  const remaining = packages?.slice(PACKAGE_ROW_VISIBLE_COUNT) ?? [];
+
   return (
     <SectionCard
       title="Assign a package"
       subtitle="Click a package to add its documents to this client."
       action={
-        <AssignPackageDialog
-          clientIds={[clientId]}
-          onAssigned={onAssigned}
-          trigger={
-            <Button variant="outline" size="sm">
-              <Plus />
-              Add package to client
+        <div className="flex items-center gap-1.5">
+          {remaining.length > 0 && (
+            <Button variant="ghost" size="sm" onClick={() => setShowMore(true)}>
+              Show more
             </Button>
-          }
-        />
+          )}
+          <AssignPackageDialog
+            clientIds={[clientId]}
+            onAssigned={onAssigned}
+            trigger={
+              <Button variant="outline" size="sm">
+                <Plus />
+                Add package to client
+              </Button>
+            }
+          />
+        </div>
       }
     >
       {packages === null ? (
@@ -791,36 +839,36 @@ function PackageQuickAssignRow({
         </p>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {packages.map((pkg) => (
-            <AssignPackageDialog
-              key={pkg.id}
-              clientIds={[clientId]}
-              initialPackage={pkg}
-              onAssigned={onAssigned}
-              trigger={
-                <button
-                  type="button"
-                  className="flex h-full flex-col gap-2 rounded-xl border border-border/60 bg-background p-3.5 text-left transition-colors hover:border-accent/40 hover:bg-muted/60"
-                >
-                  <span className="text-sm font-medium">{pkg.name}</span>
-                  <ul className="flex flex-col gap-0.5 text-xs text-muted-foreground">
-                    {pkg.documents.slice(0, 4).map((doc) => (
-                      <li key={doc.id} className="truncate">
-                        {doc.doc_type_needed}
-                        {!doc.is_required && " (optional)"}
-                      </li>
-                    ))}
-                    {pkg.documents.length > 4 && (
-                      <li>+{pkg.documents.length - 4} more</li>
-                    )}
-                  </ul>
-                </button>
-              }
-            />
+          {visible.map((pkg) => (
+            <PackageAssignCard key={pkg.id} pkg={pkg} clientId={clientId} onAssigned={onAssigned} />
           ))}
         </div>
       )}
       {error && <p className="text-sm text-destructive">{error}</p>}
+
+      <Dialog open={showMore} onOpenChange={setShowMore}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>More packages</DialogTitle>
+            <DialogDescription>
+              Click a package to add its documents to this client.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid max-h-[60vh] grid-cols-1 gap-3 overflow-y-auto sm:grid-cols-2">
+            {remaining.map((pkg) => (
+              <PackageAssignCard
+                key={pkg.id}
+                pkg={pkg}
+                clientId={clientId}
+                onAssigned={() => {
+                  setShowMore(false);
+                  onAssigned();
+                }}
+              />
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
     </SectionCard>
   );
 }
