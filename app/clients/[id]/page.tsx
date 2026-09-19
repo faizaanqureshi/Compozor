@@ -103,7 +103,7 @@ function SectionCard({
   return (
     <section className="flex flex-col gap-5 rounded-2xl bg-card p-6 ring-1 ring-foreground/10">
       <div className="flex items-start justify-between gap-4">
-        <div className="flex flex-col gap-2">
+        <div className="flex min-w-0 flex-1 flex-col gap-2">
           <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
             {title}
           </h2>
@@ -540,12 +540,6 @@ function DeleteClientButton({
   );
 }
 
-function joinWithAnd(items: string[]): string {
-  if (items.length === 0) return "";
-  if (items.length === 1) return items[0];
-  return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
-}
-
 function ChecklistCard({
   clientId,
   checklist,
@@ -587,9 +581,20 @@ function ChecklistCard({
     : [];
   const packageNames = assignedPackages.map((p) => p.name);
   const otherCount = checklist ? checklist.items.filter((i) => !i.package_name).length : 0;
+  // Comma-separated (not "and") so it reads cleanly with several packages,
+  // capped at 2 shown + a "+N more" tail so the line stays roughly bounded
+  // no matter how many packages a client ends up with.
+  const MAX_PACKAGE_NAMES_SHOWN = 2;
+  const packageLabels = packageNames.map((name) => `${name} Package`);
+  const shownPackageLabels = packageLabels.slice(0, MAX_PACKAGE_NAMES_SHOWN);
+  const hiddenPackageCount = packageLabels.length - shownPackageLabels.length;
+  const packageNamesPart =
+    hiddenPackageCount > 0
+      ? `${shownPackageLabels.join(", ")} +${hiddenPackageCount} more package${hiddenPackageCount === 1 ? "" : "s"}`
+      : shownPackageLabels.join(", ");
   const packageSummary =
     packageNames.length > 0
-      ? `${joinWithAnd(packageNames.map((name) => `${name} Package`))}${
+      ? `${packageNamesPart}${
           otherCount > 0 ? ` and ${otherCount} other requirement${otherCount === 1 ? "" : "s"}` : ""
         }`
       : null;
@@ -652,7 +657,11 @@ function ChecklistCard({
                 </span>
               )}
             </div>
-            {packageSummary && <span>{packageSummary}</span>}
+            {packageSummary && (
+              <span className="block truncate" title={packageSummary}>
+                {packageSummary}
+              </span>
+            )}
           </div>
         )
       }
