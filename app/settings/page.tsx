@@ -12,6 +12,7 @@ import {
   Organization,
   deleteInboxConnection,
   getGmailConnectUrl,
+  getOutlookConnectUrl,
   getMyOrganization,
   listInboxConnections,
   updateMyOrganization,
@@ -224,7 +225,7 @@ function ReminderSection({
   );
 }
 
-function GmailSection({
+function MailboxSection({
   connections,
   error,
   connecting,
@@ -236,13 +237,13 @@ function GmailSection({
   error: string | null;
   connecting: boolean;
   deletingId: number | null;
-  onConnect: () => void;
+  onConnect: (provider: "gmail" | "outlook") => void;
   onDelete: (id: number) => void;
 }) {
   const hasConnections = connections && connections.length > 0;
 
   return (
-    <SectionCard title="Gmail connection">
+    <SectionCard title="Mailbox connections">
       {error && <p className="text-sm text-destructive">{error}</p>}
 
       {connections === null ? (
@@ -259,9 +260,10 @@ function GmailSection({
             >
               <div className="flex flex-wrap items-center gap-2.5">
                 <span className="text-sm font-medium">{conn.email_address}</span>
+                <span className="text-xs text-muted-foreground">{conn.provider === "outlook" ? "Outlook" : "Gmail"}</span>
                 {conn.status === "needs_reauth" ? (
-                  <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-600 dark:text-amber-500">
-                    <span className="size-1.5 rounded-full bg-amber-500" />
+                  <span className="inline-flex items-center gap-1.5 text-xs font-medium text-accent">
+                    <span className="size-1.5 rounded-full bg-accent" />
                     needs reauth
                   </span>
                 ) : (
@@ -287,12 +289,18 @@ function GmailSection({
           style={{ animationDelay: "200ms" }}
         >
           <p className="text-sm text-muted-foreground">No mailbox connected.</p>
-          <Button onClick={onConnect} disabled={connecting}>
-            <GmailIcon className="size-4" />
-            {connecting ? "Redirecting…" : "Connect Gmail"}
-          </Button>
+
         </div>
       )}
+      <div className="flex flex-wrap gap-3">
+        <Button variant="outline" onClick={() => onConnect("gmail")} disabled={connecting}>
+          <GmailIcon className="size-4" />{connecting ? "Redirecting…" : "Connect Gmail"}
+        </Button>
+        <Button variant="outline" onClick={() => onConnect("outlook")} disabled={connecting}>
+          {connecting ? "Redirecting…" : "Connect Outlook"}
+        </Button>
+      </div>
+      <p className="text-xs text-muted-foreground">Outlook supports Microsoft 365 work accounts and personal Outlook or Hotmail accounts.</p>
     </SectionCard>
   );
 }
@@ -357,11 +365,11 @@ export default function SettingsPage() {
     }
   };
 
-  const onConnect = async () => {
+  const onConnect = async (provider: "gmail" | "outlook") => {
     setConnecting(true);
     setGmailError(null);
     try {
-      const { authorization_url } = await getGmailConnectUrl();
+      const { authorization_url } = await (provider === "outlook" ? getOutlookConnectUrl() : getGmailConnectUrl());
       window.location.href = authorization_url;
     } catch (e) {
       setGmailError(e instanceof ApiError ? e.message : String(e));
@@ -408,7 +416,7 @@ export default function SettingsPage() {
           onSaveInterval={onSaveInterval}
         />
 
-        <GmailSection
+        <MailboxSection
           connections={connections ?? null}
           error={gmailErrorMessage}
           connecting={connecting}

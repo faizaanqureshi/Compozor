@@ -183,7 +183,8 @@ export default function ClientsPage() {
   // for kicking that off.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const gmailStatus = params.get("gmail");
+    const provider = params.has("outlook") ? "outlook" : "gmail";
+    const gmailStatus = params.get(provider);
     if (!gmailStatus) return;
 
     const email = params.get("email");
@@ -196,10 +197,10 @@ export default function ClientsPage() {
           const connections = await listInboxConnections();
           const match = email
             ? connections.find(
-                (c) => c.email_address.toLowerCase() === email.toLowerCase()
+                (c) => (c.provider ?? "gmail") === provider && c.email_address.toLowerCase() === email.toLowerCase()
               )
             : connections[0];
-          if (match) await watchInboxConnection(match.id);
+          if (match && provider === "gmail") await watchInboxConnection(match.id);
           setGmailBanner({
             type: "success",
             message: `Connected ${email ?? "your mailbox"}.`,
@@ -213,7 +214,7 @@ export default function ClientsPage() {
       } else if (gmailStatus === "error") {
         setGmailBanner({
           type: "error",
-          message: reason ?? "Failed to connect Gmail.",
+          message: reason ?? "Failed to connect mailbox.",
         });
       }
     })();

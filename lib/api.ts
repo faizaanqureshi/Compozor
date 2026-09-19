@@ -256,6 +256,7 @@ export interface UnmatchedInboundEmail {
 }
 
 export interface InboxConnection {
+  provider: "gmail" | "outlook";
   id: number;
   organization_id: number;
   email_address: string;
@@ -714,6 +715,9 @@ export const createClientFromUnmatchedInboundEmail = (
 
 export const getGmailConnectUrl = () =>
   request<{ authorization_url: string }>("/organizations/me/gmail/connect");
+
+export const getOutlookConnectUrl = () =>
+  request<{ authorization_url: string }>("/organizations/me/outlook/connect", { credentials: "include" });
 
 export const listInboxConnections = () =>
   request<InboxConnection[]>("/inbox-connections");

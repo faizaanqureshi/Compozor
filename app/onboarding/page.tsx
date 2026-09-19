@@ -10,6 +10,7 @@ import {
   InboxConnection,
   Organization,
   getGmailConnectUrl,
+  getOutlookConnectUrl,
   getMyOrganization,
   listInboxConnections,
   updateMyOrganization,
@@ -76,7 +77,7 @@ type Step = "practice" | "gmail" | "automation";
 function StepIndicator({ step }: { step: Step }) {
   const steps: { key: Step; label: string }[] = [
     { key: "practice", label: "Your firm" },
-    { key: "gmail", label: "Connect Gmail" },
+    { key: "gmail", label: "Connect mailbox" },
     { key: "automation", label: "Automation" },
   ];
   const activeIndex = steps.findIndex((s) => s.key === step);
@@ -186,11 +187,11 @@ export default function OnboardingPage() {
     }
   };
 
-  const onConnectGmail = async () => {
+  const onConnectMailbox = async (provider: "gmail" | "outlook") => {
     setConnecting(true);
     setGmailError(null);
     try {
-      const { authorization_url } = await getGmailConnectUrl();
+      const { authorization_url } = await (provider === "outlook" ? getOutlookConnectUrl() : getGmailConnectUrl());
       window.location.href = authorization_url;
     } catch (e) {
       setGmailError(e instanceof ApiError ? e.message : String(e));
@@ -343,9 +344,12 @@ export default function OnboardingPage() {
                   <p className="text-sm text-muted-foreground">
                     No mailbox connected yet.
                   </p>
-                  <Button onClick={onConnectGmail} disabled={connecting}>
+                  <Button onClick={() => onConnectMailbox("gmail")} disabled={connecting}>
                     <GmailIcon className="size-4" />
                     {connecting ? "Redirecting…" : "Connect Gmail"}
+                  </Button>
+                  <Button variant="outline" onClick={() => onConnectMailbox("outlook")} disabled={connecting}>
+                    {connecting ? "Redirecting…" : "Connect Outlook"}
                   </Button>
                 </div>
               </div>

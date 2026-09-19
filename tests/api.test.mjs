@@ -64,3 +64,16 @@ test('client import uploads without manual mapping and polls the returned job', 
     globalThis.fetch = originalFetch;
   }
 });
+
+test('Outlook connect includes browser credentials for its OAuth state cookie', async () => {
+  const originalFetch = globalThis.fetch;
+  const { getOutlookConnectUrl } = await import(apiUrl);
+  globalThis.fetch = async (url, init) => {
+    assert.equal(new URL(url).pathname, '/organizations/me/outlook/connect');
+    assert.equal(init.credentials, 'include');
+    return Response.json({authorization_url: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize'});
+  };
+  try {
+    assert.match((await getOutlookConnectUrl()).authorization_url, /login.microsoftonline.com/);
+  } finally { globalThis.fetch = originalFetch; }
+});
