@@ -26,6 +26,7 @@ import {
   ClientCommitment,
   ClientDetail,
   ClientMemoryNote,
+  ClientWorkflowStatus,
   ClientStatus,
   CommitmentStatus,
   DocumentOut,
@@ -331,6 +332,7 @@ export default function ClientDetailPage({
       <WorkflowRunsCard
         clientId={clientId}
         runs={workflowRuns}
+        workflowStatuses={client?.workflow_statuses ?? []}
         onChange={refreshWorkflowRuns}
       />
 
@@ -1788,10 +1790,12 @@ function groupRunsByWorkflow(runs: WorkflowRun[]): WorkflowGroup[] {
 function WorkflowRunsCard({
   clientId,
   runs,
+  workflowStatuses,
   onChange,
 }: {
   clientId: number;
   runs: WorkflowRun[] | null;
+  workflowStatuses: ClientWorkflowStatus[];
   onChange: () => void;
 }) {
   const [runningId, setRunningId] = useState<number | null>(null);
@@ -1870,6 +1874,12 @@ function WorkflowRunsCard({
   // somewhere to render instead of being dropped until the run finishes.
   const displayGroups = groups;
 
+  // Assigned but never run (checklist isn't complete yet, so dispatch never
+  // fired) has no WorkflowRun at all, so it would never appear in
+  // displayGroups - without this, assigning one looks like it silently did
+  // nothing since nothing changes here.
+  const notStartedWorkflows = workflowStatuses.filter((w) => w.status === null);
+
   return (
     <SectionCard
       title="Workflows"
@@ -1892,70 +1902,89 @@ function WorkflowRunsCard({
           <Skeleton className="h-4 w-2/3" />
           <Skeleton className="h-4 w-1/2" />
         </div>
-      ) : displayGroups.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          No workflow activity yet - a run appears here once an assigned
-          workflow fires (or is ready to run) for this client.
-        </p>
       ) : (
-        <Accordion
-          value={openWorkflowIds}
-          onValueChange={(v) => setOpenWorkflowIds(v as number[])}
-          multiple
-          className="border-t border-border/70"
-        >
-          {displayGroups.map((group) => {
-            const latest = group.runs[0];
-            const isLive = latest?.status === "running";
-            return (
-              <ClientWorkflowActivity
-                key={group.workflowId}
-                workflowId={group.workflowId}
-                name={group.workflowName}
-                archived={group.workflowArchived}
-                runs={group.runs}
-                actions={<>
-                    {!isLive && !group.workflowArchived && latest?.status === "queued" && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => onRunNow(latest.id)}
-                        disabled={runningId === latest.id}
-                      >
-                        {runningId === latest.id ? <Loader2 className="animate-spin" /> : <Play />}
-                        Run now
-                      </Button>
-                    )}
-                    {!isLive && latest?.can_resume && <ResumeWorkflowDialog run={latest} onResumed={onChange} />}
-                    {!isLive &&
-                      !group.workflowArchived &&
-                      latest &&
-                      (latest.status === "completed" ||
-                        latest.status === "needs_review" ||
-                        latest.status === "failed") && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => onRerun(latest.id)}
-                        disabled={runningId === latest.id}
-                      >
-                        {runningId === latest.id ? <Loader2 className="animate-spin" /> : <RotateCcw />}
-                        Rerun
-                      </Button>
-                    )}
-                    {!isLive && latest?.workflow_assignment_id != null && (
-                      <RemoveWorkflowButton
-                        clientId={clientId}
-                        workflowId={group.workflowId}
-                        workflowName={group.workflowName}
-                        onRemoved={onChange}
-                      />
-                    )}
-                </>}
-              />
-            );
-          })}
-        </Accordion>
+        <>
+          {notStartedWorkflows.length > 0 && (
+            <div className="flex flex-col gap-1.5">
+              {notStartedWorkflows.map((w) => (
+                <div key={w.workflow_id} className="flex items-center gap-2 text-sm">
+                  <span className="size-1.5 shrink-0 rounded-full bg-muted-foreground/40" />
+                  <span className="font-medium">{w.workflow_name}</span>
+                  <span className="text-muted-foreground">
+                    Not started - will run once the checklist is complete
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+          {displayGroups.length === 0 ? (
+            notStartedWorkflows.length === 0 && (
+              <p className="text-sm text-muted-foreground">
+                No workflow activity yet - a run appears here once an assigned
+                workflow fires (or is ready to run) for this client.
+              </p>
+            )
+          ) : (
+            <Accordion
+              value={openWorkflowIds}
+              onValueChange={(v) => setOpenWorkflowIds(v as number[])}
+              multiple
+              className="border-t border-border/70"
+            >
+              {displayGroups.map((group) => {
+                const latest = group.runs[0];
+                const isLive = latest?.status === "running";
+                return (
+                  <ClientWorkflowActivity
+                    key={group.workflowId}
+                    workflowId={group.workflowId}
+                    name={group.workflowName}
+                    archived={group.workflowArchived}
+                    runs={group.runs}
+                    actions={<>
+                        {!isLive && !group.workflowArchived && latest?.status === "queued" && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => onRunNow(latest.id)}
+                            disabled={runningId === latest.id}
+                          >
+                            {runningId === latest.id ? <Loader2 className="animate-spin" /> : <Play />}
+                            Run now
+                          </Button>
+                        )}
+                        {!isLive && latest?.can_resume && <ResumeWorkflowDialog run={latest} onResumed={onChange} />}
+                        {!isLive &&
+                          !group.workflowArchived &&
+                          latest &&
+                          (latest.status === "completed" ||
+                            latest.status === "needs_review" ||
+                            latest.status === "failed") && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => onRerun(latest.id)}
+                            disabled={runningId === latest.id}
+                          >
+                            {runningId === latest.id ? <Loader2 className="animate-spin" /> : <RotateCcw />}
+                            Rerun
+                          </Button>
+                        )}
+                        {!isLive && latest?.workflow_assignment_id != null && (
+                          <RemoveWorkflowButton
+                            clientId={clientId}
+                            workflowId={group.workflowId}
+                            workflowName={group.workflowName}
+                            onRemoved={onChange}
+                          />
+                        )}
+                    </>}
+                  />
+                );
+              })}
+            </Accordion>
+          )}
+        </>
       )}
       {error && <p className="text-sm text-destructive">{error}</p>}
     </SectionCard>
