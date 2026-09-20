@@ -610,6 +610,9 @@ export const listEmailLog = (status?: EmailStatus, resolved?: boolean) => {
   return request<EmailLogEntry[]>(`/email-log${qs ? `?${qs}` : ""}`);
 };
 
+export const bulkDeleteEmailLogEntries = (emailLogIds: number[]) =>
+  request<void>("/email-log", json("DELETE", { email_log_ids: emailLogIds }));
+
 export const sendEmailLogEntry = (clientId: number, emailLogId: number) =>
   request<EmailLogEntry>(
     `/clients/${clientId}/email-log/${emailLogId}/send`,

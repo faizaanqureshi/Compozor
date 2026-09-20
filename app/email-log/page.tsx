@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
-import { AlertTriangle, ArrowDownLeft, ArrowLeft, ArrowUpRight, Check, ChevronDown, Info, Loader2, Paperclip, Pencil, Sparkles } from "lucide-react";
+import { AlertTriangle, ArrowDownLeft, ArrowLeft, ArrowUpRight, Check, ChevronDown, Info, Loader2, Paperclip, Pencil, Sparkles, Trash2 } from "lucide-react";
 import { clientsKey, emailLogKey } from "@/lib/swr-keys";
 import {
   ApiError,
@@ -12,6 +12,7 @@ import {
   EmailLogEntry,
   EmailLogStreamEvent,
   EmailStatus,
+  bulkDeleteEmailLogEntries,
   listActiveRuns,
   listClients,
   listEmailLog,
@@ -28,6 +29,7 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -121,6 +123,9 @@ export default function EmailLogPage() {
   const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [bulkSending, setBulkSending] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [bulkDeleteError, setBulkDeleteError] = useState<string | null>(null);
   const [editingEntry, setEditingEntry] = useState<EmailLogEntry | null>(null);
 
   const filterStatus = status === "all" ? undefined : status;
@@ -392,6 +397,29 @@ export default function EmailLogPage() {
     mutateEntries();
   };
 
+  const selectedMessageIds = useMemo(
+    () =>
+      threads
+        .filter((t) => selectedKeys.has(t.key))
+        .flatMap((t) => t.messages.map((m) => m.id)),
+    [threads, selectedKeys]
+  );
+
+  const onBulkDelete = async () => {
+    setBulkDeleting(true);
+    setBulkDeleteError(null);
+    try {
+      await bulkDeleteEmailLogEntries(selectedMessageIds);
+      setConfirmingDelete(false);
+      setSelectedKeys(new Set());
+      mutateEntries();
+    } catch (e) {
+      setBulkDeleteError(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
   return (
     <div className="flex h-[calc(100vh-6.5rem)] w-full flex-col gap-8 md:h-[calc(100vh-3rem)] xl:h-[calc(100vh-5rem)]">
       <div className="flex flex-col gap-2">
@@ -432,9 +460,50 @@ export default function EmailLogPage() {
                 ? "Sending…"
                 : `Send ${selectedDrafts.length} draft${selectedDrafts.length === 1 ? "" : "s"}`}
             </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              className="text-destructive hover:bg-destructive/10"
+              onClick={() => setConfirmingDelete(true)}
+            >
+              <Trash2 />
+              Delete
+            </Button>
           </div>
         )}
       </div>
+
+      <Dialog
+        open={confirmingDelete}
+        onOpenChange={(open) => !bulkDeleting && setConfirmingDelete(open)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              Delete {selectedKeys.size} thread{selectedKeys.size === 1 ? "" : "s"}?
+            </DialogTitle>
+            <DialogDescription>
+              This permanently deletes {selectedKeys.size === 1 ? "this thread" : "these threads"}{" "}
+              from the email log. Any received document, tracked commitment, or memory note that
+              came from one of these messages is kept - it just loses the link back to the email
+              it arrived through. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          {bulkDeleteError && <p className="text-sm text-destructive">{bulkDeleteError}</p>}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setConfirmingDelete(false)}
+              disabled={bulkDeleting}
+            >
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={onBulkDelete} disabled={bulkDeleting}>
+              {bulkDeleting ? "Deleting…" : `Delete ${selectedKeys.size}`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
