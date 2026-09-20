@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
-import { AlertTriangle, ArrowDownLeft, ArrowLeft, ArrowUpRight, Check, ChevronDown, Info, Loader2, Paperclip, Pencil, Sparkles, Trash2 } from "lucide-react";
+import { AlertTriangle, ArchiveRestore, ArrowDownLeft, ArrowLeft, ArrowUpRight, Check, ChevronDown, Info, Loader2, Paperclip, Pencil, Sparkles, Trash2 } from "lucide-react";
 import { clientsKey, emailLogKey } from "@/lib/swr-keys";
 import {
   ApiError,
@@ -14,9 +14,11 @@ import {
   EmailStatus,
   bulkDeleteEmailLogEntries,
   listActiveRuns,
+  listArchivedEmailLog,
   listClients,
   listEmailLog,
   resolveEmailLogEntry,
+  restoreEmailLogEntries,
   sendEmailLogEntry,
   subscribeToEmailLogStream,
   updateEmailLogEntry,
@@ -113,6 +115,137 @@ type Thread = {
   subject: string | null;
   messages: EmailLogEntry[];
 };
+
+// Shared by the main list and the Archive popup - a "thread" is purely a
+// client-side grouping of EmailLogEntry rows sharing a thread_id (or a
+// synthetic single-message key), newest thread first.
+function groupIntoThreads(entries: EmailLogEntry[]): Thread[] {
+  const map = new Map<string, EmailLogEntry[]>();
+  for (const entry of entries) {
+    const key = entry.thread_id ?? `single-${entry.id}`;
+    const list = map.get(key);
+    if (list) list.push(entry);
+    else map.set(key, [entry]);
+  }
+  const result: Thread[] = Array.from(map.entries()).map(([key, messages]) => {
+    const sorted = [...messages].sort((a, b) => a.created_at.localeCompare(b.created_at));
+    const subjectSource = sorted.find((m) => m.subject) ?? sorted[0];
+    return {
+      key,
+      clientId: sorted[0].client_id,
+      subject: normalizeSubject(subjectSource.subject),
+      messages: sorted,
+    };
+  });
+  result.sort((a, b) => {
+    const aLatest = a.messages[a.messages.length - 1].created_at;
+    const bLatest = b.messages[b.messages.length - 1].created_at;
+    return bLatest.localeCompare(aLatest);
+  });
+  return result;
+}
+
+function ArchivedEmailLogDialog({
+  clientsById,
+  onRestored,
+}: {
+  clientsById: Record<number, Client>;
+  onRestored: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [threads, setThreads] = useState<Thread[] | null>(null);
+  const [restoringKey, setRestoringKey] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = () => {
+    listArchivedEmailLog()
+      .then((entries) => setThreads(groupIntoThreads(entries)))
+      .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
+  };
+
+  const openDialog = () => {
+    setOpen(true);
+    setError(null);
+    setThreads(null);
+    refresh();
+  };
+
+  const onRestore = async (thread: Thread) => {
+    setRestoringKey(thread.key);
+    setError(null);
+    try {
+      await restoreEmailLogEntries(thread.messages.map((m) => m.id));
+      refresh();
+      onRestored();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setRestoringKey(null);
+    }
+  };
+
+  return (
+    <>
+      <Button variant="outline" size="sm" onClick={openDialog}>
+        <ArchiveRestore />
+        Archive
+      </Button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Archive</DialogTitle>
+            <DialogDescription>
+              Deleted threads stay here for 7 days before being permanently removed - restore one
+              to bring it back exactly as it was.
+            </DialogDescription>
+          </DialogHeader>
+
+          {threads === null ? (
+            <div className="flex flex-col gap-2">
+              <Skeleton className="h-9 w-full" />
+              <Skeleton className="h-9 w-full" />
+            </div>
+          ) : threads.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nothing archived.</p>
+          ) : (
+            <div className="flex max-h-96 flex-col gap-1 overflow-y-auto">
+              {threads.map((thread) => {
+                const latest = thread.messages[thread.messages.length - 1];
+                return (
+                  <div
+                    key={thread.key}
+                    className="flex items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-sm hover:bg-muted"
+                  >
+                    <span className="flex min-w-0 flex-col">
+                      <span className="truncate font-medium">
+                        {thread.subject ?? "(no subject)"}
+                      </span>
+                      <span className="truncate text-xs text-muted-foreground">
+                        {clientsById[thread.clientId]?.name ?? "Unknown client"} · Deleted{" "}
+                        {latest.archived_at ? formatRelativeTime(latest.archived_at) : ""}
+                      </span>
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="shrink-0"
+                      disabled={restoringKey === thread.key}
+                      onClick={() => onRestore(thread)}
+                    >
+                      {restoringKey === thread.key ? "Restoring…" : "Restore"}
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {error && <p className="text-sm text-destructive">{error}</p>}
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
 
 export default function EmailLogPage() {
   const [status, setStatus] = useState<EmailStatus | "all">("all");
@@ -282,32 +415,7 @@ export default function EmailLogPage() {
     return map;
   }, [clientsData]);
 
-  const threads = useMemo<Thread[]>(() => {
-    if (!entries) return [];
-    const map = new Map<string, EmailLogEntry[]>();
-    for (const entry of entries) {
-      const key = entry.thread_id ?? `single-${entry.id}`;
-      const list = map.get(key);
-      if (list) list.push(entry);
-      else map.set(key, [entry]);
-    }
-    const result: Thread[] = Array.from(map.entries()).map(([key, messages]) => {
-      const sorted = [...messages].sort((a, b) => a.created_at.localeCompare(b.created_at));
-      const subjectSource = sorted.find((m) => m.subject) ?? sorted[0];
-      return {
-        key,
-        clientId: sorted[0].client_id,
-        subject: normalizeSubject(subjectSource.subject),
-        messages: sorted,
-      };
-    });
-    result.sort((a, b) => {
-      const aLatest = a.messages[a.messages.length - 1].created_at;
-      const bLatest = b.messages[b.messages.length - 1].created_at;
-      return bLatest.localeCompare(aLatest);
-    });
-    return result;
-  }, [entries]);
+  const threads = useMemo<Thread[]>(() => (entries ? groupIntoThreads(entries) : []), [entries]);
 
   useEffect(() => {
     if (threads.length === 0) {
@@ -445,32 +553,35 @@ export default function EmailLogPage() {
             </Button>
           ))}
         </div>
-        {selectedKeys.size > 0 && (
-          <div className="flex items-center gap-3 text-sm">
-            <span className="text-muted-foreground">
-              {selectedKeys.size} selected
-            </span>
-            <Button
-              size="sm"
-              variant="secondary"
-              disabled={selectedDrafts.length === 0 || bulkSending}
-              onClick={onBulkSend}
-            >
-              {bulkSending
-                ? "Sending…"
-                : `Send ${selectedDrafts.length} draft${selectedDrafts.length === 1 ? "" : "s"}`}
-            </Button>
-            <Button
-              size="sm"
-              variant="secondary"
-              className="text-destructive hover:bg-destructive/10"
-              onClick={() => setConfirmingDelete(true)}
-            >
-              <Trash2 />
-              Delete
-            </Button>
-          </div>
-        )}
+        <div className="flex items-center gap-3 text-sm">
+          {selectedKeys.size > 0 && (
+            <>
+              <span className="text-muted-foreground">
+                {selectedKeys.size} selected
+              </span>
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={selectedDrafts.length === 0 || bulkSending}
+                onClick={onBulkSend}
+              >
+                {bulkSending
+                  ? "Sending…"
+                  : `Send ${selectedDrafts.length} draft${selectedDrafts.length === 1 ? "" : "s"}`}
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                className="text-destructive hover:bg-destructive/10"
+                onClick={() => setConfirmingDelete(true)}
+              >
+                <Trash2 />
+                Delete
+              </Button>
+            </>
+          )}
+          <ArchivedEmailLogDialog clientsById={clientsById} onRestored={() => mutateEntries()} />
+        </div>
       </div>
 
       <Dialog
@@ -483,10 +594,13 @@ export default function EmailLogPage() {
               Delete {selectedKeys.size} thread{selectedKeys.size === 1 ? "" : "s"}?
             </DialogTitle>
             <DialogDescription>
-              This permanently deletes {selectedKeys.size === 1 ? "this thread" : "these threads"}{" "}
-              from the email log. Any received document, tracked commitment, or memory note that
-              came from one of these messages is kept - it just loses the link back to the email
-              it arrived through. This action cannot be undone.
+              {selectedKeys.size === 1 ? "This thread moves" : "These threads move"} to the
+              Archive and disappear from this list. Restore{" "}
+              {selectedKeys.size === 1 ? "it" : "them"} from the Archive button above within 7
+              days, or {selectedKeys.size === 1 ? "it's" : "they're"} permanently deleted. Any
+              received document, tracked commitment, or memory note that came from one of these
+              messages is kept either way - it just loses the link back to the email it arrived
+              through.
             </DialogDescription>
           </DialogHeader>
           {bulkDeleteError && <p className="text-sm text-destructive">{bulkDeleteError}</p>}
