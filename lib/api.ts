@@ -10,6 +10,19 @@ export class ApiError extends Error {
   }
 }
 
+async function responseError(res: Response): Promise<ApiError> {
+  let message = `${res.status} ${res.statusText}`;
+  try {
+    const body = await res.json();
+    message = typeof body.detail === "string"
+      ? body.detail
+      : JSON.stringify(body.detail ?? body);
+  } catch {
+    // A proxy or storage outage can return a non-JSON error page.
+  }
+  return new ApiError(res.status, message);
+}
+
 // Clerk's browser SDK attaches itself to `window.Clerk`; this is the
 // documented way to grab a session token outside of a React hook, which
 // we need since these functions are called directly from useEffect rather
@@ -53,14 +66,7 @@ async function request<T>(
     throw new ApiError(401, "Not authenticated");
   }
   if (!res.ok) {
-    let message = `${res.status} ${res.statusText}`;
-    try {
-      const body = await res.json();
-      message = body.detail ? JSON.stringify(body.detail) : JSON.stringify(body);
-    } catch {
-      // ignore, use status text
-    }
-    throw new ApiError(res.status, message);
+    throw await responseError(res);
   }
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
@@ -550,7 +556,7 @@ export const downloadClientDocumentsZip = async (clientId: number) => {
 
   const res = await fetch(`${API_BASE_URL}/clients/${clientId}/documents/zip`, { headers });
   if (!res.ok) {
-    throw new ApiError(res.status, `${res.status} ${res.statusText}`);
+    throw await responseError(res);
   }
 
   const disposition = res.headers.get("Content-Disposition") ?? "";

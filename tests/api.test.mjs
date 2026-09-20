@@ -77,3 +77,37 @@ test('Outlook connect includes browser credentials for its OAuth state cookie', 
     assert.match((await getOutlookConnectUrl()).authorization_url, /login.microsoftonline.com/);
   } finally { globalThis.fetch = originalFetch; }
 });
+
+for (const status of [409, 503]) {
+  test(`ZIP download surfaces the server explanation for HTTP ${status}`, async () => {
+    const originalFetch = globalThis.fetch;
+    const { downloadClientDocumentsZip, ApiError } = await import(apiUrl);
+    const detail = 'Cannot download all documents: "report.pdf" is missing from storage. No partial ZIP was downloaded.';
+    globalThis.fetch = async () => Response.json({ detail }, { status });
+    try {
+      await assert.rejects(downloadClientDocumentsZip(1), (error) => {
+        assert.ok(error instanceof ApiError);
+        assert.equal(error.status, status);
+        assert.equal(error.message, detail);
+        return true;
+      });
+    } finally { globalThis.fetch = originalFetch; }
+  });
+}
+
+test('ZIP download handles non-JSON proxy errors', async () => {
+  const originalFetch = globalThis.fetch;
+  const { downloadClientDocumentsZip } = await import(apiUrl);
+  globalThis.fetch = async () => new Response('<html>Unavailable</html>', { status: 502, statusText: 'Bad Gateway' });
+  try {
+    await assert.rejects(downloadClientDocumentsZip(1), { message: '502 Bad Gateway' });
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test('API string errors render without extra JSON quotes', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => Response.json({ detail: 'Reconnect this mailbox in Settings.' }, { status: 409 });
+  try {
+    await assert.rejects(resumeWorkflowRun(1, 2, 'test'), { message: 'Reconnect this mailbox in Settings.' });
+  } finally { globalThis.fetch = originalFetch; }
+});

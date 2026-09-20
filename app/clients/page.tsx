@@ -399,11 +399,11 @@ export default function ClientsPage() {
     e.preventDefault();
     e.stopPropagation();
     setDownloadingId(clientId);
+    setError(null);
     try {
       await downloadClientDocumentsZip(clientId);
-    } catch {
-      // Best-effort - the button just stops spinning; nothing else to show
-      // inline in a single table cell without cluttering the row.
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e));
     } finally {
       setDownloadingId(null);
     }
