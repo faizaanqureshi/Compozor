@@ -467,6 +467,9 @@ export const updateClient = (
 export const deleteClient = (clientId: number) =>
   request<void>(`/clients/${clientId}`, { method: "DELETE" });
 
+export const bulkDeleteClients = (clientIds: number[]) =>
+  request<void>("/clients", json("DELETE", { client_ids: clientIds }));
+
 // ---------- Checklist items ----------
 
 export const listChecklistItems = (clientId: number) =>

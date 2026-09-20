@@ -16,6 +16,7 @@ import {
   Package as PackageIcon,
   Plus,
   Search,
+  Trash2,
   Workflow as WorkflowIcon,
   X as XIcon,
 } from "lucide-react";
@@ -28,6 +29,7 @@ import {
   ClientWorkflowStatus,
   EmailLogEntry,
   WorkflowRunStatus,
+  bulkDeleteClients,
   createClient,
   downloadClientDocumentsZip,
   listClients,
@@ -704,6 +706,13 @@ export default function ClientsPage() {
                   </Button>
                 }
               />
+              <BulkDeleteClientsButton
+                clientIds={Array.from(selectedIds)}
+                onDeleted={() => {
+                  setSelectedIds(new Set());
+                  mutateClients();
+                }}
+              />
               <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>
                 <XIcon />
                 Clear
@@ -1000,6 +1009,70 @@ function PackageStatusBadge({
         <XIcon className="size-3" />
       </button>
     </span>
+  );
+}
+
+function BulkDeleteClientsButton({
+  clientIds,
+  onDeleted,
+}: {
+  clientIds: number[];
+  onDeleted: () => void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const onDelete = async () => {
+    setDeleting(true);
+    setError(null);
+    try {
+      await bulkDeleteClients(clientIds);
+      setConfirming(false);
+      onDeleted();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <>
+      <Button
+        variant="secondary"
+        size="sm"
+        className="text-destructive hover:bg-destructive/10"
+        onClick={() => setConfirming(true)}
+      >
+        <Trash2 />
+        Delete
+      </Button>
+
+      <Dialog open={confirming} onOpenChange={(open) => !deleting && setConfirming(open)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              Delete {clientIds.length} client{clientIds.length === 1 ? "" : "s"}?
+            </DialogTitle>
+            <DialogDescription>
+              This permanently deletes {clientIds.length === 1 ? "this client" : "these clients"}{" "}
+              along with all of their checklist items, uploaded documents, email logs, memory
+              notes, and workflow/package assignments. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirming(false)} disabled={deleting}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={onDelete} disabled={deleting}>
+              {deleting ? "Deleting…" : `Delete ${clientIds.length}`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
