@@ -304,7 +304,8 @@ export default function ClientDetailPage({
       {client !== null && (
         <>
           <div className="flex items-center justify-end gap-1.5">
-            <Button variant="outline" size="sm" onClick={() => setAssignPackageOpen(true)}>
+            <Button variant="outline" onClick={() => setAssignPackageOpen(true)}>
+              <Plus />
               Assign package
             </Button>
             <PackageFormDialog onSaved={refresh} variant="outline" />
