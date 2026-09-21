@@ -22,6 +22,8 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import {
+  MAX_UPLOAD_BATCH_BYTES,
+  MAX_UPLOAD_FILE_BYTES,
   PublicChecklist,
   PublicUploadApiError,
   UploadItemStatusOut,
@@ -43,6 +45,13 @@ const ACCEPT =
   ".pdf,.csv,.tsv,.xls,.xlsx,.xlsm,.ods,.rtf,.docx,.odt,.pptx,.md,.txt,.json,.xml,.html,.htm,.png,.jpg,.jpeg,.gif,.webp,.tif,.tiff,.bmp";
 
 const UPLOAD_CONCURRENCY = 5;
+
+function formatBytes(bytes: number): string {
+  if (bytes >= 1024 * 1024 * 1024) {
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+  }
+  return `${Math.round(bytes / (1024 * 1024))} MB`;
+}
 
 type ClientPhase = "pending" | "uploading" | "uploaded" | "failed";
 
@@ -83,7 +92,7 @@ export default function PublicUploadPage({
   const { token } = use(params);
 
   const [linkInfo, setLinkInfo] = useState<
-    { client_name: string; organization_name: string } | null | "error"
+    { client_name: string; organization_name: string } | null | { error: string }
   >(null);
   const [checklist, setChecklist] = useState<PublicChecklist | null>(null);
   const [queue, setQueue] = useState<QueueEntry[]>([]);
@@ -97,7 +106,14 @@ export default function PublicUploadPage({
   useEffect(() => {
     getUploadLinkInfo(token)
       .then(setLinkInfo)
-      .catch(() => setLinkInfo("error"));
+      .catch((e) =>
+        setLinkInfo({
+          error:
+            e instanceof PublicUploadApiError
+              ? e.message
+              : "This upload link is invalid or has been revoked. Please contact your firm for a new one.",
+        })
+      );
   }, [token]);
 
   const refreshChecklist = useCallback(() => {
@@ -183,9 +199,42 @@ export default function PublicUploadPage({
   const addFiles = useCallback(
     async (files: File[]) => {
       if (files.length === 0) return;
+
+      // Reject obviously invalid files before ever starting a network
+      // request - one oversized file must not block the rest of an
+      // otherwise-valid selection. The backend re-validates both limits
+      // authoritatively (against the real, R2-verified size at completion
+      // time for the per-file cap), this is purely a fast client-side UX
+      // pre-check.
+      let runningTotal = queue
+        .filter((e) => e.clientPhase !== "failed")
+        .reduce((sum, e) => sum + e.file.size, 0);
+      const accepted: File[] = [];
+      const rejected: QueueEntry[] = [];
+      files.forEach((file, i) => {
+        const key = `${Date.now()}-${i}-${file.name}`;
+        const base = { key, file, itemId: null, progress: 0, serverStatus: null, serverError: null } as const;
+        if (file.size > MAX_UPLOAD_FILE_BYTES) {
+          rejected.push({ ...base, clientPhase: "failed",
+            clientError: `Exceeds the ${formatBytes(MAX_UPLOAD_FILE_BYTES)} per-file limit.` });
+          return;
+        }
+        if (runningTotal + file.size > MAX_UPLOAD_BATCH_BYTES) {
+          rejected.push({ ...base, clientPhase: "failed",
+            clientError: `Would exceed the ${formatBytes(MAX_UPLOAD_BATCH_BYTES)} session limit. Remove some files and try again.` });
+          return;
+        }
+        runningTotal += file.size;
+        accepted.push(file);
+      });
+      if (rejected.length > 0) {
+        setQueue((prev) => [...prev, ...rejected]);
+      }
+      if (accepted.length === 0) return;
+
       const id = await ensureBatch();
-      const entries: QueueEntry[] = files.map((file, i) => ({
-        key: `${Date.now()}-${i}-${file.name}`,
+      const entries: QueueEntry[] = accepted.map((file, i) => ({
+        key: `${Date.now()}-ok-${i}-${file.name}`,
         file,
         itemId: null,
         clientPhase: "pending",
@@ -197,7 +246,7 @@ export default function PublicUploadPage({
       setQueue((prev) => [...prev, ...entries]);
       await runWithConcurrency(entries, UPLOAD_CONCURRENCY, (entry) => uploadOne(entry, id));
     },
-    [ensureBatch, uploadOne]
+    [ensureBatch, uploadOne, queue]
   );
 
   const retryOne = useCallback(
@@ -224,6 +273,23 @@ export default function PublicUploadPage({
     startPolling(id);
   }, [token, startPolling]);
 
+  const onUploadMore = useCallback(() => {
+    // Start a genuinely new batch, not reopen the finalized one - the old
+    // batch keeps processing in the background regardless (nothing here
+    // touches its server-side state), we're only resetting what's needed
+    // for a fresh upload session in the UI. The old batch's poll interval
+    // only existed to update queue entries that are about to be cleared
+    // anyway, so it's safe to stop; the checklist keeps refreshing on its
+    // own independent poll either way.
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+    batchIdRef.current = null;
+    setQueue([]);
+    setFinalized(false);
+  }, []);
+
   const isUploading = queue.some((e) => e.clientPhase === "uploading" || e.clientPhase === "pending");
   const hasUnresolvedFailures = queue.some((e) => e.clientPhase === "failed");
   // Centralized completion gate: every file must have actually succeeded -
@@ -244,13 +310,15 @@ export default function PublicUploadPage({
     await finishAndProcess();
   }, [canCompleteUpload, finishAndProcess]);
 
-  if (linkInfo === "error") {
+  if (linkInfo !== null && "error" in linkInfo) {
     return (
       <PublicShell>
-        <p className="text-sm text-destructive">
-          This upload link is invalid or has been revoked. Please contact your
-          accountant for a new one.
-        </p>
+        <div className="flex flex-col gap-1">
+          <h1 className="text-2xl font-thin tracking-tight [font-family:var(--font-denton)] sm:text-3xl">
+            Upload link unavailable
+          </h1>
+          <p className="text-sm text-destructive">{linkInfo.error}</p>
+        </div>
       </PublicShell>
     );
   }
@@ -311,6 +379,9 @@ export default function PublicUploadPage({
             <span className="font-medium text-foreground">Click to upload</span>{" "}
             or drag and drop your documents — as many as you need, all at once.
           </p>
+          <p className="text-xs text-muted-foreground/70">
+            Up to {formatBytes(MAX_UPLOAD_FILE_BYTES)} per file · {formatBytes(MAX_UPLOAD_BATCH_BYTES)} per upload
+          </p>
         </div>
       )}
 
@@ -349,7 +420,7 @@ export default function PublicUploadPage({
                     <Loader2 className="animate-spin" /> Uploading…
                   </>
                 ) : (
-                  "Done — start processing"
+                  "Finish upload"
                 )}
               </Button>
               {!isUploading && hasUnresolvedFailures && (
@@ -361,10 +432,18 @@ export default function PublicUploadPage({
           )}
 
           {finalized && (
-            <p className="rounded-lg border border-border/60 bg-muted/30 p-3 text-sm text-muted-foreground">
-              Your files have been securely uploaded. Compozor will continue
-              processing them automatically — you can close this page.
-            </p>
+            <div className="flex flex-col gap-2 rounded-lg border border-border/60 bg-muted/30 p-3">
+              <p className="text-sm font-medium text-foreground">
+                Files uploaded successfully
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Your documents are being processed. You can close this page,
+                or upload more documents if you forgot something.
+              </p>
+              <Button variant="outline" size="sm" onClick={onUploadMore} className="self-start">
+                Upload more documents
+              </Button>
+            </div>
           )}
         </div>
       )}
@@ -404,23 +483,28 @@ function QueueRow({
   const isTerminalFail = entry.clientPhase === "failed" || entry.serverStatus === "failed";
   const isDone = entry.serverStatus === "completed";
   return (
-    <div className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm">
-      <span className="min-w-0 flex-1 truncate">{entry.file.name}</span>
-      {entry.clientPhase === "uploading" && (
-        <span className="w-24 shrink-0">
-          <Progress value={entry.progress * 100} size="sm" />
-        </span>
-      )}
-      <StatusBadge label={label} isTerminalFail={isTerminalFail} isDone={isDone} />
-      {entry.clientPhase === "failed" && (
-        <>
-          <Button variant="ghost" size="icon-sm" onClick={onRetry} aria-label="Retry">
-            <RotateCcw className="size-3.5" />
-          </Button>
-          <Button variant="ghost" size="icon-sm" onClick={onRemove} aria-label="Remove">
-            <Trash2 className="size-3.5" />
-          </Button>
-        </>
+    <div className="flex flex-col gap-0.5 rounded-md px-2 py-1.5 text-sm">
+      <div className="flex items-center gap-2">
+        <span className="min-w-0 flex-1 truncate">{entry.file.name}</span>
+        {entry.clientPhase === "uploading" && (
+          <span className="w-24 shrink-0">
+            <Progress value={entry.progress * 100} size="sm" />
+          </span>
+        )}
+        <StatusBadge label={label} isTerminalFail={isTerminalFail} isDone={isDone} />
+        {entry.clientPhase === "failed" && (
+          <>
+            <Button variant="ghost" size="icon-sm" onClick={onRetry} aria-label="Retry">
+              <RotateCcw className="size-3.5" />
+            </Button>
+            <Button variant="ghost" size="icon-sm" onClick={onRemove} aria-label="Remove">
+              <Trash2 className="size-3.5" />
+            </Button>
+          </>
+        )}
+      </div>
+      {entry.clientPhase === "failed" && entry.clientError && (
+        <p className="pl-0.5 text-xs text-destructive">{entry.clientError}</p>
       )}
     </div>
   );

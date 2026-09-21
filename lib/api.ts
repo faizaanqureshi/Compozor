@@ -192,14 +192,21 @@ export interface DocumentUploadResult {
 
 export interface ClientUploadLink {
   is_active: boolean;
+  expires_at: string;
   created_at: string;
   last_used_at: string | null;
+  // The client's current, usable upload URL - present whenever the link is
+  // active and not expired, on every GET (not just right after
+  // create/regenerate), so it survives a page reload/new session. Absent
+  // for an expired or revoked link, even though the token may technically
+  // still be recoverable server-side - an unusable link is never surfaced
+  // here to copy/send.
+  upload_url: string | null;
 }
 
-export interface ClientUploadLinkCreated extends ClientUploadLink {
-  // Only present on the response right after create/regenerate - the
-  // backend never returns the raw token again after this.
-  upload_url: string;
+export interface UploadLinkEvent {
+  event: string;
+  created_at: string;
 }
 
 export interface EmailReplyResult {
@@ -602,8 +609,11 @@ export const downloadClientDocumentsZip = async (clientId: number) => {
 export const getClientUploadLink = (clientId: number) =>
   request<ClientUploadLink | null>(`/clients/${clientId}/upload-link`);
 
+export const listClientUploadLinkEvents = (clientId: number) =>
+  request<UploadLinkEvent[]>(`/clients/${clientId}/upload-link/events`);
+
 export const regenerateClientUploadLink = (clientId: number) =>
-  request<ClientUploadLinkCreated>(`/clients/${clientId}/upload-link/regenerate`, {
+  request<ClientUploadLink>(`/clients/${clientId}/upload-link/regenerate`, {
     method: "POST",
   });
 

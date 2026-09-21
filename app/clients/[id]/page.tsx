@@ -36,6 +36,7 @@ import {
   DocumentUploadResult,
   EmailThread,
   Package,
+  UploadLinkEvent,
   WorkflowRun,
   ClientWorkflowAssignment,
   listClientWorkflowAssignments,
@@ -50,6 +51,7 @@ import {
   listClientCommitments,
   listClientDocuments,
   listClientMemoryNotes,
+  listClientUploadLinkEvents,
   listClientWorkflowRuns,
   listEmailThreads,
   listPackages,
@@ -1786,18 +1788,23 @@ function DocumentVaultCard({
 }
 
 
+const UPLOAD_LINK_EVENT_LABELS: Record<string, string> = {
+  created: "Link created",
+  auto_created: "Link created automatically (document request)",
+  regenerated: "Link regenerated",
+  revoked: "Link revoked",
+  expiry_extended: "Expiry extended (document request)",
+};
+
 function UploadLinkCard({ clientId }: { clientId: number }) {
   const [link, setLink] = useState<ClientUploadLink | null>(null);
   const [loaded, setLoaded] = useState(false);
-  // Only populated right after a create/regenerate response - the backend
-  // never returns the raw token again after that, so once the user
-  // navigates away (or this unmounts) it can only be replaced, not viewed.
-  const [revealedUrl, setRevealedUrl] = useState<string | null>(null);
+  const [events, setEvents] = useState<UploadLinkEvent[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const refresh = useCallback(() => {
     getClientUploadLink(clientId)
       .then((res) => {
         setLink(res);
@@ -1807,7 +1814,10 @@ function UploadLinkCard({ clientId }: { clientId: number }) {
         setError(e instanceof ApiError ? e.message : String(e));
         setLoaded(true);
       });
+    listClientUploadLinkEvents(clientId).then(setEvents).catch(() => {});
   }, [clientId]);
+
+  useEffect(refresh, [refresh]);
 
   const onRegenerate = async () => {
     setBusy(true);
@@ -1815,8 +1825,8 @@ function UploadLinkCard({ clientId }: { clientId: number }) {
     setCopied(false);
     try {
       const res = await regenerateClientUploadLink(clientId);
-      setLink({ is_active: res.is_active, created_at: res.created_at, last_used_at: res.last_used_at });
-      setRevealedUrl(res.upload_url);
+      setLink(res);
+      listClientUploadLinkEvents(clientId).then(setEvents).catch(() => {});
     } catch (e) {
       setError(e instanceof ApiError ? e.message : String(e));
     } finally {
@@ -1825,9 +1835,9 @@ function UploadLinkCard({ clientId }: { clientId: number }) {
   };
 
   const onCopy = async () => {
-    if (!revealedUrl) return;
+    if (!link?.upload_url) return;
     try {
-      await navigator.clipboard.writeText(revealedUrl);
+      await navigator.clipboard.writeText(link.upload_url);
       setCopied(true);
     } catch {
       setError("Couldn't copy to clipboard.");
@@ -1837,35 +1847,33 @@ function UploadLinkCard({ clientId }: { clientId: number }) {
   return (
     <SectionCard
       title="Client upload link"
-      subtitle="A permanent link this client can use to securely upload documents — no Compozor account needed."
+      subtitle="A secure link this client can use to upload documents — no Compozor account needed. Reused automatically when Compozor sends a document request, and stays valid until its expiry below."
     >
       {!loaded ? (
         <Skeleton className="h-9 w-full" />
       ) : (
         <div className="flex flex-col gap-3">
-          {revealedUrl && (
+          {link?.upload_url ? (
             <div className="flex flex-col gap-1.5 rounded-lg border border-border/60 bg-muted/30 p-3">
-              <p className="text-xs text-muted-foreground">
-                Copy this link now — for security it won&apos;t be shown again after you leave this page.
-              </p>
               <div className="flex items-center gap-2">
-                <code className="min-w-0 flex-1 truncate text-sm">{revealedUrl}</code>
+                <code className="min-w-0 flex-1 truncate text-sm">{link.upload_url}</code>
                 <Button variant="outline" size="sm" onClick={onCopy}>
                   {copied ? <CheckCircle2 className="text-accent" /> : <Copy />}
                   {copied ? "Copied" : "Copy"}
                 </Button>
               </div>
+              <p className="text-xs text-muted-foreground">
+                Expires{" "}
+                {new Date(link.expires_at).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })}
+                {" · "}Last used: {link.last_used_at ? new Date(link.last_used_at).toLocaleString() : "never"}
+              </p>
             </div>
-          )}
-
-          {link && !revealedUrl && (
-            <p className="text-sm text-muted-foreground">
-              Upload link is active. Last used:{" "}
-              {link.last_used_at ? new Date(link.last_used_at).toLocaleString() : "never"}.
+          ) : link ? (
+            <p className="text-sm text-destructive">
+              {link.is_active ? "Upload link has expired." : "Upload link has been revoked."}{" "}
+              Regenerate it to give the client a new one.
             </p>
-          )}
-
-          {!link && !revealedUrl && (
+          ) : (
             <p className="text-sm text-muted-foreground">No upload link has been created yet.</p>
           )}
 
@@ -1881,6 +1889,22 @@ function UploadLinkCard({ clientId }: { clientId: number }) {
             {busy ? <Loader2 className="animate-spin" /> : <RotateCcw />}
             {link ? "Regenerate link" : "Create link"}
           </Button>
+
+          {events && events.length > 0 && (
+            <div className="flex flex-col gap-1.5 border-t border-border/60 pt-3">
+              <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                Link activity
+              </h3>
+              <ul className="flex flex-col gap-1 text-xs text-muted-foreground">
+                {events.map((e, i) => (
+                  <li key={i} className="flex items-center justify-between gap-2">
+                    <span>{UPLOAD_LINK_EVENT_LABELS[e.event] ?? e.event}</span>
+                    <span className="shrink-0">{new Date(e.created_at).toLocaleString()}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
     </SectionCard>

@@ -393,6 +393,7 @@ export default function UnmatchedEmailsPage() {
         </h1>
         <p className="text-sm text-muted-foreground">
           Inbound mail whose sender didn&apos;t match any client profile.
+          Unmatched emails are automatically removed after 14 days.
         </p>
       </div>
 
