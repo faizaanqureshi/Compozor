@@ -119,6 +119,7 @@ export interface Client {
   status: ClientStatus;
   last_reminder_sent_at: string | null;
   created_at: string;
+  archived_at: string | null;
 }
 
 export interface ChecklistItem {
@@ -166,6 +167,7 @@ export interface ClientWithChecklistSummary extends Client {
 export interface ClientDetail extends Client {
   checklist_items: ChecklistItem[];
   assigned_package_ids: number[];
+  workflow_statuses: ClientWorkflowStatus[];
 }
 
 export interface DocumentOut {
@@ -186,6 +188,18 @@ export interface DocumentUploadResult {
   checklist_item_id: number | null;
   checklist_item_status: ChecklistItemStatus | null;
   draft_email_created: boolean;
+}
+
+export interface ClientUploadLink {
+  is_active: boolean;
+  created_at: string;
+  last_used_at: string | null;
+}
+
+export interface ClientUploadLinkCreated extends ClientUploadLink {
+  // Only present on the response right after create/regenerate - the
+  // backend never returns the raw token again after this.
+  upload_url: string;
 }
 
 export interface EmailReplyResult {
@@ -226,6 +240,7 @@ export interface EmailLogEntry {
   safety_checks?: { passed: boolean; category: string; reason?: string | null } | null;
   tool_trajectory: ToolTrajectoryStep[] | null;
   created_at: string;
+  archived_at: string | null;
   documents: DocumentOut[];
 }
 
@@ -467,6 +482,16 @@ export const updateClient = (
 export const deleteClient = (clientId: number) =>
   request<void>(`/clients/${clientId}`, { method: "DELETE" });
 
+export const bulkDeleteClients = (clientIds: number[]) =>
+  request<void>("/clients", json("DELETE", { client_ids: clientIds }));
+
+// "Delete" above never actually removes anything - it archives. These
+// power the clients page's Archive popup (list + per-row undo).
+export const listArchivedClients = () => request<Client[]>("/clients/archived");
+
+export const restoreClients = (clientIds: number[]) =>
+  request<Client[]>("/clients/restore", json("POST", { client_ids: clientIds }));
+
 // ---------- Checklist items ----------
 
 export const listChecklistItems = (clientId: number) =>
@@ -572,6 +597,21 @@ export const downloadClientDocumentsZip = async (clientId: number) => {
   URL.revokeObjectURL(url);
 };
 
+// ---------- Client upload link ----------
+
+export const getClientUploadLink = (clientId: number) =>
+  request<ClientUploadLink | null>(`/clients/${clientId}/upload-link`);
+
+export const regenerateClientUploadLink = (clientId: number) =>
+  request<ClientUploadLinkCreated>(`/clients/${clientId}/upload-link/regenerate`, {
+    method: "POST",
+  });
+
+export const revokeClientUploadLink = (clientId: number) =>
+  request<ClientUploadLink>(`/clients/${clientId}/upload-link/revoke`, {
+    method: "POST",
+  });
+
 // ---------- Email replies ----------
 
 export const submitEmailReply = (
@@ -606,6 +646,16 @@ export const listEmailLog = (status?: EmailStatus, resolved?: boolean) => {
   const qs = params.toString();
   return request<EmailLogEntry[]>(`/email-log${qs ? `?${qs}` : ""}`);
 };
+
+export const bulkDeleteEmailLogEntries = (emailLogIds: number[]) =>
+  request<void>("/email-log", json("DELETE", { email_log_ids: emailLogIds }));
+
+// "Delete" above never actually removes anything - it archives. These
+// power the Email Log page's Archive popup (list + per-thread undo).
+export const listArchivedEmailLog = () => request<EmailLogEntry[]>("/email-log/archived");
+
+export const restoreEmailLogEntries = (emailLogIds: number[]) =>
+  request<EmailLogEntry[]>("/email-log/restore", json("POST", { email_log_ids: emailLogIds }));
 
 export const sendEmailLogEntry = (clientId: number, emailLogId: number) =>
   request<EmailLogEntry>(
@@ -796,7 +846,22 @@ export type WorkflowRunStatus =
   | "failed"
   | "needs_review";
 
+export interface WorkflowWorkSample {
+  id: number;
+  filename: string;
+  size_bytes: number;
+  sha256: string;
+  created_at: string;
+}
+
+export const uploadWorkflowWorkSample = (file: File) => {
+  const body = new FormData();
+  body.append("file", file);
+  return request<WorkflowWorkSample>("/workflows/work-samples", { method: "POST", body });
+};
+
 export interface Workflow {
+  work_samples?: WorkflowWorkSample[];
   id: number;
   organization_id: number;
   name: string;
@@ -844,7 +909,7 @@ export interface WorkflowRun {
   details_loaded?: boolean;
   execution_plan: { objective: string; steps: string[]; criteria: { id: string; requirement: string }[] } | null;
   step_results: Record<string, string>;
-  verification: { passed: boolean; checks: { criterion_id: string; passed: boolean; evidence: string }[]; issues: string[]; method: string } | null;
+  verification: { passed: boolean; checks: { criterion_id: string; passed: boolean; evidence: string }[]; issues: string[]; warnings?: string[]; method: string } | null;
   can_resume: boolean;
   tool_trajectory: { round?: number; tool: string; arguments?: Record<string, unknown>; result?: string; started_at?: string; completed_at?: string }[] | null;
   id: number;
@@ -858,12 +923,14 @@ export interface WorkflowRun {
   summary: string | null;
   review_reason: string | null;
   outputs: WorkflowRunOutput[];
+  draft_outputs?: WorkflowRunOutput[];
   started_at: string | null;
   completed_at: string | null;
   created_at: string;
 }
 
 export interface WorkflowBuilderResult {
+  warnings: string[];
   suggested_name: string;
   instructions: string;
 }
@@ -871,8 +938,8 @@ export interface WorkflowBuilderResult {
 // Side-effect-free: turns a freeform description into a suggested
 // name/instructions for an editable preview - nothing is created until
 // the caller separately calls createWorkflow once a human accepts/edits it.
-export const buildWorkflowInstructions = (description: string) =>
-  request<WorkflowBuilderResult>("/workflows/builder", json("POST", { description }));
+export const buildWorkflowInstructions = (description: string, workSampleIds: number[] = []) =>
+  request<WorkflowBuilderResult>("/workflows/builder", json("POST", { description, work_sample_ids: workSampleIds }));
 
 export const listWorkflows = () => request<Workflow[]>("/workflows");
 
@@ -883,11 +950,12 @@ export const createWorkflow = (input: {
   name: string;
   instructions: string;
   execution_mode?: WorkflowExecutionMode;
+  work_sample_ids?: number[];
 }) => request<Workflow>("/workflows", json("POST", input));
 
 export const updateWorkflow = (
   workflowId: number,
-  input: { name?: string; instructions?: string; execution_mode?: WorkflowExecutionMode }
+  input: { name?: string; instructions?: string; execution_mode?: WorkflowExecutionMode; work_sample_ids?: number[] }
 ) => request<Workflow>(`/workflows/${workflowId}`, json("PATCH", input));
 
 export const archiveWorkflow = (workflowId: number) =>

@@ -7,6 +7,7 @@ import useSWR from "swr";
 import { clientsKey, emailLogKey } from "@/lib/swr-keys";
 import {
   AlertTriangle,
+  ArchiveRestore,
   ArrowUp,
   Check,
   ChevronRight,
@@ -16,6 +17,7 @@ import {
   Package as PackageIcon,
   Plus,
   Search,
+  Trash2,
   Workflow as WorkflowIcon,
   X as XIcon,
 } from "lucide-react";
@@ -28,11 +30,14 @@ import {
   ClientWorkflowStatus,
   EmailLogEntry,
   WorkflowRunStatus,
+  bulkDeleteClients,
   createClient,
   downloadClientDocumentsZip,
+  listArchivedClients,
   listClients,
   listEmailLog,
   listInboxConnections,
+  restoreClients,
   sendChecklistReminder,
   unassignPackageFromClient,
   unassignWorkflowFromClient,
@@ -466,6 +471,7 @@ export default function ClientsPage() {
         <WorkflowFormDialog onSaved={() => {}} variant="outline" />
         <PackageFormDialog onSaved={() => {}} variant="outline" />
         <ClientImportModal onImported={() => mutateClients()} />
+        <ArchivedClientsDialog onRestored={() => mutateClients()} />
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger render={<Button />}>
             <Plus />
@@ -579,7 +585,7 @@ export default function ClientsPage() {
                     onKeyDown={(e) => {
                       if (e.key === "Enter") router.push(`/clients/${client.id}`);
                     }}
-                    style={{ animationDelay: `${Math.min(i, 6) * 40}ms` }}
+                    style={{ animationDelay: `${Math.min(i, 10) * 25}ms` }}
                     className="group/waiting flex cursor-pointer animate-blur-in-sm items-center justify-between gap-4 rounded-xl border border-amber-500/20 bg-amber-500/[0.04] px-4 py-3.5 transition-colors hover:bg-amber-500/[0.07]"
                   >
                     <div className="flex flex-col gap-1.5">
@@ -653,7 +659,7 @@ export default function ClientsPage() {
                   expanded={expandedClients.has(group.clientId)}
                   onToggle={() => toggleExpanded(group.clientId)}
                   clientName={clientsById[group.clientId]?.name ?? "Unknown client"}
-                  delayMs={60 + Math.min(i, 6) * 40}
+                  delayMs={Math.min(i, 10) * 25}
                 />
               ))}
             {!loading && recentActivity.length === 0 && (
@@ -703,6 +709,13 @@ export default function ClientsPage() {
                     Assign workflow
                   </Button>
                 }
+              />
+              <BulkDeleteClientsButton
+                clientIds={Array.from(selectedIds)}
+                onDeleted={() => {
+                  setSelectedIds(new Set());
+                  mutateClients();
+                }}
               />
               <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>
                 <XIcon />
@@ -764,6 +777,7 @@ export default function ClientsPage() {
                 ))}
               {!loading &&
                 rows.map((c, i) => {
+                  const revealStyle = { animationDelay: `${Math.min(i, 10) * 25}ms` };
                   const summary = c.checklist_summary;
                   const activity = lastActivity[c.id];
                   const workflow = deriveWorkflowStatus(c, summary);
@@ -771,77 +785,92 @@ export default function ClientsPage() {
                     <tr
                       key={c.id}
                       className={cn(
-                        "group/row animate-blur-in-sm",
+                        "group/row",
                         selectedIds.has(c.id) && "bg-accent/[0.05]"
                       )}
-                      style={{ animationDelay: `${120 + Math.min(i, 10) * 25}ms` }}
                     >
                       <td className="border-b border-border/50 py-3 pr-2">
-                        <input
-                          type="checkbox"
-                          aria-label={`Select ${c.name}`}
-                          className="size-4 rounded border-input accent-primary"
-                          checked={selectedIds.has(c.id)}
-                          onChange={() => toggleSelected(c.id)}
-                        />
+                        <div className="animate-blur-in-sm motion-reduce:animate-none" style={revealStyle}>
+                          <input
+                            type="checkbox"
+                            aria-label={`Select ${c.name}`}
+                            className="size-4 rounded border-input accent-primary"
+                            checked={selectedIds.has(c.id)}
+                            onChange={() => toggleSelected(c.id)}
+                          />
+                        </div>
                       </td>
                       <td className="border-b border-border/50 py-3 pr-4">
-                        <Link
-                          href={`/clients/${c.id}`}
-                          className="font-thin underline-offset-4 [font-family:var(--font-denton)] group-hover/row:underline"
-                        >
-                          {c.name}
-                        </Link>
+                        <div className="animate-blur-in-sm motion-reduce:animate-none" style={revealStyle}>
+                          <Link
+                            href={`/clients/${c.id}`}
+                            className="font-thin underline-offset-4 [font-family:var(--font-denton)] group-hover/row:underline"
+                          >
+                            {c.name}
+                          </Link>
+                        </div>
                       </td>
                       <td className="border-b border-border/50 py-3 pr-4 text-foreground/70">
-                        {c.email}
+                        <div className="animate-blur-in-sm motion-reduce:animate-none" style={revealStyle}>
+                          {c.email}
+                        </div>
                       </td>
                       <td className="border-b border-border/50 py-3 pr-4 text-foreground/70">
-                        <span className="inline-flex items-center gap-1.5">
-                          {summary
-                            ? summary.total > 0
-                              ? `${summary.received} of ${summary.total} received`
-                              : "No checklist"
-                            : "—"}
-                          {summary && summary.received > 0 && (
-                            <button
-                              type="button"
-                              title="Download documents (.zip)"
-                              disabled={downloadingId === c.id}
-                              onClick={(e) => onDownloadZip(e, c.id)}
-                              className="text-muted-foreground/50 transition-colors hover:text-foreground disabled:opacity-50"
-                            >
-                              {downloadingId === c.id ? (
-                                <Loader2 className="size-3.5 animate-spin" />
-                              ) : (
-                                <Download className="size-3.5" />
-                              )}
-                            </button>
-                          )}
-                        </span>
+                        <div className="animate-blur-in-sm motion-reduce:animate-none" style={revealStyle}>
+                          <span className="inline-flex items-center gap-1.5">
+                            {summary
+                              ? summary.total > 0
+                                ? `${summary.received} of ${summary.total} received`
+                                : "No checklist"
+                              : "—"}
+                            {summary && summary.received > 0 && (
+                              <button
+                                type="button"
+                                title="Download documents (.zip)"
+                                disabled={downloadingId === c.id}
+                                onClick={(e) => onDownloadZip(e, c.id)}
+                                className="text-muted-foreground/50 transition-colors hover:text-foreground disabled:opacity-50"
+                              >
+                                {downloadingId === c.id ? (
+                                  <Loader2 className="size-3.5 animate-spin" />
+                                ) : (
+                                  <Download className="size-3.5" />
+                                )}
+                              </button>
+                            )}
+                          </span>
+                        </div>
                       </td>
                       <td className="border-b border-border/50 py-3 pr-4 text-foreground/70">
-                        {activity ? formatRelativeTime(activity) : "No activity yet"}
+                        <div className="animate-blur-in-sm motion-reduce:animate-none" style={revealStyle}>
+                          {activity ? formatRelativeTime(activity) : "No activity yet"}
+                        </div>
                       </td>
                       <td className="border-b border-border/50 py-3 pr-4">
-                        <span className="inline-flex items-center gap-2">
-                          <span className={cn("size-1.5 rounded-full", toneClasses[workflow.tone])} />
-                          <span className="text-foreground/80">{workflow.label}</span>
-                        </span>
+                        <div className="animate-blur-in-sm motion-reduce:animate-none" style={revealStyle}>
+                          <span className="inline-flex items-center gap-2">
+                            <span className={cn("size-1.5 rounded-full", toneClasses[workflow.tone])} />
+                            <span className="text-foreground/80">{workflow.label}</span>
+                          </span>
+                        </div>
                       </td>
                       <td className="border-b border-border/50 py-3 pr-4">
-                        <WorkflowStatusCell
-                          clientId={c.id}
-                          workflowStatuses={c.workflow_statuses}
-                          onRemoved={() => mutateClients()}
-                        />
+                        <div className="animate-blur-in-sm motion-reduce:animate-none" style={revealStyle}>
+                          <WorkflowStatusCell
+                            clientId={c.id}
+                            workflowStatuses={c.workflow_statuses}
+                            onRemoved={() => mutateClients()}
+                          />
+                        </div>
                       </td>
                       <td className="border-b border-border/50 py-3 pr-4">
-                        <PackageStatusCell
-                          clientId={c.id}
-                          assignedPackages={c.assigned_packages}
-                          onRemoved={() => mutateClients()}
-                        />
+                        <div className="animate-blur-in-sm motion-reduce:animate-none" style={revealStyle}>
+                          <PackageStatusCell
+                            clientId={c.id}
+                            assignedPackages={c.assigned_packages}
+                            onRemoved={() => mutateClients()}
+                          />
+                        </div>
                       </td>
                     </tr>
                   );
@@ -1000,6 +1029,163 @@ function PackageStatusBadge({
         <XIcon className="size-3" />
       </button>
     </span>
+  );
+}
+
+function BulkDeleteClientsButton({
+  clientIds,
+  onDeleted,
+}: {
+  clientIds: number[];
+  onDeleted: () => void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const onDelete = async () => {
+    setDeleting(true);
+    setError(null);
+    try {
+      await bulkDeleteClients(clientIds);
+      setConfirming(false);
+      onDeleted();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <>
+      <Button
+        variant="secondary"
+        size="sm"
+        className="text-destructive hover:bg-destructive/10"
+        onClick={() => setConfirming(true)}
+      >
+        <Trash2 />
+        Delete
+      </Button>
+
+      <Dialog open={confirming} onOpenChange={(open) => !deleting && setConfirming(open)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              Delete {clientIds.length} client{clientIds.length === 1 ? "" : "s"}?
+            </DialogTitle>
+            <DialogDescription>
+              {clientIds.length === 1 ? "This client moves" : "These clients move"} to the Archive
+              and disappear from this list. Restore{clientIds.length === 1 ? " it" : " them"} from
+              the Archive button above within 7 days, or {clientIds.length === 1 ? "it's" : "they're"}{" "}
+              permanently deleted along with all checklist items, uploaded documents, email logs,
+              memory notes, and workflow/package assignments.
+            </DialogDescription>
+          </DialogHeader>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirming(false)} disabled={deleting}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={onDelete} disabled={deleting}>
+              {deleting ? "Deleting…" : `Delete ${clientIds.length}`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+function ArchivedClientsDialog({ onRestored }: { onRestored: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [archived, setArchived] = useState<Client[] | null>(null);
+  const [restoringId, setRestoringId] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = () => {
+    listArchivedClients()
+      .then(setArchived)
+      .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
+  };
+
+  const openDialog = () => {
+    setOpen(true);
+    setError(null);
+    setArchived(null);
+    refresh();
+  };
+
+  const onRestore = async (clientId: number) => {
+    setRestoringId(clientId);
+    setError(null);
+    try {
+      await restoreClients([clientId]);
+      refresh();
+      onRestored();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setRestoringId(null);
+    }
+  };
+
+  return (
+    <>
+      <Button variant="outline" size="sm" onClick={openDialog}>
+        <ArchiveRestore />
+        Archive
+      </Button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Archive</DialogTitle>
+            <DialogDescription>
+              Deleted clients stay here for 7 days before being permanently removed - restore one
+              to bring it back exactly as it was.
+            </DialogDescription>
+          </DialogHeader>
+
+          {archived === null ? (
+            <div className="flex flex-col gap-2">
+              <Skeleton className="h-9 w-full" />
+              <Skeleton className="h-9 w-full" />
+            </div>
+          ) : archived.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nothing archived.</p>
+          ) : (
+            <div className="flex max-h-96 flex-col gap-1 overflow-y-auto">
+              {archived.map((client) => (
+                <div
+                  key={client.id}
+                  className="flex items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-sm hover:bg-muted"
+                >
+                  <span className="flex min-w-0 flex-col">
+                    <span className="truncate font-medium">{client.name}</span>
+                    <span className="truncate text-xs text-muted-foreground">
+                      {client.email} · Deleted{" "}
+                      {client.archived_at ? formatRelativeTime(client.archived_at) : ""}
+                    </span>
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0"
+                    disabled={restoringId === client.id}
+                    onClick={() => onRestore(client.id)}
+                  >
+                    {restoringId === client.id ? "Restoring…" : "Restore"}
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+          {error && <p className="text-sm text-destructive">{error}</p>}
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 

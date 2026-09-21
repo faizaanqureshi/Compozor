@@ -96,3 +96,41 @@ test('cache progress belongs to its extraction even with the legacy wrong tool l
   assert.equal(groupActivity([extraction, { ...progress, type: 'tool_call_started' }]).length, 2);
   assert.deepEqual(groupActivity([progress]), [progress]);
 });
+
+test('structured summaries survive truncated results and keep complete repair details', async () => {
+  const { activityDetails, activityDuration } = await import('../lib/agent-activity.ts');
+  const step = { tool:'finish_workflow',round:1,result:'{"verification_failed":',
+    started_at:'2026-09-20T09:00:00Z',completed_at:'2026-09-20T09:01:48Z',
+    activity:{summary:'Output needs correction',details:['Monthly headings do not match table totals.'],failed:true} };
+  assert.equal(summarizeToolStep(step),'Output needs correction');
+  assert.deepEqual(activityDetails(step),step.activity.details);
+  assert.equal(activityDuration(step),'1m 48s');
+  assert.equal(isToolFailure(step),true);
+});
+
+test('legacy truncated reports and extractions show counts instead of raw JSON', () => {
+  assert.equal(summarizeToolStep({round:1,tool:'extract_transactions',result:'{"dataset":"a.json","records":717,"reconciliation":['}), 'Extracted 717 transactions');
+  assert.equal(summarizeToolStep({round:1,tool:'render_report',result:'{"filename":"report.pdf","pages":23,"tables":['}), 'Built 23-page PDF');
+});
+
+test('Python task summary is merged into its operations, not a duplicate row', () => {
+  const trace = [{round:2,tool:'code_interpreter',result:'code'}, {round:2,tool:'code_interpreter',result:'code2'},
+    {round:2,tool:'code_interpreter',type:'stage_progress',result:'Working files checkpointed.',
+      activity:{summary:'Group records by month; build charts',details:['Saved: monthly.csv, chart.png']}}];
+  const rows=groupActivity(trace);
+  assert.equal(rows.length,1);
+  assert.equal(rows[0].operationCount,2);
+  assert.equal(summarizeToolStep(rows[0]),'Group records by month; build charts');
+});
+
+test('targeted review progress stays with its submission and preserves its finding', () => {
+  const rows=groupActivity([
+    {round:4,tool:'finish_workflow',result:'{"verification_failed":'},
+    {round:4,tool:'verify_workflow',result:'["Wrong totals"]',activity:{summary:'Output needs correction',details:['Wrong totals'],failed:true}},
+    {round:4,tool:'verify_workflow',type:'stage_progress',result:'Rechecking 2 affected requirements; reusing 7 unchanged checks.'},
+  ]);
+  assert.equal(rows.length,1);
+  assert.equal(rows[0].activity.details[0],'Wrong totals');
+  assert.match(rows[0].progressMessage,/reusing 7/);
+  assert.equal(isToolFailure(rows[0]),true);
+});

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { ChevronDown, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-import { groupActivity, isToolFailure, summarizeToolStep, splitAttempts, type TraceStep } from "@/lib/agent-activity";
+import { groupActivity, isToolFailure, summarizeToolStep, splitAttempts, activityDetails, activityDuration, type TraceStep } from "@/lib/agent-activity";
 export type { TraceStep } from "@/lib/agent-activity";
 
 // Renders either a finished trajectory (fetched after the fact) or a
@@ -43,11 +43,13 @@ export function AgentActivityDisclosure({
       </button>
       {open && (
         <>
-        <ul className="mt-1.5 flex flex-col gap-1 rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-xs">
+        <ul className="mt-2 flex flex-col gap-3 rounded-lg border border-border/60 bg-muted/30 px-3 py-3 text-xs">
           {visible.map((step, i) => {
             const interrupted = step.result == null && running === false;
             const pending = step.result == null && !interrupted;
             const failed = isToolFailure(step);
+            const details = activityDetails(step);
+            const duration = activityDuration(step);
             return (
               <li
                 key={`${step.round}-${step.tool}-${i}`}
@@ -69,10 +71,20 @@ export function AgentActivityDisclosure({
                     interrupted ? "–" : "✓"
                   )}
                 </span>
-                <span className="min-w-0 break-words">
-                  {interrupted ? "Step stopped before completion" : summarizeToolStep(step)}
+                <div className="min-w-0 flex-1 break-words leading-relaxed">
+                  {interrupted ? "Step stopped before completion" : failed && details.length > 0
+                    ? step.activity?.summary ?? "Output needs correction" : summarizeToolStep(step)}
+                  {failed && details.length > 0 ? <div className="mt-1 space-y-1 font-normal">
+                    {details.map((detail, index) => <p key={index}>{detail}</p>)}
+                  </div> : details.length > 0 && <details className="mt-0.5 text-muted-foreground">
+                    <summary className="w-fit cursor-pointer transition-colors hover:text-foreground">Details</summary>
+                    <ul className="mt-1 space-y-1">
+                      {details.map((detail, index) => <li key={index}>{detail}</li>)}
+                    </ul>
+                  </details>}
                   {step.progressMessage && <span className="mt-0.5 block text-muted-foreground">{step.progressMessage}</span>}
-                </span>
+                </div>
+                {duration && <span className="shrink-0 pt-0.5 text-muted-foreground tabular-nums">{duration}</span>}
               </li>
             );
           })}
@@ -82,6 +94,10 @@ export function AgentActivityDisclosure({
           <ul className="mt-1 space-y-1 pl-3">
             {earlier.map((step, i) => <li key={i} className="break-words">
               {step.result == null ? "Step stopped before completion" : summarizeToolStep(step)}
+              {activityDetails(step).length > 0 && <details className="mt-0.5">
+                <summary className="cursor-pointer">Details</summary>
+                {activityDetails(step).map((detail, index) => <p key={index}>{detail}</p>)}
+              </details>}
               {step.progressMessage && <span className="block">{step.progressMessage}</span>}
             </li>)}
           </ul>
