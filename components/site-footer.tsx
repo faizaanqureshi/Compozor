@@ -27,8 +27,8 @@ export function SiteFooter() {
       </div>
       <p className="text-center text-xs text-muted-foreground sm:text-left">
         Canada ·{" "}
-        <a href="mailto:info.compozor@gmail.com" className="hover:text-foreground">
-          info.compozor@gmail.com
+        <a href="mailto:info@compozor.com" className="hover:text-foreground">
+          info@compozor.com
         </a>
       </p>
     </footer>

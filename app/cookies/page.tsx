@@ -65,8 +65,8 @@ export default function CookiePolicyPage() {
       <LegalSection heading="6. Contact us">
         <p>
           Questions about this policy can be sent to{" "}
-          <a href="mailto:info.compozor@gmail.com" className="text-foreground underline underline-offset-2">
-            info.compozor@gmail.com
+          <a href="mailto:info@compozor.com" className="text-foreground underline underline-offset-2">
+            info@compozor.com
           </a>
           .
         </p>

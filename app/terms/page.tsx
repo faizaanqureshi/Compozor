@@ -187,8 +187,8 @@ export default function TermsPage() {
       <LegalSection heading="15. Contact us">
         <p>
           Questions about these Terms can be sent to{" "}
-          <a href="mailto:info.compozor@gmail.com" className="text-foreground underline underline-offset-2">
-            info.compozor@gmail.com
+          <a href="mailto:info@compozor.com" className="text-foreground underline underline-offset-2">
+            info@compozor.com
           </a>
           .
         </p>

@@ -162,8 +162,8 @@ export default function PrivacyPolicyPage() {
           that firm where they&apos;re better positioned to respond, unless
           the law requires us to respond directly. To exercise these
           rights, contact us at{" "}
-          <a href="mailto:info.compozor@gmail.com" className="text-foreground underline underline-offset-2">
-            info.compozor@gmail.com
+          <a href="mailto:info@compozor.com" className="text-foreground underline underline-offset-2">
+            info@compozor.com
           </a>
           .
         </p>
@@ -199,8 +199,8 @@ export default function PrivacyPolicyPage() {
       <LegalSection heading="13. Contact us">
         <p>
           Questions about this policy or your data can be sent to{" "}
-          <a href="mailto:info.compozor@gmail.com" className="text-foreground underline underline-offset-2">
-            info.compozor@gmail.com
+          <a href="mailto:info@compozor.com" className="text-foreground underline underline-offset-2">
+            info@compozor.com
           </a>
           . Compozor is based in Canada.
         </p>
