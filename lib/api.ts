@@ -166,6 +166,7 @@ export interface ClientWithChecklistSummary extends Client {
 export interface ClientDetail extends Client {
   checklist_items: ChecklistItem[];
   assigned_package_ids: number[];
+  workflow_statuses: ClientWorkflowStatus[];
 }
 
 export interface DocumentOut {
