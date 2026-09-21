@@ -2,19 +2,23 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
-First, run the development server:
+Use Node 24 and pnpm 10.33.0 (pinned in `package.json`). Install dependencies
+from the committed lockfile, then run the development server:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install --frozen-lockfile
 pnpm dev
-# or
-bun dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+
+For a separate local backend database, follow the
+[API setup guide](https://github.com/faizaanqureshi/Compozor-API/blob/main/docs/local-development.md).
+Set `NEXT_PUBLIC_API_BASE_URL=http://localhost:8000` and use the Clerk publishable
+key matching your local backend. Keep these values in ignored `.env.local`.
+
+CI runs `pnpm typecheck`, `pnpm test`, and `pnpm build --webpack` on every pull
+request and main update. Commit `pnpm-lock.yaml` whenever dependencies change.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
