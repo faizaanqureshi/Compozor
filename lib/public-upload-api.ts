@@ -75,8 +75,26 @@ export interface UploadBatchStatusOut {
   items: UploadItemStatusOut[];
 }
 
+export interface PublicChecklistItem {
+  doc_type_needed: string;
+  description: string | null;
+  status: "missing" | "received" | "wrong";
+  expected_date_range_start: string | null;
+  expected_date_range_end: string | null;
+  package_name: string | null;
+}
+
+export interface PublicChecklist {
+  total: number;
+  received: number;
+  items: PublicChecklistItem[];
+}
+
 export const getUploadLinkInfo = (token: string) =>
   request<UploadLinkInfo>(`/public/uploads/${token}`);
+
+export const getPublicChecklist = (token: string) =>
+  request<PublicChecklist>(`/public/uploads/${token}/checklist`);
 
 export const createUploadBatch = (token: string) =>
   request<UploadBatchCreated>(`/public/uploads/${token}/batches`, {
