@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import useSWR from "swr";
 import { Check } from "lucide-react";
 import { GmailIcon } from "@/components/icons/gmail";
@@ -214,6 +215,7 @@ function ReminderSection({
             }
           }}
           disabled={!enabled || savingInterval}
+          aria-label="Remind after, in days"
           className="w-20 text-center"
         />
         <span className="text-sm text-foreground/80">days</span>
@@ -315,6 +317,30 @@ function MailboxSection({
         </div>
       )}
       {missingProviders.includes("outlook") && <p className="text-xs text-muted-foreground">Outlook supports Microsoft 365 work accounts and personal Outlook or Hotmail accounts.</p>}
+    </SectionCard>
+  );
+}
+
+const legalLinks = [
+  { href: "/privacy", label: "Privacy Policy" },
+  { href: "/terms", label: "Terms & Conditions" },
+  { href: "/cookies", label: "Cookie Policy" },
+];
+
+function LegalLinksSection() {
+  return (
+    <SectionCard title="Legal">
+      <div className="flex flex-col gap-1">
+        {legalLinks.map((link) => (
+          <Link
+            key={link.href}
+            href={link.href}
+            className="w-fit text-sm text-foreground/80 underline underline-offset-2 hover:text-foreground"
+          >
+            {link.label}
+          </Link>
+        ))}
+      </div>
     </SectionCard>
   );
 }
@@ -438,6 +464,8 @@ export default function SettingsPage() {
           onConnect={onConnect}
           onDelete={onDelete}
         />
+
+        <LegalLinksSection />
       </div>
     </div>
   );
