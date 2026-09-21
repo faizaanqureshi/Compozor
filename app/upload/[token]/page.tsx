@@ -314,7 +314,7 @@ export default function PublicUploadPage({
     return (
       <PublicShell>
         <div className="flex flex-col gap-1">
-          <h1 className="text-2xl font-thin tracking-tight [font-family:var(--font-denton)] sm:text-3xl">
+          <h1 className="text-2xl font-medium tracking-tight sm:text-3xl">
             Upload link unavailable
           </h1>
           <p className="text-sm text-destructive">{linkInfo.error}</p>
