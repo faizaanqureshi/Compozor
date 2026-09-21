@@ -2,9 +2,9 @@
 // practice_description seeds. Used by both the onboarding wizard
 // (app/onboarding/page.tsx) and Settings' Organization section
 // (app/settings/page.tsx) so the two never drift into separate preset
-// lists or mismatched seed text - see PRACTICE_TYPE_LABELS below for how
-// a stored `practice_type` (an onboarding `value`, or free custom text if
-// "Other" was picked) maps back to a display label.
+// lists or mismatched seed text - see practiceCategoryForLabel below for
+// how a stored `practice_type` (a preset's `label`, or free custom text if
+// "Other" was picked) maps back to the matching preset.
 
 export type PracticeCategory = {
   value: string;

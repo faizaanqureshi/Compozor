@@ -299,6 +299,7 @@ function OrganizationSection({
                 <button
                   type="button"
                   key={category.value}
+                  aria-pressed={categoryValue === category.value}
                   onClick={() => selectCategory(category.value)}
                   className={cn(
                     "rounded-lg border-2 px-3 py-1.5 text-left text-sm font-medium transition-colors",
