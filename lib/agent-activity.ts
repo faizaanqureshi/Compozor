@@ -12,6 +12,7 @@ export interface TraceStep {
   completed_at?: string;
   operationCount?: number;
   progressMessage?: string;
+  activity?: { summary: string; details: string[]; failed?: boolean };
 }
 
 // Presentation only: retain every original event in the saved audit trail.
@@ -27,6 +28,15 @@ export function groupActivity(trajectory: TraceStep[]): TraceStep[] {
       finishIndex = extractionIndex = undefined;
       round = step.round;
     }
+    const previous = visible.at(-1);
+    if (step.type === "stage_progress" && step.tool === "code_interpreter" && previous?.tool === "code_interpreter") {
+      visible[visible.length - 1] = { ...previous, activity: step.activity ?? previous.activity };
+      continue;
+    }
+    if (step.type === "stage_progress" && step.tool === "verify_workflow" && finishIndex !== undefined) {
+      visible[finishIndex] = { ...visible[finishIndex], progressMessage: step.result };
+      continue;
+    }
     if (step.type === "stage_progress" && extractionIndex !== undefined) {
       visible[extractionIndex] = { ...visible[extractionIndex], progressMessage: step.result };
       continue;
@@ -36,8 +46,9 @@ export function groupActivity(trajectory: TraceStep[]): TraceStep[] {
       // Prefer the parent's final outcome, but never conceal a failed child.
       const outcome = isToolFailure(step) || parent.result == null ? step : parent;
       visible[finishIndex] = { ...parent, tool: outcome.tool, result: outcome.result,
-        completed_at: outcome.completed_at };
-      finishIndex = undefined;
+        completed_at: outcome.completed_at,
+        ...(step.activity || parent.activity ? { activity: isToolFailure(step) === isToolFailure(outcome)
+          ? step.activity ?? parent.activity : outcome.activity } : {}) };
       continue;
     }
     if (step.tool === "execute_workflow" && step.result === "Workflow execution step received.") continue;
@@ -72,6 +83,11 @@ const TOOL_LABELS: Record<string, string> = {
   flag_for_review: "Checked need for staff review",
   code_interpreter: "Processed document data",
   render_report: "Built report from saved data",
+  inspect_office_document: "Inspected Office document structure",
+  inspect_work_sample: "Inspected work sample",
+  edit_office_document: "Edited document from sample",
+  render_office_document: "Rendered Office document",
+  verify_office_pages: "Checked every Office page",
   list_client_documents: "Looked up documents on file",
   read_document: "Read a document",
   get_full_conversation_history: "Pulled full conversation history",
@@ -95,6 +111,7 @@ export function humanizeToolName(tool: string): string {
 }
 
 export function isToolFailure(step: TraceStep): boolean {
+  if (step.activity?.failed) return true;
   if (!step.result) return false;
   if (/^\s*\{\s*"(?:error|verification_failed)"\s*:/.test(step.result)) return true;
   if (step.tool === "verify_workflow" && step.result.trim().startsWith("[")) return step.result.trim() !== "[]";
@@ -107,17 +124,21 @@ export function isToolFailure(step: TraceStep): boolean {
 
 export function summarizeToolStep(step: TraceStep): string {
   if (step.result == null) {
+    if (step.tool === "verify_office_pages") return "Checking Office pages and formatting…";
     if (step.tool === "execute_workflow") return "Processing documents and outputs…";
     if (step.tool === "plan_workflow") return "Planning the current attempt…";
     if (step.tool === "finish_workflow" || step.tool === "verify_workflow") return "Checking generated outputs…";
     return `${humanizeToolName(step.tool)}…`;
   }
+  if (step.activity?.summary) return step.activity.summary;
   let data: Record<string, unknown> | unknown[] | null = null;
   try { data = JSON.parse(step.result); } catch { /* Older traces may be truncated. */ }
   const value = data && !Array.isArray(data) ? data : null;
   const short = (text: string) => text.length > 180 ? `${text.slice(0, 180)}…` : text;
   if (isToolFailure(step)) {
-    const error = typeof value?.error === "string" ? value.error : null;
+    const nested = value?.verification_failed as { issues?: string[] } | undefined;
+    const error = typeof value?.error === "string" ? value.error
+      : nested?.issues?.[0] ?? (Array.isArray(data) && typeof data[0] === "string" ? data[0] : null);
     return error ? `Needs correction — ${short(error)}` : "Output checks found issues to repair.";
   }
 
@@ -128,8 +149,19 @@ export function summarizeToolStep(step: TraceStep): string {
   }
   if (step.tool === "execute_workflow") return "Preparing the next workflow step";
   if (step.tool === "code_interpreter") return `Processed document data and draft files${step.operationCount ? ` (${step.operationCount} operations)` : ""}`;
-  if (step.tool === "render_report") return typeof value?.pages === "number"
-    ? `Built ${value.pages}-page PDF from saved data; completion checks still required`
+  const numberField = (name: string) => {
+    const found = step.result?.match(new RegExp(`"${name}"\\s*:\\s*(\\d+)`));
+    return found ? Number(found[1]) : undefined;
+  };
+  if (step.tool === "extract_transactions" || step.tool === "extract_records") {
+    const count = numberField("records") ?? numberField("record_count");
+    return count != null ? `Extracted ${count.toLocaleString()} ${step.tool === "extract_transactions" ? "transactions" : "records"}`
+      : "Extracted requested information";
+  }
+  if (step.tool === "record_progress") return numberField("saved_step") != null
+    ? `Saved checkpoint for step ${numberField("saved_step")}` : "Saved working results";
+  if (step.tool === "render_report") return numberField("pages") != null
+    ? `Built ${numberField("pages")}-page PDF`
     : "Built report from saved data";
 
   if (step.tool === "list_client_documents") {
@@ -165,6 +197,28 @@ export function summarizeToolStep(step: TraceStep): string {
 
   const trimmed = step.result.length > 140 ? `${step.result.slice(0, 140)}…` : step.result;
   return `${humanizeToolName(step.tool)} — ${trimmed}`;
+}
+
+export function activityDetails(step: TraceStep): string[] {
+  if (step.activity?.details?.length) return step.activity.details;
+  if (!step.result) return [];
+  try {
+    const data = JSON.parse(step.result);
+    if (data.verification_failed?.issues) return data.verification_failed.issues;
+    if (step.tool === "verify_workflow" && Array.isArray(data)) return data.filter(v => typeof v === "string");
+  } catch { /* Preserve the complete first finding even when later JSON was truncated. */ }
+  const firstIssue = step.result.match(/"issues"\s*:\s*\[\s*("(?:\\.|[^"\\])*")/);
+  if (firstIssue) {
+    try { return [JSON.parse(firstIssue[1])]; } catch { /* No fabricated completion. */ }
+  }
+  return [];
+}
+
+export function activityDuration(step: TraceStep): string | null {
+  if (!step.started_at || !step.completed_at) return null;
+  const seconds = Math.round((Date.parse(step.completed_at) - Date.parse(step.started_at)) / 1000);
+  if (!Number.isFinite(seconds) || seconds < 1) return null;
+  return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 }
 
 export function splitAttempts(trajectory: TraceStep[], startedAt?: string | null) {
