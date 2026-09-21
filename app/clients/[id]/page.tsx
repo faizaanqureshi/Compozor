@@ -541,9 +541,10 @@ function DeleteClientButton({
           <DialogHeader>
             <DialogTitle>Delete {clientName}?</DialogTitle>
             <DialogDescription>
-              This permanently deletes this client along with all of their
-              checklist items, uploaded documents, email logs, and memory
-              notes. This action cannot be undone.
+              This client moves to the Archive (on the Clients page) and
+              disappears from your list. Restore it within 7 days, or it's
+              permanently deleted along with all checklist items, uploaded
+              documents, email logs, and memory notes.
             </DialogDescription>
           </DialogHeader>
           {error && <p className="text-sm text-destructive">{error}</p>}

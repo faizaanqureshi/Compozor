@@ -119,6 +119,7 @@ export interface Client {
   status: ClientStatus;
   last_reminder_sent_at: string | null;
   created_at: string;
+  archived_at: string | null;
 }
 
 export interface ChecklistItem {
@@ -239,6 +240,7 @@ export interface EmailLogEntry {
   safety_checks?: { passed: boolean; category: string; reason?: string | null } | null;
   tool_trajectory: ToolTrajectoryStep[] | null;
   created_at: string;
+  archived_at: string | null;
   documents: DocumentOut[];
 }
 
@@ -480,6 +482,16 @@ export const updateClient = (
 export const deleteClient = (clientId: number) =>
   request<void>(`/clients/${clientId}`, { method: "DELETE" });
 
+export const bulkDeleteClients = (clientIds: number[]) =>
+  request<void>("/clients", json("DELETE", { client_ids: clientIds }));
+
+// "Delete" above never actually removes anything - it archives. These
+// power the clients page's Archive popup (list + per-row undo).
+export const listArchivedClients = () => request<Client[]>("/clients/archived");
+
+export const restoreClients = (clientIds: number[]) =>
+  request<Client[]>("/clients/restore", json("POST", { client_ids: clientIds }));
+
 // ---------- Checklist items ----------
 
 export const listChecklistItems = (clientId: number) =>
@@ -634,6 +646,16 @@ export const listEmailLog = (status?: EmailStatus, resolved?: boolean) => {
   const qs = params.toString();
   return request<EmailLogEntry[]>(`/email-log${qs ? `?${qs}` : ""}`);
 };
+
+export const bulkDeleteEmailLogEntries = (emailLogIds: number[]) =>
+  request<void>("/email-log", json("DELETE", { email_log_ids: emailLogIds }));
+
+// "Delete" above never actually removes anything - it archives. These
+// power the Email Log page's Archive popup (list + per-thread undo).
+export const listArchivedEmailLog = () => request<EmailLogEntry[]>("/email-log/archived");
+
+export const restoreEmailLogEntries = (emailLogIds: number[]) =>
+  request<EmailLogEntry[]>("/email-log/restore", json("POST", { email_log_ids: emailLogIds }));
 
 export const sendEmailLogEntry = (clientId: number, emailLogId: number) =>
   request<EmailLogEntry>(
