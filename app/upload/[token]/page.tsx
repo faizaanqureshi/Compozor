@@ -20,7 +20,7 @@ import {
   getUploadBatchStatus,
   getUploadLinkInfo,
   initUploadItem,
-  uploadFileToR2,
+  uploadClientFile,
 } from "@/lib/public-upload-api";
 
 // Same set of extensions the authenticated document vault accepts (see
@@ -111,7 +111,7 @@ export default function PublicUploadPage({
       try {
         const init = await initUploadItem(token, id, entry.file);
         updateEntry(entry.key, { itemId: init.item_id });
-        await uploadFileToR2(init.upload_url, init.headers, entry.file, (fraction) =>
+        await uploadClientFile(token, id, init, entry.file, (fraction) =>
           updateEntry(entry.key, { progress: fraction })
         );
         await completeUploadItem(token, id, init.item_id);

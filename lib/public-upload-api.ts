@@ -114,6 +114,28 @@ export const finalizeUploadBatch = (token: string, batchId: number) =>
 export const getUploadBatchStatus = (token: string, batchId: number) =>
   request<UploadBatchStatusOut>(`/public/uploads/${token}/batches/${batchId}`);
 
+let directUploadsUnavailable = false;
+
+export async function uploadClientFile(
+  token: string, batchId: number, item: InitUploadItemResult,
+  file: File, onProgress: (fraction: number) => void
+): Promise<void> {
+  if (!directUploadsUnavailable) {
+    try {
+      await uploadFileToR2(item.upload_url, item.headers, file, onProgress);
+      return;
+    } catch {
+      // Avoid repeating a failed storage preflight for every remaining file.
+      directUploadsUnavailable = true;
+    }
+  }
+  await request<void>(`/public/uploads/${token}/batches/${batchId}/items/${item.item_id}/content`, {
+    method: "PUT", body: file,
+    headers: { "Content-Type": file.type || "application/octet-stream" },
+  });
+  onProgress(1);
+}
+
 // XHR (not fetch) because we need upload progress events, which fetch's
 // duplex-stream API doesn't expose cleanly in browsers yet - PUTs the file
 // bytes straight to the R2 presigned URL, not through our own API.
