@@ -17,6 +17,7 @@ import {
   updateMyOrganization,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { PRACTICE_CATEGORIES } from "@/lib/practice-types";
 import { AuroraBackground } from "@/components/aurora-background";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,36 +25,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { startProductTour } from "@/components/product-tour";
-
-type Category = {
-  value: string;
-  label: string;
-  seed: string;
-};
-
-const categories: Category[] = [
-  {
-    value: "accounting",
-    label: "Accounting",
-    seed: "an accounting firm helping clients gather tax documents",
-  },
-  {
-    value: "immigration",
-    label: "Immigration law",
-    seed:
-      "an immigration law firm helping clients gather PR application documents",
-  },
-  {
-    value: "mortgage",
-    label: "Mortgage / lending",
-    seed: "a mortgage brokerage helping clients gather loan application documents",
-  },
-  {
-    value: "other",
-    label: "Other",
-    seed: "",
-  },
-];
 
 const automationOptions: { value: AutomationLevel; label: string; description: string }[] = [
   {
@@ -129,6 +100,7 @@ export default function OnboardingPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const [category, setCategory] = useState<string | null>(null);
+  const [customPracticeType, setCustomPracticeType] = useState("");
   const [name, setName] = useState("");
   const nameTouched = useRef(false);
   const [practiceDescription, setPracticeDescription] = useState("");
@@ -166,17 +138,28 @@ export default function OnboardingPage() {
 
   const onSelectCategory = (value: string) => {
     setCategory(value);
-    const seed = categories.find((c) => c.value === value)?.seed ?? "";
+    const seed = PRACTICE_CATEGORIES.find((c) => c.value === value)?.seed ?? "";
     setPracticeDescription(seed);
   };
 
   const onSubmitPractice = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!category) {
+      setPracticeError("Pick what kind of practice this is.");
+      return;
+    }
+    const practiceType =
+      category === "other" ? customPracticeType.trim() : (PRACTICE_CATEGORIES.find((c) => c.value === category)?.label ?? "");
+    if (!practiceType) {
+      setPracticeError("Enter your practice type.");
+      return;
+    }
     setSavingPractice(true);
     setPracticeError(null);
     try {
       const updated = await updateMyOrganization({
         name: name.trim(),
+        practice_type: practiceType,
         practice_description: practiceDescription.trim(),
         jurisdiction: jurisdiction.trim(),
       });
@@ -267,7 +250,7 @@ export default function OnboardingPage() {
                 <div className="flex flex-col gap-2 border-b border-border/70 pb-6">
                   <Label>What kind of practice is this?</Label>
                   <div className="grid grid-cols-2 gap-2">
-                    {categories.map((c) => (
+                    {PRACTICE_CATEGORIES.map((c) => (
                       <button
                         type="button"
                         key={c.value}
@@ -283,6 +266,15 @@ export default function OnboardingPage() {
                       </button>
                     ))}
                   </div>
+                  {category === "other" && (
+                    <Input
+                      autoFocus
+                      required
+                      placeholder="e.g. Bookkeeping"
+                      value={customPracticeType}
+                      onChange={(e) => setCustomPracticeType(e.target.value)}
+                    />
+                  )}
                 </div>
 
                 <div className="flex flex-col gap-1.5 border-b border-border/70 pb-6">
