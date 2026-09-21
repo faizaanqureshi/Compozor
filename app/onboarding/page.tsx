@@ -17,6 +17,7 @@ import {
   updateMyOrganization,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { organizationCategories as categories } from "@/lib/organization-categories";
 import { AuroraBackground } from "@/components/aurora-background";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,36 +25,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { startProductTour } from "@/components/product-tour";
-
-type Category = {
-  value: string;
-  label: string;
-  seed: string;
-};
-
-const categories: Category[] = [
-  {
-    value: "accounting",
-    label: "Accounting",
-    seed: "an accounting firm helping clients gather tax documents",
-  },
-  {
-    value: "immigration",
-    label: "Immigration law",
-    seed:
-      "an immigration law firm helping clients gather PR application documents",
-  },
-  {
-    value: "mortgage",
-    label: "Mortgage / lending",
-    seed: "a mortgage brokerage helping clients gather loan application documents",
-  },
-  {
-    value: "other",
-    label: "Other",
-    seed: "",
-  },
-];
 
 const automationOptions: { value: AutomationLevel; label: string; description: string }[] = [
   {
@@ -179,6 +150,7 @@ export default function OnboardingPage() {
         name: name.trim(),
         practice_description: practiceDescription.trim(),
         jurisdiction: jurisdiction.trim(),
+        ...(category ? { organization_category: category } : {}),
       });
       setOrg(updated);
     } catch (e) {

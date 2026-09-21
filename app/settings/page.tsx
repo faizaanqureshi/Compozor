@@ -19,10 +19,19 @@ import {
   updateMyOrganization,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { organizationCategories, organizationCategoryLabel } from "@/lib/organization-categories";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const automationOptions: { value: AutomationLevel; label: string; description: string }[] = [
   {
@@ -222,6 +231,119 @@ function ReminderSection({
         )}
       </div>
       )}
+    </SectionCard>
+  );
+}
+
+function OrganizationTypeSection({
+  current,
+  onSaved,
+}: {
+  current: Organization | null;
+  onSaved: (org: Organization) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const openDialog = () => {
+    setSelected(current?.organization_category ?? null);
+    setError(null);
+    setOpen(true);
+  };
+
+  const onSave = async () => {
+    if (!selected) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await updateMyOrganization({ organization_category: selected });
+      onSaved(updated);
+      setOpen(false);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const hasExisting = current?.organization_category != null;
+  const canSave = selected !== null && selected !== (current?.organization_category ?? null);
+  const showWarning = hasExisting && canSave;
+
+  return (
+    <SectionCard
+      title="Organization type"
+      subtitle="What kind of practice Compozor is set up for."
+      action={
+        current ? (
+          <Button variant="outline" size="sm" onClick={openDialog}>
+            Edit
+          </Button>
+        ) : (
+          <Skeleton className="h-8 w-14" />
+        )
+      }
+    >
+      {!current ? (
+        <Skeleton className="h-5 w-32" />
+      ) : (
+        <p className="text-sm text-foreground/80">
+          {organizationCategoryLabel(current.organization_category)}
+        </p>
+      )}
+
+      <Dialog open={open} onOpenChange={(next) => !saving && setOpen(next)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="pr-8">Organization type</DialogTitle>
+            <DialogDescription>
+              Choose the option that best describes your practice.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid grid-cols-2 gap-2">
+            {organizationCategories.map((c) => (
+              <button
+                type="button"
+                key={c.value}
+                onClick={() => setSelected(c.value)}
+                className={cn(
+                  "rounded-lg border-2 px-3 py-2 text-left text-sm font-medium transition-colors",
+                  selected === c.value
+                    ? "border-accent bg-accent/[0.08] text-accent"
+                    : "border-border bg-muted/40 hover:bg-muted/70"
+                )}
+              >
+                {c.label}
+              </button>
+            ))}
+          </div>
+
+          {showWarning && (
+            <p className="rounded-lg bg-amber-500/10 px-3 py-2.5 text-xs text-amber-900 dark:text-amber-300">
+              This changes how Compozor is configured for your firm, not just a label.
+              Only change it if you&apos;re sure — and make sure your team knows before you do.
+            </p>
+          )}
+
+          {error && <p className="text-sm text-destructive">{error}</p>}
+
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setOpen(false)} disabled={saving}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={onSave}
+              disabled={saving || !canSave}
+            >
+              {saving ? "Saving…" : "Save changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </SectionCard>
   );
 }
@@ -428,6 +550,11 @@ export default function SettingsPage() {
           savingInterval={savingInterval}
           error={orgErrorMessage}
           onSaveInterval={onSaveInterval}
+        />
+
+        <OrganizationTypeSection
+          current={org ?? null}
+          onSaved={(updated) => mutateOrg(updated, { revalidate: false })}
         />
 
         <MailboxSection

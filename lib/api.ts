@@ -106,6 +106,7 @@ export interface Organization {
   reminder_interval_days: number | null;
   practice_description: string | null;
   jurisdiction: string | null;
+  organization_category: string | null;
   onboarding_completed_at: string | null;
 }
 
@@ -378,6 +379,7 @@ export const updateMyOrganization = (input: {
   reminder_interval_days?: number | null;
   practice_description?: string;
   jurisdiction?: string;
+  organization_category?: string;
   onboarding_completed?: boolean;
 }) => request<Organization>("/organizations/me", json("PATCH", input));
 
