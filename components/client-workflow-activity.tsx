@@ -43,14 +43,17 @@ function RunContents({ run, loadDetails = false }: { run: WorkflowRun; loadDetai
     { revalidateOnFocus: false },
   );
   const detail = run.details_loaded === false ? data : run;
+  const draftOutputs = detail?.draft_outputs ?? run.draft_outputs ?? [];
+  const downloadableOutputs = run.status === "completed" ? run.outputs : draftOutputs;
+  const isDraft = run.status !== "completed" && draftOutputs.length > 0;
   return (
     <div className="flex min-w-0 flex-col gap-4">
       {run.summary && <p className="max-w-3xl text-pretty text-[0.8125rem] leading-relaxed text-muted-foreground">{run.summary}</p>}
-      {run.review_reason && <p className="max-w-3xl border-l border-destructive/40 pl-3 text-[0.8125rem] leading-relaxed text-destructive">{run.review_reason}</p>}
-      {run.status === "completed" && run.outputs.length > 0 && (
+      {downloadableOutputs.length > 0 && (
         <div className="flex max-w-2xl flex-col gap-2">
-          {run.outputs.map(output => output.download_url && (
-            <a key={output.id} href={output.download_url} target="_blank" rel="noreferrer" title={output.filename}
+          {isDraft && <p className="text-xs leading-relaxed text-muted-foreground"><span className="font-medium text-foreground/80">Draft available.</span> Checks are incomplete or need attention. Review the notes before using this file.</p>}
+          {downloadableOutputs.map(output => output.download_url && (
+            <a key={output.id} href={output.download_url} target="_blank" rel="noreferrer" title={output.filename} aria-label={`Download ${isDraft ? "draft " : ""}${output.filename}`}
               className="group flex min-w-0 items-center gap-3 rounded-lg border border-border/70 px-3 py-3 text-[0.8125rem] !no-underline transition-colors hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
               <FileText className="size-4 shrink-0 text-muted-foreground" />
               <span className="min-w-0 flex-1 break-all leading-snug text-foreground/90">{output.filename}</span>
@@ -59,6 +62,13 @@ function RunContents({ run, loadDetails = false }: { run: WorkflowRun; loadDetai
           ))}
         </div>
       )}
+      {run.status === "completed" && Boolean(detail?.verification?.warnings?.length) && (
+        <div className="max-w-3xl space-y-1.5 text-xs leading-relaxed text-muted-foreground">
+          <p className="font-medium text-foreground/80">Completion notes</p>
+          <ul className="list-disc space-y-1 pl-4">{detail?.verification?.warnings?.map((note, i) => <li key={i}>{note}</li>)}</ul>
+        </div>
+      )}
+      {run.review_reason && <p className="max-w-3xl border-l border-destructive/40 pl-3 text-[0.8125rem] leading-relaxed text-destructive">{run.review_reason}</p>}
       {isLoading && <span role="status" className="flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="size-3 animate-spin" />Loading run details…</span>}
       {error && <div className="flex items-center gap-2 text-xs text-destructive">Could not load run details.<Button variant="ghost" size="sm" onClick={() => void mutate()}>Retry</Button></div>}
       {(detail?.execution_plan || Boolean(detail?.tool_trajectory?.length)) && (

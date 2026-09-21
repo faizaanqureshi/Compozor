@@ -579,7 +579,7 @@ export default function ClientsPage() {
                     onKeyDown={(e) => {
                       if (e.key === "Enter") router.push(`/clients/${client.id}`);
                     }}
-                    style={{ animationDelay: `${Math.min(i, 6) * 40}ms` }}
+                    style={{ animationDelay: `${Math.min(i, 10) * 25}ms` }}
                     className="group/waiting flex cursor-pointer animate-blur-in-sm items-center justify-between gap-4 rounded-xl border border-amber-500/20 bg-amber-500/[0.04] px-4 py-3.5 transition-colors hover:bg-amber-500/[0.07]"
                   >
                     <div className="flex flex-col gap-1.5">
@@ -653,7 +653,7 @@ export default function ClientsPage() {
                   expanded={expandedClients.has(group.clientId)}
                   onToggle={() => toggleExpanded(group.clientId)}
                   clientName={clientsById[group.clientId]?.name ?? "Unknown client"}
-                  delayMs={60 + Math.min(i, 6) * 40}
+                  delayMs={Math.min(i, 10) * 25}
                 />
               ))}
             {!loading && recentActivity.length === 0 && (
@@ -764,6 +764,7 @@ export default function ClientsPage() {
                 ))}
               {!loading &&
                 rows.map((c, i) => {
+                  const revealStyle = { animationDelay: `${Math.min(i, 10) * 25}ms` };
                   const summary = c.checklist_summary;
                   const activity = lastActivity[c.id];
                   const workflow = deriveWorkflowStatus(c, summary);
@@ -771,77 +772,92 @@ export default function ClientsPage() {
                     <tr
                       key={c.id}
                       className={cn(
-                        "group/row animate-blur-in-sm",
+                        "group/row",
                         selectedIds.has(c.id) && "bg-accent/[0.05]"
                       )}
-                      style={{ animationDelay: `${120 + Math.min(i, 10) * 25}ms` }}
                     >
                       <td className="border-b border-border/50 py-3 pr-2">
-                        <input
-                          type="checkbox"
-                          aria-label={`Select ${c.name}`}
-                          className="size-4 rounded border-input accent-primary"
-                          checked={selectedIds.has(c.id)}
-                          onChange={() => toggleSelected(c.id)}
-                        />
+                        <div className="animate-blur-in-sm motion-reduce:animate-none" style={revealStyle}>
+                          <input
+                            type="checkbox"
+                            aria-label={`Select ${c.name}`}
+                            className="size-4 rounded border-input accent-primary"
+                            checked={selectedIds.has(c.id)}
+                            onChange={() => toggleSelected(c.id)}
+                          />
+                        </div>
                       </td>
                       <td className="border-b border-border/50 py-3 pr-4">
-                        <Link
-                          href={`/clients/${c.id}`}
-                          className="font-thin underline-offset-4 [font-family:var(--font-denton)] group-hover/row:underline"
-                        >
-                          {c.name}
-                        </Link>
+                        <div className="animate-blur-in-sm motion-reduce:animate-none" style={revealStyle}>
+                          <Link
+                            href={`/clients/${c.id}`}
+                            className="font-thin underline-offset-4 [font-family:var(--font-denton)] group-hover/row:underline"
+                          >
+                            {c.name}
+                          </Link>
+                        </div>
                       </td>
                       <td className="border-b border-border/50 py-3 pr-4 text-foreground/70">
-                        {c.email}
+                        <div className="animate-blur-in-sm motion-reduce:animate-none" style={revealStyle}>
+                          {c.email}
+                        </div>
                       </td>
                       <td className="border-b border-border/50 py-3 pr-4 text-foreground/70">
-                        <span className="inline-flex items-center gap-1.5">
-                          {summary
-                            ? summary.total > 0
-                              ? `${summary.received} of ${summary.total} received`
-                              : "No checklist"
-                            : "—"}
-                          {summary && summary.received > 0 && (
-                            <button
-                              type="button"
-                              title="Download documents (.zip)"
-                              disabled={downloadingId === c.id}
-                              onClick={(e) => onDownloadZip(e, c.id)}
-                              className="text-muted-foreground/50 transition-colors hover:text-foreground disabled:opacity-50"
-                            >
-                              {downloadingId === c.id ? (
-                                <Loader2 className="size-3.5 animate-spin" />
-                              ) : (
-                                <Download className="size-3.5" />
-                              )}
-                            </button>
-                          )}
-                        </span>
+                        <div className="animate-blur-in-sm motion-reduce:animate-none" style={revealStyle}>
+                          <span className="inline-flex items-center gap-1.5">
+                            {summary
+                              ? summary.total > 0
+                                ? `${summary.received} of ${summary.total} received`
+                                : "No checklist"
+                              : "—"}
+                            {summary && summary.received > 0 && (
+                              <button
+                                type="button"
+                                title="Download documents (.zip)"
+                                disabled={downloadingId === c.id}
+                                onClick={(e) => onDownloadZip(e, c.id)}
+                                className="text-muted-foreground/50 transition-colors hover:text-foreground disabled:opacity-50"
+                              >
+                                {downloadingId === c.id ? (
+                                  <Loader2 className="size-3.5 animate-spin" />
+                                ) : (
+                                  <Download className="size-3.5" />
+                                )}
+                              </button>
+                            )}
+                          </span>
+                        </div>
                       </td>
                       <td className="border-b border-border/50 py-3 pr-4 text-foreground/70">
-                        {activity ? formatRelativeTime(activity) : "No activity yet"}
+                        <div className="animate-blur-in-sm motion-reduce:animate-none" style={revealStyle}>
+                          {activity ? formatRelativeTime(activity) : "No activity yet"}
+                        </div>
                       </td>
                       <td className="border-b border-border/50 py-3 pr-4">
-                        <span className="inline-flex items-center gap-2">
-                          <span className={cn("size-1.5 rounded-full", toneClasses[workflow.tone])} />
-                          <span className="text-foreground/80">{workflow.label}</span>
-                        </span>
+                        <div className="animate-blur-in-sm motion-reduce:animate-none" style={revealStyle}>
+                          <span className="inline-flex items-center gap-2">
+                            <span className={cn("size-1.5 rounded-full", toneClasses[workflow.tone])} />
+                            <span className="text-foreground/80">{workflow.label}</span>
+                          </span>
+                        </div>
                       </td>
                       <td className="border-b border-border/50 py-3 pr-4">
-                        <WorkflowStatusCell
-                          clientId={c.id}
-                          workflowStatuses={c.workflow_statuses}
-                          onRemoved={() => mutateClients()}
-                        />
+                        <div className="animate-blur-in-sm motion-reduce:animate-none" style={revealStyle}>
+                          <WorkflowStatusCell
+                            clientId={c.id}
+                            workflowStatuses={c.workflow_statuses}
+                            onRemoved={() => mutateClients()}
+                          />
+                        </div>
                       </td>
                       <td className="border-b border-border/50 py-3 pr-4">
-                        <PackageStatusCell
-                          clientId={c.id}
-                          assignedPackages={c.assigned_packages}
-                          onRemoved={() => mutateClients()}
-                        />
+                        <div className="animate-blur-in-sm motion-reduce:animate-none" style={revealStyle}>
+                          <PackageStatusCell
+                            clientId={c.id}
+                            assignedPackages={c.assigned_packages}
+                            onRemoved={() => mutateClients()}
+                          />
+                        </div>
                       </td>
                     </tr>
                   );

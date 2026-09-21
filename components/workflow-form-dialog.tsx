@@ -6,12 +6,14 @@ import {
   ApiError,
   Workflow,
   WorkflowExecutionMode,
+  WorkflowWorkSample,
   buildWorkflowInstructions,
   createWorkflow,
   updateWorkflow,
 } from "@/lib/api";
 import { Button, buttonVariants } from "@/components/ui/button";
 import type { VariantProps } from "class-variance-authority";
+import { WorkflowWorkSamples } from "@/components/workflow-work-samples";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -54,11 +56,16 @@ export function WorkflowFormDialog({
   const [executionMode, setExecutionMode] = useState<WorkflowExecutionMode>(
     workflow?.execution_mode ?? "manual"
   );
+  const [samples, setSamples] = useState<WorkflowWorkSample[]>(workflow?.work_samples ?? []);
+  const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [draftWarnings, setDraftWarnings] = useState<string[]>([]);
 
   const openDialog = () => {
     setDescription("");
+    setDraftWarnings([]);
+    setSamples(workflow?.work_samples ?? []);
     setName(workflow?.name ?? "");
     setInstructions(workflow?.instructions ?? "");
     setExecutionMode(workflow?.execution_mode ?? "manual");
@@ -69,11 +76,13 @@ export function WorkflowFormDialog({
   const onGenerate = async () => {
     if (!description.trim()) return;
     setBuilding(true);
+    setDraftWarnings([]);
     setError(null);
     try {
-      const result = await buildWorkflowInstructions(description);
+      const result = await buildWorkflowInstructions(description, samples.map((sample) => sample.id));
       setName(result.suggested_name);
       setInstructions(result.instructions);
+      setDraftWarnings(result.warnings ?? []);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : String(e));
     } finally {
@@ -83,12 +92,13 @@ export function WorkflowFormDialog({
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (uploading) return;
     setSubmitting(true);
     setError(null);
     try {
       const saved = isEdit
-        ? await updateWorkflow(workflow.id, { name, instructions, execution_mode: executionMode })
-        : await createWorkflow({ name, instructions, execution_mode: executionMode });
+        ? await updateWorkflow(workflow.id, { name, instructions, execution_mode: executionMode, work_sample_ids: samples.map((sample) => sample.id) })
+        : await createWorkflow({ name, instructions, execution_mode: executionMode, work_sample_ids: samples.map((sample) => sample.id) });
       setOpen(false);
       onSaved(saved);
     } catch (e) {
@@ -99,7 +109,7 @@ export function WorkflowFormDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !submitting && !building && (o ? openDialog() : setOpen(false))}>
+    <Dialog open={open} onOpenChange={(o) => !submitting && !building && !uploading && (o ? openDialog() : setOpen(false))}>
       <DialogTrigger
         render={trigger ?? (isEdit ? <Button variant="ghost" size="sm" /> : <Button variant={variant} />)}
       >
@@ -130,7 +140,7 @@ export function WorkflowFormDialog({
                 placeholder="e.g. Client document review"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                disabled={building || submitting}
+                disabled={building || submitting || uploading}
                 className="h-10 px-3 md:text-[0.8125rem]"
               />
             </div>
@@ -149,14 +159,14 @@ export function WorkflowFormDialog({
                       placeholder="e.g. Review the submitted documents and prepare a report of key findings and missing information."
                       value={description}
                       onChange={(e) => setDescription(e.target.value)}
-                      disabled={building || submitting}
+                      disabled={building || submitting || uploading}
                       className="resize-none px-3 leading-relaxed md:text-[0.8125rem]"
                     />
                     <div className="flex flex-wrap items-center justify-between gap-3">
-                      <p className="!mb-0 text-xs text-muted-foreground">Generates a new name and instructions below.</p>
-                      <Button type="button" variant="outline" size="sm" onClick={onGenerate} disabled={building || submitting || !description.trim()}>
+                      <p className="!mb-0 text-xs text-muted-foreground">{samples.length ? "Uses attached samples to guide the draft." : "Attach work samples below to guide the draft."}</p>
+                      <Button type="button" variant="outline" size="sm" onClick={onGenerate} disabled={building || submitting || uploading || !description.trim()}>
                         {building && <Loader2 className="animate-spin" />}
-                        {building ? "Drafting…" : "Generate draft"}
+                        {building ? (samples.length ? "Reading samples & drafting…" : "Drafting…") : "Generate draft"}
                       </Button>
                     </div>
                   </div>
@@ -175,10 +185,12 @@ export function WorkflowFormDialog({
                 placeholder="Write your instructions here, or use AI to prepare a first draft."
                 value={instructions}
                 onChange={(e) => setInstructions(e.target.value)}
-                disabled={building || submitting}
+                disabled={building || submitting || uploading}
                 className="min-h-48 resize-y px-3.5 py-3 leading-relaxed md:text-[0.8125rem]"
               />
             </div>
+
+            <WorkflowWorkSamples value={samples} onChange={setSamples} disabled={submitting || building} onBusyChange={setUploading} />
 
             <div className="flex flex-col gap-3 border-t border-border/70 pt-5 sm:flex-row sm:items-center sm:justify-between sm:gap-5">
               <div className="flex flex-col gap-1.5">
@@ -192,19 +204,22 @@ export function WorkflowFormDialog({
                 aria-describedby={`${fieldId}-mode-hint`}
                 value={executionMode}
                 onChange={(e) => setExecutionMode(e.target.value as WorkflowExecutionMode)}
-                disabled={building || submitting}
+                disabled={building || submitting || uploading}
                 className="h-10 w-full shrink-0 rounded-lg border border-input bg-transparent px-3 text-base outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50 sm:w-40 md:text-[0.8125rem]"
               >
                 <option value="manual">Manual</option>
                 <option value="auto">Automatic</option>
               </select>
             </div>
+            {draftWarnings.length > 0 && <div role="status" className="space-y-2 text-xs leading-relaxed text-muted-foreground">
+              {draftWarnings.map((warning, index) => <p key={index}>{warning}</p>)}
+            </div>}
             {error && <p role="alert" className="text-[0.8125rem] text-destructive">{error}</p>}
           </div>
 
           <DialogFooter className="m-0 shrink-0 flex-row justify-end gap-2 bg-transparent px-5 py-4 sm:px-7">
-            <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)} disabled={submitting || building}>Cancel</Button>
-            <Button type="submit" size="sm" disabled={submitting || building}>
+            <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)} disabled={submitting || building || uploading}>Cancel</Button>
+            <Button type="submit" size="sm" disabled={submitting || building || uploading}>
               {submitting && <Loader2 className="animate-spin" />}
               {submitting ? "Saving…" : isEdit ? "Save changes" : "Create workflow"}
             </Button>
