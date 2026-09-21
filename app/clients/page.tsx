@@ -965,6 +965,7 @@ function WorkflowStatusBadge({
       <RemoveAssignmentDialog
         open={confirming}
         onOpenChange={setConfirming}
+        kind="workflow"
         itemName={workflowStatus.workflow_name}
         removing={removing}
         onConfirm={onRemove}
@@ -1044,6 +1045,7 @@ function PackageStatusBadge({
       <RemoveAssignmentDialog
         open={confirming}
         onOpenChange={setConfirming}
+        kind="package"
         itemName={pkg.package_name}
         removing={removing}
         onConfirm={onRemove}
@@ -1058,12 +1060,14 @@ function PackageStatusBadge({
 function RemoveAssignmentDialog({
   open,
   onOpenChange,
+  kind,
   itemName,
   removing,
   onConfirm,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  kind: "package" | "workflow";
   itemName: string;
   removing: boolean;
   onConfirm: () => void;
@@ -1072,7 +1076,8 @@ function RemoveAssignmentDialog({
     <Dialog open={open} onOpenChange={(next) => !removing && onOpenChange(next)}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Delete “{itemName}”?</DialogTitle>
+          <DialogTitle className="pr-8">Delete “{itemName}”?</DialogTitle>
+          <DialogDescription>This removes the {kind} from this client.</DialogDescription>
         </DialogHeader>
         <DialogFooter>
           <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} disabled={removing}>
