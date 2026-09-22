@@ -74,7 +74,7 @@ import { ResumeWorkflowDialog } from "@/components/resume-workflow-dialog";
 import { AgentActivityDisclosure } from "@/components/agent-activity-disclosure";
 import { ClientWorkflowActivity } from "@/components/client-workflow-activity";
 import { AssignWorkflowDialog } from "@/components/assign-workflow-dialog";
-import { AssignPackageDialog } from "@/components/assign-package-dialog";
+import { PackageDocumentPicker } from "@/components/package-document-picker";
 import { PackageFormDialog } from "@/components/package-form-dialog";
 import { ChecklistItemFormDialog } from "@/components/checklist-item-form-dialog";
 import { Linkify } from "@/components/linkify";
@@ -858,58 +858,17 @@ function ChecklistCard({
   );
 }
 
-function PackageAssignCard({
-  pkg,
-  clientId,
-  isSelected,
-  currentDocumentIds,
-  onAssigned,
-}: {
-  pkg: Package;
-  clientId: number;
-  isSelected?: boolean;
-  /** This client's already-checked document ids for this package, if it's
-   * already assigned - switches the dialog to "Save" instead of "Assign". */
-  currentDocumentIds?: number[];
-  onAssigned: () => void;
-}) {
-  return (
-    <AssignPackageDialog
-      clientIds={[clientId]}
-      initialPackage={pkg}
-      currentDocumentIds={currentDocumentIds}
-      onAssigned={onAssigned}
-      trigger={
-        <button
-          type="button"
-          className={cn(
-            "flex h-full flex-col gap-2 rounded-xl border p-3.5 text-left transition-colors",
-            isSelected
-              ? "border-accent/50 bg-accent/[0.06] ring-1 ring-accent/30"
-              : "border-border/60 bg-background hover:border-accent/40 hover:bg-muted/60"
-          )}
-        >
-          <span className="text-sm font-medium">{pkg.name}</span>
-          <ul className="flex flex-col gap-0.5 text-xs text-muted-foreground">
-            {pkg.documents.slice(0, 4).map((doc) => (
-              <li key={doc.id} className="truncate">
-                {doc.doc_type_needed}
-                {!doc.is_required && " (optional)"}
-              </li>
-            ))}
-            {pkg.documents.length > 4 && <li>+{pkg.documents.length - 4} more</li>}
-          </ul>
-        </button>
-      }
-    />
-  );
-}
-
 // Replaces the old always-visible "3 boxes in a row" package section so the
 // checklist is the first thing a client's page shows - assigning, editing,
 // and changing a client's package(s) all happen through this one dialog
 // instead, opened from the "Assign package" button above the checklist or
 // "Edit package" on the checklist card itself once one's assigned.
+//
+// Picking a package used to open a *second*, nested dialog on top of this
+// one for the document-selection step - two overlays stacked read as
+// cluttered rather than as one flow. This dialog now just swaps its own
+// content between the package grid and PackageDocumentPicker instead, so
+// there's never more than one dialog open at a time.
 function AssignPackagePopup({
   open,
   onOpenChange,
@@ -926,6 +885,8 @@ function AssignPackagePopup({
   onAssigned: () => void;
 }) {
   const [packages, setPackages] = useState<Package[] | null>(null);
+  const [selectedPackage, setSelectedPackage] = useState<Package | null>(null);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const refreshPackages = () => {
@@ -935,11 +896,14 @@ function AssignPackagePopup({
   };
 
   useEffect(() => {
-    if (open) refreshPackages();
+    if (open) {
+      setSelectedPackage(null);
+      refreshPackages();
+    }
   }, [open]);
 
   // Which of this package's specific document lines are already checked
-  // for this client - lets a card for an already-assigned package open
+  // for this client - lets picking an already-assigned package open
   // pre-populated with the real current state instead of just "required".
   const currentDocIdsByPackage: Record<number, number[]> = {};
   for (const item of checklist?.items ?? []) {
@@ -957,40 +921,75 @@ function AssignPackagePopup({
     : null;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(next) => !saving && onOpenChange(next)}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle className="pr-8">Assign a package</DialogTitle>
+          <DialogTitle className="pr-8">
+            {selectedPackage ? selectedPackage.name : "Assign a package"}
+          </DialogTitle>
           <DialogDescription>
-            Click a package to add its documents to this client, or change what&apos;s selected.
+            {selectedPackage
+              ? "Choose which documents to add to this client's checklist."
+              : "Click a package to add its documents to this client, or change what's selected."}
           </DialogDescription>
         </DialogHeader>
-        <div className="flex justify-end">
-          <PackageFormDialog onSaved={refreshPackages} variant="outline" />
-        </div>
-        {packages === null ? (
-          <div className="grid max-h-[60vh] grid-cols-1 gap-3 overflow-y-auto sm:grid-cols-2">
-            {[0, 1, 2].map((i) => (
-              <Skeleton key={i} className="h-28 w-full rounded-xl" />
-            ))}
-          </div>
-        ) : packages.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No packages yet - use &quot;Create New Package&quot; above to create one.
-          </p>
+
+        {selectedPackage ? (
+          <PackageDocumentPicker
+            pkg={selectedPackage}
+            clientIds={[clientId]}
+            currentDocumentIds={currentDocIdsByPackage[selectedPackage.id]}
+            onAssigned={onAssigned}
+            onBack={() => setSelectedPackage(null)}
+            onSavingChange={setSaving}
+          />
         ) : (
-          <div className="grid max-h-[60vh] grid-cols-1 gap-3 overflow-y-auto sm:grid-cols-2">
-            {sorted!.map((pkg) => (
-              <PackageAssignCard
-                key={pkg.id}
-                pkg={pkg}
-                clientId={clientId}
-                isSelected={assignedPackageIds.includes(pkg.id)}
-                currentDocumentIds={currentDocIdsByPackage[pkg.id]}
-                onAssigned={onAssigned}
-              />
-            ))}
-          </div>
+          <>
+            <div className="flex justify-end">
+              <PackageFormDialog onSaved={refreshPackages} variant="outline" />
+            </div>
+            {packages === null ? (
+              <div className="grid max-h-[65vh] grid-cols-1 gap-3 overflow-y-auto sm:grid-cols-2">
+                {[0, 1, 2].map((i) => (
+                  <Skeleton key={i} className="h-28 w-full rounded-xl" />
+                ))}
+              </div>
+            ) : packages.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No packages yet - use &quot;Create New Package&quot; above to create one.
+              </p>
+            ) : (
+              <div className="grid max-h-[65vh] grid-cols-1 gap-3 overflow-y-auto sm:grid-cols-2">
+                {sorted!.map((pkg) => {
+                  const isSelected = assignedPackageIds.includes(pkg.id);
+                  return (
+                    <button
+                      key={pkg.id}
+                      type="button"
+                      onClick={() => setSelectedPackage(pkg)}
+                      className={cn(
+                        "flex h-full flex-col gap-2 rounded-xl border p-3.5 text-left transition-colors",
+                        isSelected
+                          ? "border-accent/50 bg-accent/[0.06] ring-1 ring-accent/30"
+                          : "border-border/60 bg-background hover:border-accent/40 hover:bg-muted/60"
+                      )}
+                    >
+                      <span className="text-sm font-medium">{pkg.name}</span>
+                      <ul className="flex flex-col gap-0.5 text-xs text-muted-foreground">
+                        {pkg.documents.slice(0, 4).map((doc) => (
+                          <li key={doc.id} className="truncate">
+                            {doc.doc_type_needed}
+                            {!doc.is_required && " (optional)"}
+                          </li>
+                        ))}
+                        {pkg.documents.length > 4 && <li>+{pkg.documents.length - 4} more</li>}
+                      </ul>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </>
         )}
         {error && <p className="text-sm text-destructive">{error}</p>}
       </DialogContent>
