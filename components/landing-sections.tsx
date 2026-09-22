@@ -9,7 +9,7 @@ export function LandingSections() {
     <>
       <section
         id="workflows"
-        className={`${depth.ambient} scroll-mt-24 bg-marketing-forest py-20 text-sidebar-foreground sm:py-28`}
+        className="scroll-mt-24 border-y border-border/60 bg-muted/40 py-20 text-foreground sm:py-28"
       >
         <div className="mx-auto max-w-7xl px-6 sm:px-10">
           <div
@@ -17,7 +17,7 @@ export function LandingSections() {
             className="mb-12 grid items-end gap-8 lg:grid-cols-2 lg:gap-24"
           >
             <div>
-              <p className="text-xs uppercase tracking-widest text-marketing-brass">
+              <p className="text-xs uppercase tracking-widest text-marketing-forest dark:text-marketing-brass">
                 Workflows & work samples
               </p>
               <h2 className="mt-5 text-5xl leading-tight font-thin tracking-tight sm:text-6xl [font-family:var(--font-denton)]">
@@ -27,13 +27,13 @@ export function LandingSections() {
               </h2>
             </div>
             <div className="max-w-md lg:pb-2">
-              <p className="text-base leading-relaxed text-sidebar-foreground/90">
+              <p className="text-base leading-relaxed text-muted-foreground">
                 The details make it yours. Give Compozor an example of your
                 work, then use your client’s documents to prepare a new
                 version—with the structure, figures, and supporting detail your
                 team needs.
               </p>
-              <p className="mt-6 text-xs uppercase tracking-widest text-marketing-brass">
+              <p className="mt-6 text-xs uppercase tracking-widest text-marketing-forest dark:text-marketing-brass">
                 Word · Excel · PowerPoint · PDF
               </p>
             </div>
@@ -44,7 +44,7 @@ export function LandingSections() {
         </div>
       </section>
       <LandingPractices />
-      <section className="border-y border-border bg-marketing-sage/40 py-20 sm:py-28">
+      <section className="border-y border-border bg-marketing-brass/5 py-20 sm:py-28">
         <div className="mx-auto grid max-w-7xl gap-12 px-6 sm:px-10 md:grid-cols-2 md:gap-24">
           <div data-reveal="focus">
             <p className="text-xs uppercase tracking-widest text-marketing-forest dark:text-marketing-brass">

@@ -3,8 +3,8 @@ import { LandingWorkspacePreview } from "@/components/landing-workspace-preview"
 
 export function LandingHero() {
   return (
-    <section className="mx-auto w-full max-w-7xl px-6 pt-36 pb-16 sm:px-10 sm:pt-44 sm:pb-20">
-      <div className="grid items-center gap-8 lg:grid-cols-[1.35fr_1fr] lg:gap-16">
+    <section className="w-full pt-36 pb-16 sm:pt-44 sm:pb-20">
+      <div className="mx-auto grid w-full max-w-7xl items-center gap-8 px-6 sm:px-10 lg:grid-cols-[1.35fr_1fr] lg:gap-16">
         <div>
           <p className="mb-6 flex items-center gap-3 text-xs uppercase tracking-widest text-marketing-forest dark:text-marketing-brass">
             <span className="h-px w-7 bg-accent" aria-hidden />

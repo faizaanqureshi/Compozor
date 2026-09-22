@@ -335,3 +335,20 @@ light and compact contact shadows. Keep the hero grid and aurora intact. Use dep
 on the principal previews and CTA controls, not every card or paragraph; no tilt,
 parallax, floating loops, or additional blur. Reduce shadows on small screens and
 remove them for increased contrast and print.
+
+The hero workspace showcase can extend beyond the editorial text column (up to
+112rem) so product detail stays legible. Use `landing-workspace-preview.module.css`
+for its mottled mineral-stone texture; keep the texture behind opaque UI surfaces,
+never on text, charts, or controls. Keep the textured frame free of labels; use
+the caption below for context. On desktop, leave roughly 8% side margins and
+4.5% vertical margins around the workspace. Preserve the compact checklist-and-workflow
+composition. Add familiar app controls as static illustration details, not new
+panels or a redesigned dashboard; label the preview and its fictional data.
+Stack panels at smaller sizes instead of shrinking a desktop screenshot. Remove
+texture for increased contrast, reduced transparency, and print.
+
+The work-sample section uses a warm neutral surround and an ivory toolbar/source
+panel. Its report sits inside a muted champagne-gold mineral frame, a companion
+to the green hero texture. Keep the material confined to the space around solid
+paper; never behind text or charts. Use `landing-work-sample.module.css` with the
+same increased-contrast, reduced-transparency, and print fallbacks as the hero.
