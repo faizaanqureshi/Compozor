@@ -49,8 +49,13 @@ export function ChecklistItemFormDialog({
   const docTypePlaceholder = exampleDocTypesFor(org?.practice_type);
   const [docTypeNeeded, setDocTypeNeeded] = useState(item?.doc_type_needed ?? "");
   const [description, setDescription] = useState(item?.description ?? "");
-  const [startDate, setStartDate] = useState(item?.expected_date_range_start ?? "");
-  const [endDate, setEndDate] = useState(item?.expected_date_range_end ?? "");
+  // Deadline maps to the existing expected_date_range_end column - the
+  // separate expected_date_range_start field (a "document must cover this
+  // period" concept, still used by document_validation.py for items set
+  // before this simplification) has no UI here anymore. Saving through
+  // this form always clears it going forward - see performSave - rather
+  // than leaving a stale, now-invisible value in place.
+  const [deadline, setDeadline] = useState(item?.expected_date_range_end ?? "");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmedMaterial, setConfirmedMaterial] = useState(false);
@@ -60,8 +65,7 @@ export function ChecklistItemFormDialog({
   const resetForm = () => {
     setDocTypeNeeded(item?.doc_type_needed ?? "");
     setDescription(item?.description ?? "");
-    setStartDate(item?.expected_date_range_start ?? "");
-    setEndDate(item?.expected_date_range_end ?? "");
+    setDeadline(item?.expected_date_range_end ?? "");
     setError(null);
     setConfirmedMaterial(false);
     setShowReceivedWarning(false);
@@ -80,8 +84,7 @@ export function ChecklistItemFormDialog({
   const isMaterial =
     isEdit &&
     (docTypeNeeded.trim() !== item!.doc_type_needed ||
-      (startDate || null) !== (item!.expected_date_range_start || null) ||
-      (endDate || null) !== (item!.expected_date_range_end || null));
+      (deadline || null) !== (item!.expected_date_range_end || null));
 
   const performSave = async (notifyClient: boolean, confirmMaterialNow = confirmedMaterial) => {
     setSubmitting(true);
@@ -91,8 +94,8 @@ export function ChecklistItemFormDialog({
         await editChecklistItem(clientId, item!.id, {
           doc_type_needed: docTypeNeeded.trim(),
           description: description.trim(),
-          expected_date_range_start: startDate || null,
-          expected_date_range_end: endDate || null,
+          expected_date_range_start: null,
+          expected_date_range_end: deadline || null,
           confirm_material: confirmMaterialNow,
           notify_client: notifyClient,
         });
@@ -100,8 +103,7 @@ export function ChecklistItemFormDialog({
         await createChecklistItem(clientId, {
           doc_type_needed: docTypeNeeded.trim(),
           description: description.trim() || undefined,
-          expected_date_range_start: startDate || undefined,
-          expected_date_range_end: endDate || undefined,
+          expected_date_range_end: deadline || undefined,
         });
       }
       setShowReceivedWarning(false);
@@ -180,25 +182,14 @@ export function ChecklistItemFormDialog({
                   rows={3}
                 />
               </div>
-              <div className="flex gap-3">
-                <div className="flex flex-1 flex-col gap-1.5">
-                  <Label htmlFor="checklist-item-start">Expected period start</Label>
-                  <Input
-                    id="checklist-item-start"
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                  />
-                </div>
-                <div className="flex flex-1 flex-col gap-1.5">
-                  <Label htmlFor="checklist-item-end">Expected period end</Label>
-                  <Input
-                    id="checklist-item-end"
-                    type="date"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                  />
-                </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="checklist-item-deadline">Deadline (optional)</Label>
+                <Input
+                  id="checklist-item-deadline"
+                  type="date"
+                  value={deadline}
+                  onChange={(e) => setDeadline(e.target.value)}
+                />
               </div>
             </div>
 
