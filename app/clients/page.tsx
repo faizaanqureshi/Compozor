@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import { clientsKey, emailLogKey } from "@/lib/swr-keys";
 import {
@@ -65,6 +64,7 @@ import { PackageFormDialog } from "@/components/package-form-dialog";
 import { AssignWorkflowDialog } from "@/components/assign-workflow-dialog";
 import { AssignPackageDialog } from "@/components/assign-package-dialog";
 import { PurgeConfirmDialog } from "@/components/purge-confirm-dialog";
+import { UrgencyDashboard } from "@/components/urgency-dashboard";
 
 type WorkflowTone = "success" | "warning" | "attention" | "neutral";
 type SortKey = "name" | "email" | "documents" | "activity" | "status";
@@ -153,7 +153,6 @@ function deriveWorkflowStatus(
 }
 
 export default function ClientsPage() {
-  const router = useRouter();
   const {
     data: clients,
     error: clientsError,
@@ -423,12 +422,17 @@ export default function ClientsPage() {
     try {
       await sendChecklistReminder(clientId);
       setReminderState((prev) => ({ ...prev, [clientId]: "sent" }));
-    } catch {
+      // Refreshes client.last_reminder_sent_at from the server, which is
+      // what actually drives the 12h cooldown - the local "sent" state above
+      // is just the immediate in-session feedback until this lands.
+      mutateClients();
+    } catch (e) {
       setReminderState((prev) => {
         const next = { ...prev };
         delete next[clientId];
         return next;
       });
+      setError(e instanceof ApiError ? e.message : String(e));
     }
   };
 
@@ -557,83 +561,15 @@ export default function ClientsPage() {
       )}
 
       <section className="flex flex-col gap-4">
-        {!loading && waiting.length === 0 ? (
-          <div className="flex items-center gap-2 text-xs font-medium tracking-wide text-chart-2 uppercase dark:text-chart-4">
-            <Check className="size-3.5" />
-            No action needed
-          </div>
-        ) : (
-          <div className="flex items-center gap-2 text-xs font-medium tracking-wide text-amber-600 uppercase dark:text-amber-500">
-            <AlertTriangle className="size-3.5" />
-            Waiting for action
-          </div>
-        )}
-        <div className="rounded-2xl bg-card p-4 ring-1 ring-foreground/10">
-          <div className="grid grid-cols-1 gap-2.5 xl:grid-cols-2">
-            {loading &&
-              Array.from({ length: 2 }).map((_, i) => (
-                <Skeleton key={i} className="h-[4.75rem] w-full rounded-xl" />
-              ))}
-            {!loading &&
-              waiting.map(({ client, items }, i) => {
-                const state = reminderState[client.id];
-                return (
-                  <div
-                    key={client.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => router.push(`/clients/${client.id}`)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") router.push(`/clients/${client.id}`);
-                    }}
-                    style={{ animationDelay: `${Math.min(i, 10) * 25}ms` }}
-                    className="group/waiting flex cursor-pointer animate-blur-in-sm items-center justify-between gap-4 rounded-xl border border-amber-500/20 bg-amber-500/[0.04] px-4 py-3.5 transition-colors hover:bg-amber-500/[0.07]"
-                  >
-                    <div className="flex flex-col gap-1.5">
-                      <span className="font-thin underline-offset-4 [font-family:var(--font-denton)] group-hover/waiting:underline">
-                        {client.name}
-                      </span>
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        {items.slice(0, 3).map((i) => (
-                          <span
-                            key={i.id}
-                            className="rounded-full bg-amber-500/20 px-2 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-500/15 dark:text-amber-300"
-                          >
-                            {i.doc_type_needed}
-                          </span>
-                        ))}
-                        {items.length > 3 && (
-                          <span className="text-xs text-muted-foreground">
-                            +{items.length - 3} more
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-3">
-                      <button
-                        type="button"
-                        disabled={state === "sending" || state === "sent"}
-                        onClick={(e) => sendReminder(e, client.id)}
-                        className="rounded-full border border-amber-600/30 px-3 py-1.5 text-xs font-medium text-amber-700 opacity-0 transition-opacity group-hover/waiting:opacity-100 hover:bg-amber-500/10 disabled:opacity-100 dark:text-amber-400"
-                      >
-                        {state === "sent"
-                          ? "Sent"
-                          : state === "sending"
-                            ? "Sending…"
-                            : "Send reminder"}
-                      </button>
-                      <ChevronRight className="size-4 text-amber-700/50 dark:text-amber-400/50" />
-                    </div>
-                  </div>
-                );
-              })}
-            {!loading && waiting.length === 0 && (
-              <p className="animate-blur-in-sm py-3 text-sm text-muted-foreground">
-                Nothing outstanding — every client is caught up.
-              </p>
-            )}
-          </div>
+        <div className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+          Overview
         </div>
+        <UrgencyDashboard
+          clients={clients}
+          loading={loading}
+          reminderState={reminderState}
+          onSendReminder={sendReminder}
+        />
       </section>
 
       <section className="flex flex-col gap-4">

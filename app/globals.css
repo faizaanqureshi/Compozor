@@ -18,6 +18,10 @@
     --color-sidebar-primary: var(--sidebar-primary);
     --color-sidebar-foreground: var(--sidebar-foreground);
     --color-sidebar: var(--sidebar);
+    --color-doc-4: var(--doc-4);
+    --color-doc-3: var(--doc-3);
+    --color-doc-2: var(--doc-2);
+    --color-doc-1: var(--doc-1);
     --color-chart-5: var(--chart-5);
     --color-chart-4: var(--chart-4);
     --color-chart-3: var(--chart-3);
@@ -94,6 +98,16 @@
     --sidebar-accent-foreground: oklch(0.9261 0.0226 87.15);
     --sidebar-border: oklch(1 0 0 / 10%);
     --sidebar-ring: oklch(0.7280 0.1380 89.73);
+    /* Categorical palette reserved for document-TYPE charts only (e.g. the
+       urgency dashboard's doc-type pie) - deliberately distinct hues from
+       chart-1..5 above and from accent/destructive/success, so a doc-type
+       color is never mistaken for an urgency signal. Validated as a set
+       (lightness band, chroma floor, CVD/normal-vision separation, contrast)
+       via the dataviz skill's validate_palette.js - don't edit ad hoc. */
+    --doc-1: oklch(0.48 0.13 315); /* #79438F muted plum */
+    --doc-2: oklch(0.60 0.15 55); /* #C26300 terracotta */
+    --doc-3: oklch(0.60 0.13 250); /* #3A84CA slate blue */
+    --doc-4: oklch(0.55 0.14 350); /* #AB4A7D mauve */
 }
 
 .dark {
@@ -122,6 +136,10 @@
     --chart-3: oklch(0.8386 0.0533 89.04);
     --chart-4: oklch(0.3854 0.0345 178.87);
     --chart-5: oklch(0.6689 0.0248 84.59);
+    --doc-1: oklch(0.63 0.13 315); /* #A66FBF muted plum, brightened for dark bg */
+    --doc-2: oklch(0.64 0.15 55); /* #CF6F19 terracotta, brightened for dark bg */
+    --doc-3: oklch(0.64 0.12 250); /* #4E90D2 slate blue, brightened for dark bg */
+    --doc-4: oklch(0.65 0.14 350); /* #CD689B mauve, brightened for dark bg */
     --sidebar: oklch(0.2322 0.0201 212.57); /* #122023 brand */
     --sidebar-foreground: oklch(0.9261 0.0226 87.15);
     --sidebar-primary: oklch(0.7280 0.1380 89.73); /* #C9A227 brass gold */
