@@ -19,7 +19,6 @@ import {
   RotateCcw,
   Trash2,
   UploadCloud,
-  X,
 } from "lucide-react";
 import {
   ApiError,
@@ -40,9 +39,9 @@ import {
   ClientWorkflowAssignment,
   listClientWorkflowAssignments,
   startAssignedWorkflow,
-  createChecklistItem,
   deleteClient,
   deleteClientMemoryNote,
+  deleteDocument,
   downloadClientDocumentsZip,
   getClient,
   getClientUploadLink,
@@ -54,6 +53,7 @@ import {
   listEmailThreads,
   listPackages,
   regenerateClientUploadLink,
+  renameDocument,
   resolveClientCommitment,
   rerunWorkflowRun,
   runQueuedWorkflowRun,
@@ -74,6 +74,7 @@ import { ClientWorkflowActivity } from "@/components/client-workflow-activity";
 import { AssignWorkflowDialog } from "@/components/assign-workflow-dialog";
 import { AssignPackageDialog } from "@/components/assign-package-dialog";
 import { PackageFormDialog } from "@/components/package-form-dialog";
+import { ChecklistItemFormDialog } from "@/components/checklist-item-form-dialog";
 import { Linkify } from "@/components/linkify";
 import {
   Accordion,
@@ -579,10 +580,7 @@ function ChecklistCard({
   onChange: () => void;
   onEditPackage: () => void;
 }) {
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [docTypeNeeded, setDocTypeNeeded] = useState("");
-  const [description, setDescription] = useState("");
-  const [submitting, setSubmitting] = useState(false);
+  const [showAddDialog, setShowAddDialog] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
   const [deselecting, setDeselecting] = useState(false);
@@ -646,26 +644,6 @@ function ChecklistCard({
       setError(e instanceof ApiError ? e.message : String(e));
     } finally {
       setDeselecting(false);
-    }
-  };
-
-  const onSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSubmitting(true);
-    setError(null);
-    try {
-      await createChecklistItem(clientId, {
-        doc_type_needed: docTypeNeeded,
-        description: description || undefined,
-      });
-      setDocTypeNeeded("");
-      setDescription("");
-      setShowAddForm(false);
-      onChange();
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : String(e));
-    } finally {
-      setSubmitting(false);
     }
   };
 
@@ -765,7 +743,12 @@ function ChecklistCard({
               .sort((a, b) => b.received_at.localeCompare(a.received_at))[0];
             return (
               <tr key={item.id} className="border-b border-border/40">
-                <td className="py-2 pr-4 font-medium">{item.doc_type_needed}</td>
+                <td className="py-2 pr-4 font-medium">
+                  {item.doc_type_needed}
+                  {item.description && (
+                    <div className="text-xs font-normal text-muted-foreground">{item.description}</div>
+                  )}
+                </td>
                 <td className="py-2 pr-4">
                   <StatusPill status={item.status} />
                 </td>
@@ -817,47 +800,21 @@ function ChecklistCard({
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
-      {showAddForm ? (
-        <form
-          onSubmit={onSubmit}
-          className="flex items-start gap-2 border-t border-border/60 pt-4"
-        >
-          <Input
-            required
-            autoFocus
-            placeholder="Doc type (e.g. T4, T4A, T5, NOA, bank_statement, qbo_export, receipt)"
-            value={docTypeNeeded}
-            onChange={(e) => setDocTypeNeeded(e.target.value)}
-            className="flex-1"
-          />
-          <Input
-            placeholder="Description (optional)"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            className="flex-1"
-          />
-          <Button type="submit" disabled={submitting} size="sm">
-            {submitting ? "Adding…" : "Save"}
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            onClick={() => setShowAddForm(false)}
-          >
-            <X />
-          </Button>
-        </form>
-      ) : (
-        <button
-          type="button"
-          onClick={() => setShowAddForm(true)}
-          className="flex items-center gap-1.5 self-start border-t border-transparent pt-1 text-sm font-medium text-accent underline-offset-4 transition-colors hover:text-accent/70 hover:underline"
-        >
-          <Plus className="size-3.5" />
-          Add requirement
-        </button>
-      )}
+      <button
+        type="button"
+        onClick={() => setShowAddDialog(true)}
+        className="flex items-center gap-1.5 self-start border-t border-transparent pt-1 text-sm font-medium text-accent underline-offset-4 transition-colors hover:text-accent/70 hover:underline"
+      >
+        <Plus className="size-3.5" />
+        Add requirement
+      </button>
+
+      <ChecklistItemFormDialog
+        clientId={clientId}
+        open={showAddDialog}
+        onOpenChange={setShowAddDialog}
+        onSaved={onChange}
+      />
 
       <Dialog open={deselectOpen} onOpenChange={setDeselectOpen}>
         <DialogContent>
@@ -1083,6 +1040,7 @@ function ChecklistItemActions({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmingWaive, setConfirmingWaive] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   const isOutstanding = item.status === "missing" || item.status === "wrong";
 
@@ -1139,6 +1097,9 @@ function ChecklistItemActions({
           <span className="sr-only">Row actions</span>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={() => setEditing(true)}>
+            Edit requirement
+          </DropdownMenuItem>
           <DropdownMenuItem disabled={item.status === "received"} onClick={onAccept}>
             Accept anyway
           </DropdownMenuItem>
@@ -1174,6 +1135,14 @@ function ChecklistItemActions({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ChecklistItemFormDialog
+        clientId={clientId}
+        item={item}
+        open={editing}
+        onOpenChange={setEditing}
+        onSaved={onChange}
+      />
     </div>
   );
 }
@@ -1708,7 +1677,10 @@ function DocumentVaultCard({
         <thead>
           <tr className="border-b border-border text-left">
             <th className="py-1.5 pr-4 pb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-              Type
+              Document
+            </th>
+            <th className="py-1.5 pr-4 pb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+              Source
             </th>
             <th className="py-1.5 pr-4 pb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
               Status
@@ -1719,7 +1691,7 @@ function DocumentVaultCard({
             <th className="py-1.5 pr-4 pb-2.5 text-right text-xs font-medium tracking-wide text-muted-foreground uppercase">
               Received
             </th>
-            <th className="py-1.5 pr-4" />
+            <th className="py-1.5 pr-0" />
           </tr>
         </thead>
         <tbody>
@@ -1736,7 +1708,13 @@ function DocumentVaultCard({
             return (
               <tr key={doc.id} className="border-b border-border/40">
                 <td className="py-2 pr-4 font-medium">
-                  {doc.classified_type ?? "unknown"}
+                  {doc.resolved_display_name}
+                  {doc.classified_type && doc.classified_type !== doc.resolved_display_name && (
+                    <div className="text-xs font-normal text-muted-foreground">{doc.classified_type}</div>
+                  )}
+                </td>
+                <td className="py-2 pr-4 text-muted-foreground">
+                  {sourceChannelLabel(doc.source_channel)}
                 </td>
                 <td className="py-2 pr-4">
                   {rejected ? (
@@ -1753,26 +1731,15 @@ function DocumentVaultCard({
                 <td className="py-2 pr-4 text-right text-muted-foreground">
                   {new Date(doc.received_at).toLocaleString()}
                 </td>
-                <td className="py-2 pr-4">
-                  {doc.download_url ? (
-                    <a
-                      href={doc.download_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="underline underline-offset-4"
-                    >
-                      View
-                    </a>
-                  ) : (
-                    <span className="text-muted-foreground">unavailable</span>
-                  )}
+                <td className="py-2 pr-0 text-right">
+                  <DocumentActions clientId={clientId} doc={doc} checklistItem={item} onChange={onChange} />
                 </td>
               </tr>
             );
           })}
           {documents?.length === 0 && (
             <tr>
-              <td colSpan={5} className="py-4 text-muted-foreground">
+              <td colSpan={6} className="py-4 text-muted-foreground">
                 No documents uploaded yet.
               </td>
             </tr>
@@ -1782,6 +1749,175 @@ function DocumentVaultCard({
       </div>
       )}
     </SectionCard>
+  );
+}
+
+const SOURCE_CHANNEL_LABELS: Record<string, string> = {
+  manual_upload: "Manual upload",
+  email: "Email",
+  upload_link: "Upload link",
+};
+
+function sourceChannelLabel(source: string | null): string {
+  if (!source) return "—";
+  return (
+    SOURCE_CHANNEL_LABELS[source] ??
+    // Unknown/future channel value - humanize rather than breaking
+    // ("api_import" -> "Api import") instead of showing a raw enum-ish string.
+    source.charAt(0).toUpperCase() + source.slice(1).replace(/_/g, " ")
+  );
+}
+
+function DocumentActions({
+  clientId,
+  doc,
+  checklistItem,
+  onChange,
+}: {
+  clientId: number;
+  doc: DocumentOut;
+  checklistItem?: ChecklistItem;
+  onChange: () => void;
+}) {
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState(false);
+  const [newName, setNewName] = useState(doc.resolved_display_name);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+  // Whether this specific document is plausibly what's currently keeping
+  // the linked checklist item Received - drives the stronger delete
+  // warning. A document can be linked to an item (checklist_item_id set)
+  // without being the one that satisfied it (e.g. a wrong-attempt is
+  // linked too) - only an "accepted" one is.
+  const validationStatus =
+    doc.extracted_metadata && typeof doc.extracted_metadata === "object"
+      ? (doc.extracted_metadata as { validation_status?: string }).validation_status
+      : undefined;
+  const satisfiesReceivedItem =
+    !!checklistItem && checklistItem.status === "received" && validationStatus === "accepted";
+
+  const onStartRename = () => {
+    setNewName(doc.resolved_display_name);
+    setError(null);
+    setRenaming(true);
+  };
+
+  const onSaveRename = async () => {
+    const trimmed = newName.trim();
+    if (!trimmed) return;
+    setPending(true);
+    setError(null);
+    try {
+      await renameDocument(clientId, doc.id, trimmed);
+      setRenaming(false);
+      onChange();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setPending(false);
+    }
+  };
+
+  const onDelete = async () => {
+    setPending(true);
+    setError(null);
+    try {
+      await deleteDocument(clientId, doc.id);
+      setConfirmingDelete(false);
+      onChange();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center justify-end gap-2">
+      {error && <p className="text-xs text-destructive">{error}</p>}
+      <DropdownMenu>
+        <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" disabled={pending} />}>
+          <MoreHorizontal />
+          <span className="sr-only">Document actions</span>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={onStartRename}>Rename document</DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={!doc.download_url}
+            onClick={() => doc.download_url && window.open(doc.download_url, "_blank", "noreferrer")}
+          >
+            View / Download
+          </DropdownMenuItem>
+          <DropdownMenuItem variant="destructive" onClick={() => setConfirmingDelete(true)}>
+            Delete document
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <Dialog open={renaming} onOpenChange={(open) => !pending && setRenaming(open)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Rename document</DialogTitle>
+            <DialogDescription>
+              Only changes what you and your client see here - the AI&apos;s own classification and
+              matching are untouched.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="document-display-name">Name</Label>
+            <Input
+              id="document-display-name"
+              autoFocus
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+            />
+          </div>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRenaming(false)} disabled={pending}>
+              Cancel
+            </Button>
+            <Button onClick={onSaveRename} disabled={pending || !newName.trim()}>
+              {pending ? "Saving…" : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={confirmingDelete} onOpenChange={(open) => !pending && setConfirmingDelete(open)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Are you sure?</DialogTitle>
+            <DialogDescription render={<div className="flex flex-col gap-2" />}>
+                {satisfiesReceivedItem && checklistItem && (
+                  <p>
+                    This document currently satisfies{" "}
+                    <span className="font-medium text-foreground">
+                      &ldquo;{checklistItem.doc_type_needed}&rdquo;
+                    </span>
+                    . Deleting it may return that requirement to Missing.
+                  </p>
+                )}
+                <p>
+                  The document will be permanently deleted from Compozor.{" "}
+                  <span className="font-semibold text-foreground">This cannot be undone.</span> The
+                  file will no longer be available to view or download.
+                </p>
+            </DialogDescription>
+          </DialogHeader>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmingDelete(false)} disabled={pending}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={onDelete} disabled={pending}>
+              {pending ? "Deleting…" : "Delete permanently"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }
 

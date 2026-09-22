@@ -135,6 +135,12 @@ export interface ChecklistItem {
   package_id: number | null;
   package_name: string | null;
   package_document_id: number | null;
+  last_communicated_at: string | null;
+  // Whether the client may already have been told about this exact
+  // requirement (set once, or a conservative legacy fallback server-side)
+  // - drives whether editing it warns before saving. See
+  // ChecklistItem.possibly_communicated on the backend.
+  possibly_communicated: boolean;
 }
 
 export interface ChecklistSummary {
@@ -170,16 +176,29 @@ export interface ClientDetail extends Client {
   workflow_statuses: ClientWorkflowStatus[];
 }
 
+export type DocumentSourceChannel = "manual_upload" | "email" | "upload_link" | (string & {});
+
 export interface DocumentOut {
   id: number;
   client_id: number;
   checklist_item_id: number | null;
   email_log_id: number | null;
+  upload_batch_id: number | null;
   s3_path: string;
   classified_type: string | null;
   year: number | null;
   extracted_metadata: unknown;
   received_at: string;
+  // User-facing rename target - never affects classified_type or anything
+  // else about processing. See lib/api.ts's updateDocument.
+  display_name: string | null;
+  // Immutable original filename, never changed by rename.
+  original_filename: string | null;
+  source_channel: DocumentSourceChannel | null;
+  // What the Vault should actually render - the backend's own fallback
+  // chain (display_name -> classified_type -> original filename ->
+  // generic label), so the frontend doesn't reimplement it.
+  resolved_display_name: string;
   download_url: string | null;
 }
 
@@ -522,6 +541,37 @@ export const updateChecklistItem = (
     json("PATCH", input)
   );
 
+export interface ChecklistItemEditInput {
+  doc_type_needed?: string;
+  description?: string;
+  expected_date_range_start?: string | null;
+  expected_date_range_end?: string | null;
+  // Must be true to proceed with a material edit (doc_type_needed or
+  // either date) to a Received item - the backend 409s otherwise. Set this
+  // only after the user has confirmed the "already marked as received"
+  // warning.
+  confirm_material?: boolean;
+  // Draft (or send, per the org's normal automation rules) a client-facing
+  // update through the existing email system.
+  notify_client?: boolean;
+}
+
+export interface ChecklistItemNotification {
+  status: EmailStatus;
+  email_log_id: number;
+}
+
+export interface ChecklistItemEditResult {
+  item: ChecklistItem;
+  notification: ChecklistItemNotification | null;
+}
+
+export const editChecklistItem = (clientId: number, itemId: number, input: ChecklistItemEditInput) =>
+  request<ChecklistItemEditResult>(
+    `/clients/${clientId}/checklist-items/${itemId}/edit`,
+    json("PATCH", input)
+  );
+
 export const waiveChecklistItem = (clientId: number, itemId: number) =>
   request<void>(`/clients/${clientId}/checklist-items/${itemId}`, {
     method: "DELETE",
@@ -568,6 +618,17 @@ export const uploadDocument = (clientId: number, file: File) => {
 
 export const listClientDocuments = (clientId: number) =>
   request<DocumentOut[]>(`/clients/${clientId}/documents`);
+
+// Presentation only - never touches classified_type, checklist matching,
+// or the R2 object key.
+export const renameDocument = (clientId: number, documentId: number, displayName: string) =>
+  request<DocumentOut>(`/clients/${clientId}/documents/${documentId}`, json("PATCH", { display_name: displayName }));
+
+// Permanent: removes the stored file and soft-deletes the row. See the
+// Vault's delete confirmation for what the user is told before this is
+// ever called.
+export const deleteDocument = (clientId: number, documentId: number) =>
+  request<void>(`/clients/${clientId}/documents/${documentId}`, { method: "DELETE" });
 
 // Bypasses request<T>() (which always calls res.json()) since this returns
 // a binary .zip, not JSON - fetches it as a blob with the same auth header
