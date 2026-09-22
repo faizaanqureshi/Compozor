@@ -471,7 +471,6 @@ export default function ClientsPage() {
         <WorkflowFormDialog onSaved={() => {}} variant="outline" />
         <PackageFormDialog onSaved={() => {}} variant="outline" />
         <ClientImportModal onImported={() => mutateClients()} />
-        <ArchivedClientsDialog onRestored={() => mutateClients()} />
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger render={<Button />}>
             <Plus />
@@ -674,15 +673,18 @@ export default function ClientsPage() {
           <div className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
             All clients
           </div>
-          <div className="relative flex items-center">
-            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-foreground/50" />
-            <Input
-              placeholder="Search clients…"
-              aria-label="Search clients"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full border-none bg-muted/60 pl-8 shadow-none focus-visible:ring-1 focus-visible:ring-ring/30 sm:w-56"
-            />
+          <div className="flex items-center gap-2">
+            <div className="relative flex items-center">
+              <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-foreground/50" />
+              <Input
+                placeholder="Search clients…"
+                aria-label="Search clients"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full border-none bg-muted/60 pl-8 shadow-none focus-visible:ring-1 focus-visible:ring-ring/30 sm:w-56"
+              />
+            </div>
+            <ArchivedClientsDialog onRestored={() => mutateClients()} />
           </div>
         </div>
         {selectedIds.size > 0 && (
@@ -927,13 +929,13 @@ function WorkflowStatusBadge({
   onRemoved: () => void;
 }) {
   const [removing, setRemoving] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
-  const onRemove = async (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const onRemove = async () => {
     setRemoving(true);
     try {
       await unassignWorkflowFromClient(workflowStatus.workflow_id, clientId);
+      setConfirming(false);
       onRemoved();
     } catch {
       setRemoving(false);
@@ -953,13 +955,24 @@ function WorkflowStatusBadge({
       </span>
       <button
         type="button"
-        onClick={onRemove}
-        disabled={removing}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setConfirming(true);
+        }}
         title={`Remove ${workflowStatus.workflow_name}`}
-        className="hidden shrink-0 rounded-full p-0.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive group-hover/wf:inline-flex disabled:opacity-50"
+        className="hidden shrink-0 rounded-full p-0.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive group-hover/wf:inline-flex"
       >
         <XIcon className="size-3" />
       </button>
+      <RemoveAssignmentDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        kind="workflow"
+        itemName={workflowStatus.workflow_name}
+        removing={removing}
+        onConfirm={onRemove}
+      />
     </span>
   );
 }
@@ -997,13 +1010,13 @@ function PackageStatusBadge({
   onRemoved: () => void;
 }) {
   const [removing, setRemoving] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
-  const onRemove = async (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const onRemove = async () => {
     setRemoving(true);
     try {
       await unassignPackageFromClient(pkg.package_id, clientId);
+      setConfirming(false);
       onRemoved();
     } catch {
       setRemoving(false);
@@ -1022,14 +1035,63 @@ function PackageStatusBadge({
       </Tooltip>
       <button
         type="button"
-        onClick={onRemove}
-        disabled={removing}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setConfirming(true);
+        }}
         title={`Remove ${pkg.package_name}`}
-        className="hidden shrink-0 rounded-full p-0.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive group-hover/pkg:inline-flex disabled:opacity-50"
+        className="hidden shrink-0 rounded-full p-0.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive group-hover/pkg:inline-flex"
       >
         <XIcon className="size-3" />
       </button>
+      <RemoveAssignmentDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        kind="package"
+        itemName={pkg.package_name}
+        removing={removing}
+        onConfirm={onRemove}
+      />
     </span>
+  );
+}
+
+// Shared by WorkflowStatusBadge and PackageStatusBadge - hovering to reveal
+// the "x" makes it easy to remove an assignment by accident, so both go
+// through this same short confirm instead of unassigning immediately.
+function RemoveAssignmentDialog({
+  open,
+  onOpenChange,
+  kind,
+  itemName,
+  removing,
+  onConfirm,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  kind: "package" | "workflow";
+  itemName: string;
+  removing: boolean;
+  onConfirm: () => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={(next) => !removing && onOpenChange(next)}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle className="pr-8">Delete “{itemName}”?</DialogTitle>
+          <DialogDescription>This removes the {kind} from this client.</DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} disabled={removing}>
+            Cancel
+          </Button>
+          <Button variant="destructive" size="sm" onClick={onConfirm} disabled={removing}>
+            {removing ? "Deleting…" : "Delete"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
