@@ -548,12 +548,18 @@ function ChecklistPanel({ checklist }: { checklist: PublicChecklist | null }) {
             )}
             <span
               className={cn(
+                "flex flex-col",
                 item.status === "received" && "text-muted-foreground line-through decoration-muted-foreground/50"
               )}
             >
-              {item.doc_type_needed}
-              {item.status === "wrong" && (
-                <span className="ml-1.5 text-xs text-accent">(replacement needed)</span>
+              <span>
+                {item.doc_type_needed}
+                {item.status === "wrong" && (
+                  <span className="ml-1.5 text-xs text-accent no-underline">(replacement needed)</span>
+                )}
+              </span>
+              {item.description && (
+                <span className="text-xs font-normal text-muted-foreground no-underline">{item.description}</span>
               )}
             </span>
           </li>
