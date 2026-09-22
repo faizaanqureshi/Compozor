@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { publicPageMetadata } from "@/lib/seo";
 import Link from "next/link";
 import { Show, Waitlist } from "@clerk/nextjs";
 import { AuroraBackground } from "@/components/aurora-background";
@@ -6,11 +7,18 @@ import { LandingNav } from "@/components/landing-nav";
 import { SiteFooter } from "@/components/site-footer";
 import { Button } from "@/components/ui/button";
 
-export const metadata: Metadata = {
-  title: "Join the waitlist — Compozor",
-  description:
-    "Join Compozor’s early-access waitlist. Less chasing, more work delivered for your firm.",
-};
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ waitlist?: string[] }>;
+}): Promise<Metadata> {
+  const { waitlist } = await params;
+  const metadata = publicPageMetadata("/waitlist");
+  // Clerk's confirmation routes are not separate landing pages.
+  return waitlist?.length
+    ? { ...metadata, robots: { index: false, follow: true } }
+    : metadata;
+}
 
 export default function WaitlistPage() {
   return (

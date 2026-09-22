@@ -11,6 +11,9 @@ const isPublicRoute = createRouteMatcher([
   "/privacy",
   "/terms",
   "/cookies",
+  "/robots\\.txt",
+  "/sitemap\\.xml",
+  "/opengraph-image",
 ]);
 
 export default clerkMiddleware(async (auth, request) => {

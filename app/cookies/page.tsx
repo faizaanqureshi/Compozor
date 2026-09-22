@@ -1,5 +1,8 @@
+import { publicPageMetadata } from "@/lib/seo";
 import Link from "next/link";
 import { LegalPageShell, LegalSection } from "@/components/legal-page-shell";
+
+export const metadata = publicPageMetadata("/cookies");
 
 export default function CookiePolicyPage() {
   return (

@@ -6,14 +6,10 @@ import { LandingSections, LandingClosing } from "@/components/landing-sections";
 import { LandingFaq } from "@/components/landing-faq";
 import { AuroraBackground } from "@/components/aurora-background";
 import { LandingMotion } from "@/components/landing-motion";
-import type { Metadata } from "next";
+import { publicPageMetadata, SITE_STRUCTURED_DATA } from "@/lib/seo";
 import styles from "@/components/landing-motion.module.css";
 
-export const metadata: Metadata = {
-  title: "Compozor — Less chasing. More work delivered.",
-  description:
-    "Client communication, document collection, and work prepared your way. Compozor helps professional service firms turn client documents into reports, spreadsheets, and more.",
-};
+export const metadata = publicPageMetadata("/");
 
 export default function Home() {
   return (
@@ -24,6 +20,12 @@ export default function Home() {
       >
         Skip to content
       </a>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(SITE_STRUCTURED_DATA).replace(/</g, "\\u003c"),
+        }}
+      />
       <LandingNav />
       <main id="main-content">
         <LandingMotion />

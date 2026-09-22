@@ -4,6 +4,7 @@ import "./globals.css";
 import { AppShell } from "@/components/app-shell";
 import localFont from "next/font/local";
 import { cn } from "@/lib/utils";
+import { SITE_URL, SITE_DESCRIPTION } from "@/lib/seo";
 
 const neueMontreal = localFont({
   variable: "--font-sans",
@@ -28,8 +29,12 @@ const denton = localFont({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: "Compozor",
-  description: "Client communication, document collection, and workflows for professional service firms.",
+  description: SITE_DESCRIPTION,
+  // Only explicitly listed marketing pages opt into indexing. This also keeps
+  // new dashboard pages, sign-in, and client upload links out of search.
+  robots: { index: false, follow: true },
   manifest: "/site.webmanifest",
   icons: {
     icon: [
