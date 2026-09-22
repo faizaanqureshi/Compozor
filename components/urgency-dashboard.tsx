@@ -9,18 +9,6 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
-// Reserved for document-TYPE identity only (see the --doc-* tokens in
-// globals.css) - deliberately never accent/destructive/success, so a
-// doc-type color is never mistaken for an urgency signal on the same page.
-// Validated as a categorical set via the dataviz skill's validate_palette.js.
-const DOC_TYPE_COLORS = [
-  "var(--color-doc-1)",
-  "var(--color-doc-2)",
-  "var(--color-doc-3)",
-  "var(--color-doc-4)",
-];
-const DOC_TYPE_OTHER_COLOR = "var(--color-muted-foreground)";
-
 // "Deadline" isn't a dedicated field anywhere in the data model - the closest
 // thing is ChecklistItem.expected_date_range_end, an AI-extracted date that's
 // null whenever a request had no date context. Treating "no deadline" the
@@ -202,6 +190,7 @@ export function UrgencyDashboard({
 
   return (
     <div className="flex animate-blur-in-sm flex-col gap-4">
+      <div className="flex flex-col gap-4 rounded-2xl bg-muted/30 p-4 ring-1 ring-foreground/10">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
         <StatTile
           label="Outstanding documents"
@@ -233,6 +222,68 @@ export function UrgencyDashboard({
         <StatTile label="Clients needing action" value={stats.clientsNeedingAction} icon={Users} />
       </div>
 
+      <p className="-mt-2 text-xs text-muted-foreground">
+        Click a tile to filter the documents below.
+      </p>
+
+      <Accordion defaultValue={["table"]} className="rounded-2xl bg-card ring-1 ring-foreground/10">
+        <AccordionItem value="table" className="border-none">
+          <AccordionTrigger className="items-center px-4 py-3.5 text-xs font-medium tracking-wide text-muted-foreground uppercase hover:no-underline">
+            Outstanding documents
+          </AccordionTrigger>
+          <AccordionContent className="px-4 pb-4">
+            {filterTier && (
+              <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
+                <span>
+                  Showing {TIER_META[filterTier].label.toLowerCase()} only ({visibleRows.length})
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setFilterTier(null)}
+                  className="font-medium text-foreground/80 underline-offset-2 hover:underline"
+                >
+                  Clear filter
+                </button>
+              </div>
+            )}
+            <div className="max-h-72 overflow-x-auto overflow-y-auto">
+              <table className="w-full min-w-[720px] border-collapse text-sm">
+                <thead className="sticky top-0 z-10 bg-card">
+                  <tr className="text-left">
+                    <SortableTh label="Client" sortKey="client" sort={sort} onSort={toggleSort} />
+                    <SortableTh label="Document" sortKey="document" sort={sort} onSort={toggleSort} />
+                    <SortableTh label="Deadline" sortKey="deadline" sort={sort} onSort={toggleSort} />
+                    <SortableTh label="Age" sortKey="age" sort={sort} onSort={toggleSort} />
+                    <th className="border-b border-border/70 py-1.5 text-right text-[11px] font-medium tracking-wide text-muted-foreground/70">
+                      Action
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleRows.map((row) => (
+                    <UrgencyRow
+                      key={row.item.id}
+                      row={row}
+                      now={now}
+                      reminderState={reminderState}
+                      onSendReminder={onSendReminder}
+                    />
+                  ))}
+                  {visibleRows.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="py-4 text-center text-xs text-muted-foreground">
+                        No {filterTier ? TIER_META[filterTier].label.toLowerCase() : "outstanding"} documents.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </AccordionContent>
+        </AccordionItem>
+      </Accordion>
+      </div>
+
       <Accordion defaultValue={["insights"]} className="rounded-2xl bg-card ring-1 ring-foreground/10">
         <AccordionItem value="insights" className="border-none">
           <AccordionTrigger className="items-center px-4 py-3.5 text-xs font-medium tracking-wide text-muted-foreground uppercase hover:no-underline">
@@ -241,11 +292,13 @@ export function UrgencyDashboard({
           <AccordionContent className="px-4 pb-4">
             <div className="grid grid-cols-1 gap-6 pt-2 lg:grid-cols-2">
               <div className="flex flex-col gap-3">
-                <span className="text-xs text-muted-foreground">Outstanding documents by deadline status</span>
+                <span className="text-[0.625rem] tracking-widest text-muted-foreground uppercase">
+                  Outstanding documents by deadline status
+                </span>
                 <UrgencyPieChart stats={stats} />
               </div>
               <div className="flex flex-col gap-3">
-                <span className="text-xs text-muted-foreground">
+                <span className="text-[0.625rem] tracking-widest text-muted-foreground uppercase">
                   Outstanding documents by type{docTypeBreakdown.length >= 5 && " (top 4)"}
                 </span>
                 <DocTypeBarChart data={docTypeBreakdown} />
@@ -254,56 +307,6 @@ export function UrgencyDashboard({
           </AccordionContent>
         </AccordionItem>
       </Accordion>
-
-      <div className="rounded-2xl bg-card p-4 ring-1 ring-foreground/10">
-        {filterTier && (
-          <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
-            <span>
-              Showing {TIER_META[filterTier].label.toLowerCase()} only ({visibleRows.length})
-            </span>
-            <button
-              type="button"
-              onClick={() => setFilterTier(null)}
-              className="font-medium text-foreground/80 underline-offset-2 hover:underline"
-            >
-              Clear filter
-            </button>
-          </div>
-        )}
-        <div className="max-h-72 overflow-x-auto overflow-y-auto">
-          <table className="w-full min-w-[720px] border-collapse text-sm">
-            <thead className="sticky top-0 z-10 bg-card">
-              <tr className="text-left">
-                <SortableTh label="Client" sortKey="client" sort={sort} onSort={toggleSort} />
-                <SortableTh label="Document" sortKey="document" sort={sort} onSort={toggleSort} />
-                <SortableTh label="Deadline" sortKey="deadline" sort={sort} onSort={toggleSort} />
-                <SortableTh label="Age" sortKey="age" sort={sort} onSort={toggleSort} />
-                <th className="border-b border-border/70 py-1.5 text-right text-[11px] font-medium tracking-wide text-muted-foreground/70">
-                  Action
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {visibleRows.map((row) => (
-                <UrgencyRow
-                  key={row.item.id}
-                  row={row}
-                  now={now}
-                  reminderState={reminderState}
-                  onSendReminder={onSendReminder}
-                />
-              ))}
-              {visibleRows.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="py-4 text-center text-xs text-muted-foreground">
-                    No {filterTier ? TIER_META[filterTier].label.toLowerCase() : "outstanding"} documents.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
     </div>
   );
 }
@@ -512,7 +515,7 @@ function UrgencyPieChart({
   ].filter((d) => d.count > 0);
 
   const radius = 40;
-  const strokeWidth = 16;
+  const strokeWidth = 11;
   const circumference = 2 * Math.PI * radius;
   // Prefix-sum of fractions so each segment's start offset is a lookup, not
   // a mutation carried across the render map (React Compiler flags
@@ -550,8 +553,8 @@ function UrgencyPieChart({
           })}
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-2xl font-semibold text-foreground">{total}</span>
-          <span className="text-[8px] tracking-wide text-muted-foreground uppercase">outstanding</span>
+          <span className="text-2xl font-semibold text-foreground tabular-nums">{total}</span>
+          <span className="text-[9px] tracking-widest text-muted-foreground uppercase">outstanding</span>
         </div>
       </div>
       <div className="flex w-40 shrink-0 flex-col gap-1.5 sm:w-44">
@@ -580,27 +583,30 @@ function DocTypeBarChart({ data }: { data: { label: string; count: number }[] })
 
   return (
     <div className="flex h-40 items-end gap-3 sm:gap-4">
-      {data.map((d, i) => {
-        const color = i < DOC_TYPE_COLORS.length ? DOC_TYPE_COLORS[i] : DOC_TYPE_OTHER_COLOR;
-        return (
-          <div key={d.label} className="flex h-full flex-1 flex-col items-center justify-end gap-1.5">
-            <span className="text-xs font-medium text-foreground/80 tabular-nums">{d.count}</span>
-            <div className="flex w-full flex-1 items-end">
-              <div
-                className="w-full rounded-t-md transition-[height]"
-                style={{
-                  height: `${Math.max((d.count / max) * 100, d.count > 0 ? 4 : 0)}%`,
-                  backgroundColor: color,
-                }}
-                title={`${d.label}: ${d.count}`}
-              />
-            </div>
-            <span className="w-full truncate text-center text-[11px] text-muted-foreground" title={d.label}>
-              {d.label}
-            </span>
+      {data.map((d) => (
+        <div key={d.label} className="flex h-full flex-1 flex-col items-center justify-end gap-1.5">
+          <span className="text-xs tabular-nums text-foreground/80">{d.count}</span>
+          <div className="flex w-full flex-1 items-end">
+            {/* Magnitude comparison across categories that are already
+                direct-labeled below - one muted sequential hue (chart-2,
+                the same primary series color the marketing charts use),
+                not a categorical rainbow. "Sequential" means more-is-darker,
+                not just taller - opacity carries that (a flat color with
+                only height varying reads as one flat block, not a ramp). */}
+            <div
+              className="w-full rounded-t-sm bg-chart-2 transition-[height]"
+              style={{
+                height: `${Math.max((d.count / max) * 100, d.count > 0 ? 4 : 0)}%`,
+                opacity: d.count > 0 ? 0.45 + 0.55 * (d.count / max) : 0.25,
+              }}
+              title={`${d.label}: ${d.count}`}
+            />
           </div>
-        );
-      })}
+          <span className="w-full truncate text-center text-[11px] text-muted-foreground" title={d.label}>
+            {d.label}
+          </span>
+        </div>
+      ))}
     </div>
   );
 }
