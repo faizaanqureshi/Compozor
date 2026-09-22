@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import useSWR from "swr";
 import {
   ChevronsLeft,
   ChevronsRight,
@@ -24,6 +25,8 @@ import {
   Show,
   useUser,
 } from "@clerk/nextjs";
+import { getMyOrganization } from "@/lib/api";
+import { organizationKey } from "@/lib/swr-keys";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
@@ -56,11 +59,21 @@ const adminLink = { href: "/admin", label: "Admin", icon: Landmark, tourId: "adm
 export function Nav() {
   const pathname = usePathname();
   const { user } = useUser();
+  // Shares its SWR cache entry with the Settings page (same key) - editing
+  // your name or firm name there updates this instantly everywhere else,
+  // with no polling or extra plumbing needed.
+  const { data: org } = useSWR(organizationKey(), getMyOrganization);
   const [collapsed, setCollapsed] = useState(false);
   const { mobileOpen, setMobileOpen } = useMobileNav();
   const visibleLinks = isAdminEmail(user?.primaryEmailAddress?.emailAddress)
     ? [...links, adminLink]
     : links;
+
+  // contact_name/org name are unset until someone visits Settings (or,
+  // for the org name, sets a firm name during onboarding) - Clerk's own
+  // name is the only thing guaranteed to exist for a brand-new account.
+  const displayName = org?.contact_name || user?.fullName || "Account";
+  const orgLabel = org?.name || null;
 
   useEffect(() => {
     setMobileOpen(false);
@@ -221,8 +234,18 @@ export function Nav() {
                 !collapsed && "xl:flex"
               )}
             >
-              <span className="truncate text-sm font-medium text-sidebar-foreground/80">
-                {user?.fullName ?? "Account"}
+              <span
+                className="truncate text-sm font-medium text-sidebar-foreground/80"
+                title={orgLabel ? `${displayName} · ${orgLabel}` : displayName}
+              >
+                {displayName}
+                {orgLabel && (
+                  <>
+                    {" "}
+                    <span aria-hidden className="text-sidebar-foreground/40">·</span>{" "}
+                    {orgLabel}
+                  </>
+                )}
               </span>
               <span className="truncate text-xs text-sidebar-foreground/65">
                 {user?.primaryEmailAddress?.emailAddress}
