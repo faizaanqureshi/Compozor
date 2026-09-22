@@ -35,6 +35,7 @@ import {
   DocumentUploadResult,
   EmailThread,
   Package,
+  UploadLinkEvent,
   WorkflowRun,
   ClientWorkflowAssignment,
   listClientWorkflowAssignments,
@@ -49,6 +50,7 @@ import {
   listClientCommitments,
   listClientDocuments,
   listClientMemoryNotes,
+  listClientUploadLinkEvents,
   listClientWorkflowRuns,
   listEmailThreads,
   listPackages,
@@ -173,11 +175,7 @@ export default function ClientDetailPage({
   const [workflowError, setWorkflowError] = useState<string | null>(null);
   const [workflowRuns, setWorkflowRuns] = useState<WorkflowRun[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // null = no manual override yet, so visibility just follows whether a
-  // package has been assigned - once one has, the row collapses to keep
-  // the checklist front and center, and "Edit package"/"Done" toggle it
-  // back open on demand.
-  const [packageRowOverride, setPackageRowOverride] = useState<boolean | null>(null);
+  const [assignPackageOpen, setAssignPackageOpen] = useState(false);
   const router = useRouter();
   const workflowRefreshRef = useRef<ReturnType<typeof createSnapshotRefresh<[WorkflowRun[], ClientWorkflowAssignment[]]>> | null>(null);
 
@@ -235,9 +233,6 @@ export default function ClientDetailPage({
     refreshWorkflowRuns();
   };
   useEffect(refreshClient, [refreshClient]);
-
-  const hasPackageItems = checklist?.items.some((i) => i.package_name) ?? false;
-  const showPackageRow = packageRowOverride ?? !hasPackageItems;
 
   if (error && !client) return <p className="text-sm text-destructive">{error}</p>;
 
@@ -309,17 +304,25 @@ export default function ClientDetailPage({
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
-      {client !== null && showPackageRow && (
-        <PackageQuickAssignRow
-          clientId={clientId}
-          assignedPackageIds={client.assigned_package_ids}
-          checklist={checklist}
-          onAssigned={() => {
-            refresh();
-            setPackageRowOverride(false);
-          }}
-          onDone={hasPackageItems ? () => setPackageRowOverride(false) : undefined}
-        />
+      {client !== null && (
+        <>
+          <div className="flex items-center justify-end gap-1.5">
+            <Button variant="outline" onClick={() => setAssignPackageOpen(true)}>
+              <Plus />
+              Assign package
+            </Button>
+            <PackageFormDialog onSaved={refresh} variant="outline" />
+          </div>
+
+          <AssignPackagePopup
+            open={assignPackageOpen}
+            onOpenChange={setAssignPackageOpen}
+            clientId={clientId}
+            assignedPackageIds={client.assigned_package_ids}
+            checklist={checklist}
+            onAssigned={refresh}
+          />
+        </>
       )}
 
       <ChecklistCard
@@ -327,7 +330,7 @@ export default function ClientDetailPage({
         checklist={checklist}
         documents={documents}
         onChange={refresh}
-        onEditPackage={() => setPackageRowOverride(true)}
+        onEditPackage={() => setAssignPackageOpen(true)}
       />
 
       <WaitingOnCard
@@ -855,8 +858,6 @@ function ChecklistCard({
   );
 }
 
-const PACKAGE_ROW_VISIBLE_COUNT = 3;
-
 function PackageAssignCard({
   pkg,
   clientId,
@@ -904,22 +905,28 @@ function PackageAssignCard({
   );
 }
 
-function PackageQuickAssignRow({
+// Replaces the old always-visible "3 boxes in a row" package section so the
+// checklist is the first thing a client's page shows - assigning, editing,
+// and changing a client's package(s) all happen through this one dialog
+// instead, opened from the "Assign package" button above the checklist or
+// "Edit package" on the checklist card itself once one's assigned.
+function AssignPackagePopup({
+  open,
+  onOpenChange,
   clientId,
   assignedPackageIds,
   checklist,
   onAssigned,
-  onDone,
 }: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   clientId: number;
   assignedPackageIds: number[];
   checklist: ChecklistSummary | null;
   onAssigned: () => void;
-  onDone?: () => void;
 }) {
   const [packages, setPackages] = useState<Package[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [showMore, setShowMore] = useState(false);
 
   const refreshPackages = () => {
     listPackages()
@@ -927,7 +934,9 @@ function PackageQuickAssignRow({
       .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
   };
 
-  useEffect(refreshPackages, []);
+  useEffect(() => {
+    if (open) refreshPackages();
+  }, [open]);
 
   // Which of this package's specific document lines are already checked
   // for this client - lets a card for an already-assigned package open
@@ -939,92 +948,53 @@ function PackageQuickAssignRow({
     }
   }
 
-  // Assigned packages float to the front so "Edit package" always shows
-  // the client's current selection right away, without having to dig into
-  // "Show more" first.
+  // Assigned packages float to the front so it's obvious at a glance what's
+  // already selected when reopening this to edit.
   const sorted = packages
     ? [...packages].sort(
         (a, b) => Number(assignedPackageIds.includes(b.id)) - Number(assignedPackageIds.includes(a.id))
       )
     : null;
-  const visible = sorted?.slice(0, PACKAGE_ROW_VISIBLE_COUNT) ?? [];
-  const remaining = sorted?.slice(PACKAGE_ROW_VISIBLE_COUNT) ?? [];
 
   return (
-    <SectionCard
-      title="Assign a package"
-      subtitle="Click a package to add its documents to this client."
-      action={
-        <div className="flex items-center gap-1.5">
-          {remaining.length > 0 && (
-            <Button variant="ghost" size="sm" onClick={() => setShowMore(true)}>
-              Show more
-            </Button>
-          )}
-          <PackageFormDialog
-            onSaved={refreshPackages}
-            variant="outline"
-          />
-          {onDone && (
-            <Button variant="ghost" size="sm" onClick={onDone}>
-              Done
-            </Button>
-          )}
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle className="pr-8">Assign a package</DialogTitle>
+          <DialogDescription>
+            Click a package to add its documents to this client, or change what&apos;s selected.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex justify-end">
+          <PackageFormDialog onSaved={refreshPackages} variant="outline" />
         </div>
-      }
-    >
-      {packages === null ? (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {[0, 1, 2].map((i) => (
-            <Skeleton key={i} className="h-28 w-full rounded-xl" />
-          ))}
-        </div>
-      ) : packages.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          No packages yet - use &quot;Create New Package&quot; above to create one.
-        </p>
-      ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {visible.map((pkg) => (
-            <PackageAssignCard
-              key={pkg.id}
-              pkg={pkg}
-              clientId={clientId}
-              isSelected={assignedPackageIds.includes(pkg.id)}
-              currentDocumentIds={currentDocIdsByPackage[pkg.id]}
-              onAssigned={onAssigned}
-            />
-          ))}
-        </div>
-      )}
-      {error && <p className="text-sm text-destructive">{error}</p>}
-
-      <Dialog open={showMore} onOpenChange={setShowMore}>
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>More packages</DialogTitle>
-            <DialogDescription>
-              Click a package to add its documents to this client.
-            </DialogDescription>
-          </DialogHeader>
+        {packages === null ? (
           <div className="grid max-h-[60vh] grid-cols-1 gap-3 overflow-y-auto sm:grid-cols-2">
-            {remaining.map((pkg) => (
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} className="h-28 w-full rounded-xl" />
+            ))}
+          </div>
+        ) : packages.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No packages yet - use &quot;Create New Package&quot; above to create one.
+          </p>
+        ) : (
+          <div className="grid max-h-[60vh] grid-cols-1 gap-3 overflow-y-auto sm:grid-cols-2">
+            {sorted!.map((pkg) => (
               <PackageAssignCard
                 key={pkg.id}
                 pkg={pkg}
                 clientId={clientId}
                 isSelected={assignedPackageIds.includes(pkg.id)}
                 currentDocumentIds={currentDocIdsByPackage[pkg.id]}
-                onAssigned={() => {
-                  setShowMore(false);
-                  onAssigned();
-                }}
+                onAssigned={onAssigned}
               />
             ))}
           </div>
-        </DialogContent>
-      </Dialog>
-    </SectionCard>
+        )}
+        {error && <p className="text-sm text-destructive">{error}</p>}
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -1922,18 +1892,23 @@ function DocumentActions({
 }
 
 
+const UPLOAD_LINK_EVENT_LABELS: Record<string, string> = {
+  created: "Link created",
+  auto_created: "Link created automatically (document request)",
+  regenerated: "Link regenerated",
+  revoked: "Link revoked",
+  expiry_extended: "Expiry extended (document request)",
+};
+
 function UploadLinkCard({ clientId }: { clientId: number }) {
   const [link, setLink] = useState<ClientUploadLink | null>(null);
   const [loaded, setLoaded] = useState(false);
-  // Only populated right after a create/regenerate response - the backend
-  // never returns the raw token again after that, so once the user
-  // navigates away (or this unmounts) it can only be replaced, not viewed.
-  const [revealedUrl, setRevealedUrl] = useState<string | null>(null);
+  const [events, setEvents] = useState<UploadLinkEvent[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const refresh = useCallback(() => {
     getClientUploadLink(clientId)
       .then((res) => {
         setLink(res);
@@ -1943,7 +1918,10 @@ function UploadLinkCard({ clientId }: { clientId: number }) {
         setError(e instanceof ApiError ? e.message : String(e));
         setLoaded(true);
       });
+    listClientUploadLinkEvents(clientId).then(setEvents).catch(() => {});
   }, [clientId]);
+
+  useEffect(refresh, [refresh]);
 
   const onRegenerate = async () => {
     setBusy(true);
@@ -1951,8 +1929,8 @@ function UploadLinkCard({ clientId }: { clientId: number }) {
     setCopied(false);
     try {
       const res = await regenerateClientUploadLink(clientId);
-      setLink({ is_active: res.is_active, created_at: res.created_at, last_used_at: res.last_used_at });
-      setRevealedUrl(res.upload_url);
+      setLink(res);
+      listClientUploadLinkEvents(clientId).then(setEvents).catch(() => {});
     } catch (e) {
       setError(e instanceof ApiError ? e.message : String(e));
     } finally {
@@ -1961,9 +1939,9 @@ function UploadLinkCard({ clientId }: { clientId: number }) {
   };
 
   const onCopy = async () => {
-    if (!revealedUrl) return;
+    if (!link?.upload_url) return;
     try {
-      await navigator.clipboard.writeText(revealedUrl);
+      await navigator.clipboard.writeText(link.upload_url);
       setCopied(true);
     } catch {
       setError("Couldn't copy to clipboard.");
@@ -1973,35 +1951,33 @@ function UploadLinkCard({ clientId }: { clientId: number }) {
   return (
     <SectionCard
       title="Client upload link"
-      subtitle="A permanent link this client can use to securely upload documents — no Compozor account needed."
+      subtitle="A secure link this client can use to upload documents — no Compozor account needed. Reused automatically when Compozor sends a document request, and stays valid until its expiry below."
     >
       {!loaded ? (
         <Skeleton className="h-9 w-full" />
       ) : (
         <div className="flex flex-col gap-3">
-          {revealedUrl && (
+          {link?.upload_url ? (
             <div className="flex flex-col gap-1.5 rounded-lg border border-border/60 bg-muted/30 p-3">
-              <p className="text-xs text-muted-foreground">
-                Copy this link now — for security it won&apos;t be shown again after you leave this page.
-              </p>
               <div className="flex items-center gap-2">
-                <code className="min-w-0 flex-1 truncate text-sm">{revealedUrl}</code>
+                <code className="min-w-0 flex-1 truncate text-sm">{link.upload_url}</code>
                 <Button variant="outline" size="sm" onClick={onCopy}>
                   {copied ? <CheckCircle2 className="text-accent" /> : <Copy />}
                   {copied ? "Copied" : "Copy"}
                 </Button>
               </div>
+              <p className="text-xs text-muted-foreground">
+                Expires{" "}
+                {new Date(link.expires_at).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })}
+                {" · "}Last used: {link.last_used_at ? new Date(link.last_used_at).toLocaleString() : "never"}
+              </p>
             </div>
-          )}
-
-          {link && !revealedUrl && (
-            <p className="text-sm text-muted-foreground">
-              Upload link is active. Last used:{" "}
-              {link.last_used_at ? new Date(link.last_used_at).toLocaleString() : "never"}.
+          ) : link ? (
+            <p className="text-sm text-destructive">
+              {link.is_active ? "Upload link has expired." : "Upload link has been revoked."}{" "}
+              Regenerate it to give the client a new one.
             </p>
-          )}
-
-          {!link && !revealedUrl && (
+          ) : (
             <p className="text-sm text-muted-foreground">No upload link has been created yet.</p>
           )}
 
@@ -2017,6 +1993,22 @@ function UploadLinkCard({ clientId }: { clientId: number }) {
             {busy ? <Loader2 className="animate-spin" /> : <RotateCcw />}
             {link ? "Regenerate link" : "Create link"}
           </Button>
+
+          {events && events.length > 0 && (
+            <div className="flex flex-col gap-1.5 border-t border-border/60 pt-3">
+              <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                Link activity
+              </h3>
+              <ul className="flex flex-col gap-1 text-xs text-muted-foreground">
+                {events.map((e, i) => (
+                  <li key={i} className="flex items-center justify-between gap-2">
+                    <span>{UPLOAD_LINK_EVENT_LABELS[e.event] ?? e.event}</span>
+                    <span className="shrink-0">{new Date(e.created_at).toLocaleString()}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
     </SectionCard>

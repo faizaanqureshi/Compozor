@@ -5,6 +5,9 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+    --color-marketing-forest: var(--marketing-forest);
+    --color-marketing-sage: var(--marketing-sage);
+    --color-marketing-brass: var(--marketing-brass);
     --font-heading: var(--font-sans);
     --font-sans: var(--font-sans);
     --color-sidebar-ring: var(--sidebar-ring);
@@ -50,6 +53,10 @@
 }
 
 :root {
+    /* Homepage: richer evergreen surfaces and readable brass on dark backgrounds. */
+    --marketing-forest: oklch(0.27 0.038 170);
+    --marketing-sage: oklch(0.91 0.022 160);
+    --marketing-brass: oklch(0.72 0.108 83);
     /* Old-money palette anchored on the brand mark, #122023 (deep teal-charcoal),
        paired with warm ivory/champagne neutrals and a brass-gold accent -
        evergreen/navy + brass is the classic "old money" combination. */
@@ -64,7 +71,7 @@
     --secondary: oklch(0.8947 0.0319 91.04); /* #E4DCC5 pale camel */
     --secondary-foreground: oklch(0.3219 0.0233 77.80); /* #3A3226 dark brown */
     --muted: oklch(0.9168 0.0239 88.24); /* #EAE3D2 soft sand */
-    --muted-foreground: oklch(0.5237 0.0219 93.85); /* #6E6A5C warm grey */
+    --muted-foreground: oklch(0.5000 0.0219 93.85); /* #676355 warm grey - darkened from #6E6A5C for AA text contrast (4.5:1) on --muted */
     --accent: oklch(0.6290 0.1095 82.85); /* #A9822F brass gold */
     --accent-foreground: oklch(0.1969 0.0216 75.83); /* #1B140A near-black brown */
     --destructive: oklch(0.4033 0.1126 26.26); /* #7A2A26 oxblood */
@@ -104,7 +111,7 @@
     --muted-foreground: oklch(0.6689 0.0248 84.59); /* #9C9484 */
     --accent: oklch(0.3500 0.0256 188.32); /* #2B3F3D muted teal */
     --accent-foreground: oklch(0.9261 0.0226 87.15);
-    --destructive: oklch(0.5162 0.1288 27.24); /* #A5453D oxblood, brightened for dark bg */
+    --destructive: oklch(0.6700 0.1288 27.24); /* #D97469 oxblood - further brightened from #A5453D for AA text contrast (4.5:1) on both dark bg and card */
     --success: oklch(0.6400 0.1050 152); /* muted evergreen, brightened for dark bg */
     --success-foreground: oklch(0.1969 0.0216 75.83);
     --border: oklch(1 0 0 / 10%);
@@ -188,4 +195,12 @@
 
 .bg-grain {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Stronger body-copy contrast is scoped to marketing, not the app. */
+.marketing-page {
+  --muted-foreground: oklch(0.42 0.018 170);
+}
+.dark .marketing-page {
+  --muted-foreground: oklch(0.78 0.022 87);
 }

@@ -1,0 +1,20 @@
+/* The gold material frames the finished work; all content stays on solid paper. */
+.reportStage {
+  position: relative;
+  isolation: isolate;
+  background-color: var(--secondary);
+}
+
+.reportStage::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: url("/textures/work-sample-gold.webp") center / cover no-repeat;
+  opacity: 0.7;
+}
+
+@media (prefers-contrast: more), (prefers-reduced-transparency: reduce), print {
+  .reportStage::before { display: none; }
+}

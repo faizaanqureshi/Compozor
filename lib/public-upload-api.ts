@@ -6,6 +6,14 @@
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
+// Mirrors app/services/upload_links.py on the backend, for immediate
+// client-side UX (reject an obviously oversized file before ever starting
+// an upload). The backend remains authoritative - these are re-checked
+// server-side at both item-init and completion time, the latter against
+// the real R2-verified size, not just what the browser reports.
+export const MAX_UPLOAD_FILE_BYTES = 100 * 1024 * 1024;
+export const MAX_UPLOAD_BATCH_BYTES = 5 * 1024 * 1024 * 1024;
+
 export class PublicUploadApiError extends Error {
   status: number;
   constructor(status: number, message: string) {

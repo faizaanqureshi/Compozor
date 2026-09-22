@@ -283,3 +283,72 @@ Before writing new UI:
       catch wrong tokens/fonts/spacing; they don't catch a layout that's
       technically compliant but still looks flat, cluttered, or awkward —
       that needs an eyes-on look, ideally at mobile, `md`, and `xl`+.
+
+## Marketing contrast refinement (September 21, 2026)
+
+The homepage uses the user-approved Harvey-inspired direction: a larger product
+workspace illustration, dark evergreen feature sections, and higher-contrast body
+copy. `marketing-forest`, `marketing-sage`, and `marketing-brass` are semantic
+tokens for this marketing treatment. Keep these changes scoped to marketing; do
+not recolor dashboard status semantics. Ivory text belongs on evergreen surfaces,
+and the rich brass token is for accents on dark backgrounds. Preserve the hero's
+fine grid and soft yellow aurora glow alongside the deeper evergreen surfaces.
+Product previews
+use fictional data and must be labeled as illustrations, never actual client
+records. Retain the existing Denton / Neue Montreal pairing and quiet motion.
+
+Homepage scroll motion uses a short upward reveal with a light blur, once per
+content group. Keep surfaces stationary and stagger paired content by only 120ms.
+The floating navigation contracts after scrolling and expands at the top, with
+separate thresholds to prevent jitter. Respect reduced motion, reveal focused
+controls immediately, and keep all content visible without JavaScript. Do not
+add scroll hijacking or a general animation dependency for this treatment.
+
+Marketing demonstrations should show a concrete action and its outcome: assigning
+a package, correcting a document, or turning a sample into a client deliverable.
+Keep them clearly labeled as fictional examples, run them locally in the browser,
+and do not imply they send email or execute real workflows. Practice selectors
+should change the sources and deliverable together, not just the industry label.
+
+Homepage interactions share a 300ms control transition and 400–550ms content
+transition. Use `LandingTransition` for changing demo heights, with Base UI’s
+panel lifecycle for enter/exit fades. Avoid instant scrolling, fixed tallest-panel
+heights, and unmounting details before their closing animation. All interaction
+motion must honor reduced motion; keep it scoped to the marketing experience.
+
+Chart marks may reveal once on entering view: bars grow from a fixed baseline,
+lines draw, and donut segments appear through a ring mask. Keep labels, exact
+values, axes, and document surfaces crisp and stationary. Use the `focus` reveal
+only for editorial introductions; its light blur resolves before the final
+settling movement. No count-up numbers or continuous/reverse scroll animation.
+
+The homepage uses a restrained glass material on floating navigation, its mobile
+menu, the work-sample toolbar/selector, and the closing secondary action. Reuse
+`landing-glass.module.css`: warm translucent fills, a fine inner highlight, and
+very light depth only on floating surfaces. Keep reports, charts, and primary
+CTAs solid. Never add lens distortion, moving shine, or pointer-following effects.
+Provide an opaque fallback and respect reduced transparency/increased contrast.
+
+Marketing depth follows three static planes: the ambient page, an inset workspace,
+and solid paper-like output. Reuse `landing-depth.module.css` for faint directional
+light and compact contact shadows. Keep the hero grid and aurora intact. Use depth
+on the principal previews and CTA controls, not every card or paragraph; no tilt,
+parallax, floating loops, or additional blur. Reduce shadows on small screens and
+remove them for increased contrast and print.
+
+The hero workspace showcase can extend beyond the editorial text column (up to
+112rem) so product detail stays legible. Use `landing-workspace-preview.module.css`
+for its mottled mineral-stone texture; keep the texture behind opaque UI surfaces,
+never on text, charts, or controls. Keep the textured frame free of labels; use
+the caption below for context. On desktop, leave roughly 8% side margins and
+4.5% vertical margins around the workspace. Preserve the compact checklist-and-workflow
+composition. Add familiar app controls as static illustration details, not new
+panels or a redesigned dashboard; label the preview and its fictional data.
+Stack panels at smaller sizes instead of shrinking a desktop screenshot. Remove
+texture for increased contrast, reduced transparency, and print.
+
+The work-sample section uses a warm neutral surround and an ivory toolbar/source
+panel. Its report sits inside a muted champagne-gold mineral frame, a companion
+to the green hero texture. Keep the material confined to the space around solid
+paper; never behind text or charts. Use `landing-work-sample.module.css` with the
+same increased-contrast, reduced-transparency, and print fallbacks as the hero.

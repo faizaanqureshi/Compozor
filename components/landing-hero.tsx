@@ -1,46 +1,42 @@
-import Link from "next/link";
-import { ArrowRightIcon } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { LandingDemo } from "@/components/landing-demo";
+import { MarketingActions } from "@/components/marketing-actions";
+import { LandingWorkspacePreview } from "@/components/landing-workspace-preview";
 
 export function LandingHero() {
   return (
-    <section className="animate-blur-in mx-auto flex min-h-screen w-full max-w-7xl flex-col items-center justify-center gap-12 px-4 pt-28 pb-12 sm:gap-16 sm:px-6 sm:pt-32 sm:pb-16 md:gap-20 lg:gap-24 xl:flex-row xl:gap-24">
-      <div className="flex max-w-2xl flex-col gap-5 sm:gap-7">
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="outline" className="uppercase tracking-wide text-muted-foreground">
-            Automated intake
-          </Badge>
-          <span className="text-sm text-muted-foreground">
-            For accounting & tax firms
-          </span>
+    <section className="w-full pt-36 pb-16 sm:pt-44 sm:pb-20">
+      <div className="mx-auto grid w-full max-w-7xl items-center gap-8 px-6 sm:px-10 lg:grid-cols-[1.35fr_1fr] lg:gap-16">
+        <div>
+          <p className="mb-6 flex items-center gap-3 text-xs uppercase tracking-widest text-marketing-forest dark:text-marketing-brass">
+            <span className="h-px w-7 bg-accent" aria-hidden />
+            AI for professional service firms
+          </p>
+          <h1 className="text-5xl leading-[1.06] font-thin tracking-tight sm:text-7xl xl:text-[5.25rem] [font-family:var(--font-denton)]">
+            Less chasing.
+            <br />
+            <span className="text-marketing-forest dark:text-marketing-brass">
+              More work delivered.
+            </span>
+          </h1>
         </div>
-        <h1 className="text-5xl leading-[1.05] font-thin tracking-tight text-balance sm:text-6xl md:text-6xl lg:text-7xl [font-family:var(--font-denton)]">
-          Stop chasing clients.
-          <br />
-          We send the follow‑up.
-        </h1>
-        <p className="text-base text-muted-foreground text-pretty sm:text-lg">
-          We watch the inbox, match every email to the right client, and
-          file the attachments the moment they land — no more digging
-          through folders.
-        </p>
-        <div className="flex flex-col gap-2.5">
-          <div>
-            <Button size="lg" nativeButton={false} render={<Link href="/sign-up" />}>
-              Join the Waitlist
-              <ArrowRightIcon />
-            </Button>
-          </div>
-          <span className="text-sm text-muted-foreground">
-            Now onboarding a small group of early firms.
-          </span>
+        <div className="max-w-md lg:pb-1">
+          <p className="text-base leading-relaxed text-pretty text-foreground/90 sm:text-lg">
+            Compozor follows up with clients, checks their documents, and
+            prepares work in your firm’s format. Give your team more time for
+            the expertise clients come for.
+          </p>
+          <MarketingActions className="mt-7" />
+          <p className="mt-4 text-xs text-muted-foreground">
+            Early access. Built around the way your firm works.
+          </p>
+          <a
+            href="#how-it-works"
+            className="mt-6 inline-flex rounded-sm py-1 text-sm underline decoration-accent underline-offset-4 transition-colors hover:text-marketing-forest focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring dark:hover:text-marketing-brass"
+          >
+            Walk through a client example
+          </a>
         </div>
       </div>
-      <div className="flex w-full max-w-xl justify-center">
-        <LandingDemo />
-      </div>
+      <LandingWorkspacePreview />
     </section>
   );
 }

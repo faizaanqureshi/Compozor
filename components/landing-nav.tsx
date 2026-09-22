@@ -1,150 +1,132 @@
 "use client";
 
+import depth from "@/components/landing-depth.module.css";
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRightIcon, MenuIcon } from "lucide-react";
-import { SignInButton, SignOutButton, Show } from "@clerk/nextjs";
+import { useEffect, useRef } from "react";
+import styles from "@/components/landing-motion.module.css";
+import glass from "@/components/landing-glass.module.css";
+import { Menu, ArrowRight } from "lucide-react";
+import { Show } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
-import {
-  NavigationMenu,
-  NavigationMenuContent,
-  NavigationMenuItem,
-  NavigationMenuLink,
-  NavigationMenuList,
-  NavigationMenuTrigger,
-  navigationMenuTriggerStyle,
-} from "@/components/ui/navigation-menu";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { cn } from "@/lib/utils";
 
 const links = [
-  {
-    href: "/product",
-    label: "Products",
-    description: "Automatically gather and organize client tax documents.",
-  },
-  { href: "/pricing", label: "Pricing" },
-  { href: "/updates", label: "Updates" },
+  { href: "/#how-it-works", label: "How it works" },
+  { href: "/#workflows", label: "Workflows" },
+  { href: "/#for-firms", label: "For firms" },
 ];
 
 export function LandingNav() {
+  const headerRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const header = headerRef.current;
+    if (!header) return;
+    let frame = 0;
+    let compact = false;
+    const update = () => {
+      frame = 0;
+      // Separate thresholds prevent jitter near the transition point.
+      compact = window.scrollY > (compact ? 12 : 32);
+      header.dataset.compact = String(compact);
+    };
+    const onScroll = () => {
+      if (!frame) frame = window.requestAnimationFrame(update);
+    };
+    update();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.cancelAnimationFrame(frame);
+    };
+  }, []);
+
   return (
-    <header className="fixed inset-x-0 top-3 z-50 flex justify-center px-3 sm:top-4 sm:px-4">
-      <div className="flex w-full max-w-4xl items-center justify-between gap-2 rounded-full border border-border bg-card/95 px-3 py-2 shadow-sm backdrop-blur sm:gap-4 sm:px-4 supports-backdrop-filter:bg-card/80">
-        <div className="flex items-center gap-4 sm:gap-6">
-          <Link href="/" className="shrink-0">
-            <Image
-              src="/compozor-logo-dark.png"
-              alt="Compozor"
-              width={795}
-              height={214}
-              priority
-              className="h-6 w-auto sm:h-7 md:h-8"
-            />
-          </Link>
-          <div className="hidden h-6 w-px shrink-0 bg-border md:block" />
-          <NavigationMenu className="hidden md:flex">
-            <NavigationMenuList>
-              <NavigationMenuItem>
-                <NavigationMenuTrigger>Products</NavigationMenuTrigger>
-                <NavigationMenuContent>
-                  <NavigationMenuLink
-                    render={<Link href="/product" />}
-                    className="w-72 flex-col items-start gap-1"
-                  >
-                    <span className="font-medium">Document Collection</span>
-                    <span className="text-xs text-muted-foreground">
-                      Automatically gather and organize client tax documents.
-                    </span>
-                  </NavigationMenuLink>
-                </NavigationMenuContent>
-              </NavigationMenuItem>
-              <NavigationMenuItem>
-                <NavigationMenuLink
-                  render={<Link href="/pricing" />}
-                  className={cn(navigationMenuTriggerStyle(), "font-medium")}
-                >
-                  Pricing
-                </NavigationMenuLink>
-              </NavigationMenuItem>
-              <NavigationMenuItem>
-                <NavigationMenuLink
-                  render={<Link href="/updates" />}
-                  className={cn(navigationMenuTriggerStyle(), "font-medium")}
-                >
-                  Updates
-                </NavigationMenuLink>
-              </NavigationMenuItem>
-            </NavigationMenuList>
-          </NavigationMenu>
-        </div>
-        <div className="flex items-center gap-2 sm:gap-3">
-          <Show when="signed-in">
-            <SignOutButton>
-              <button className="hidden text-sm font-medium text-muted-foreground hover:text-foreground md:inline-block">
-                Sign out
-              </button>
-            </SignOutButton>
-            <Button
-              size="sm"
-              nativeButton={false}
-              render={<Link href="/email-log" />}
-              className="px-2.5 sm:px-3"
+    <header
+      ref={headerRef}
+      className={`${styles.header} fixed inset-x-0 top-4 z-50 flex justify-center px-4 sm:top-5 sm:px-6`}
+    >
+      <nav
+        aria-label="Main navigation"
+        className={`${styles.nav} ${glass.light} flex w-full items-center justify-between gap-4 rounded-full px-5 sm:px-6`}
+      >
+        <Link href="/" aria-label="Compozor home" className="shrink-0">
+          <Image
+            src="/compozor-logo-dark.png"
+            alt="Compozor"
+            width={795}
+            height={214}
+            priority
+            className={`${styles.logo} w-auto`}
+          />
+        </Link>
+        <div className="hidden items-center gap-7 lg:flex">
+          {links.map((link) => (
+            <a
+              key={link.href}
+              href={link.href}
+              className="text-sm text-muted-foreground transition-colors hover:text-foreground"
             >
-              <span className="hidden sm:inline">Dashboard</span>
-              <span className="sm:hidden">Go</span>
-              <ArrowRightIcon />
-            </Button>
-          </Show>
+              {link.label}
+            </a>
+          ))}
+        </div>
+        <div className="flex items-center gap-4 sm:gap-6">
           <Show when="signed-out">
-            <SignInButton forceRedirectUrl="/clients">
-              <Button size="sm" variant="outline" className="px-2.5 sm:px-3">
-                Sign in
-              </Button>
-            </SignInButton>
+            <Link
+              href="/sign-in"
+              className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Sign in
+            </Link>
           </Show>
+          <Show when="signed-in">
+            <Link href="/clients" className="flex items-center gap-1.5 text-sm">
+              <span>Dashboard</span>
+              <ArrowRight className="hidden size-3.5 sm:block" aria-hidden />
+            </Link>
+          </Show>
+          <Button
+            nativeButton={false}
+            render={<Link href="/demo" />}
+            className={`${depth.primaryAction} hidden h-9 bg-marketing-forest px-4 text-sidebar-foreground hover:bg-marketing-forest/90 sm:inline-flex`}
+          >
+            Book a demo
+          </Button>
           <DropdownMenu>
             <DropdownMenuTrigger
               render={
-                <Button variant="ghost" size="icon-sm" className="md:hidden" />
+                <Button variant="ghost" size="icon" className="lg:hidden" />
               }
             >
-              <MenuIcon />
+              <Menu />
               <span className="sr-only">Open menu</span>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-64">
+            <DropdownMenuContent align="end" className={`${styles.menu} ${glass.light} w-52`}>
               {links.map((link) => (
                 <DropdownMenuItem
                   key={link.href}
-                  render={<Link href={link.href} />}
-                  className="flex-col items-start gap-0.5 py-2"
+                  render={<a href={link.href} />}
                 >
                   {link.label}
-                  {link.description && (
-                    <span className="text-xs font-normal text-muted-foreground">
-                      {link.description}
-                    </span>
-                  )}
                 </DropdownMenuItem>
               ))}
-              <Show when="signed-in">
-                <DropdownMenuSeparator />
-                <SignOutButton>
-                  <DropdownMenuItem variant="destructive" closeOnClick={false}>
-                    Sign out
-                  </DropdownMenuItem>
-                </SignOutButton>
-              </Show>
+              <DropdownMenuItem render={<Link href="/demo" />}>
+                Book a demo
+              </DropdownMenuItem>
+              <DropdownMenuItem render={<Link href="/waitlist" />}>
+                Join the waitlist
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-      </div>
+      </nav>
     </header>
   );
 }

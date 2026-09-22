@@ -4,6 +4,7 @@ import "./globals.css";
 import { AppShell } from "@/components/app-shell";
 import localFont from "next/font/local";
 import { cn } from "@/lib/utils";
+import { SITE_URL, SITE_DESCRIPTION } from "@/lib/seo";
 
 const neueMontreal = localFont({
   variable: "--font-sans",
@@ -28,8 +29,12 @@ const denton = localFont({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: "Compozor",
-  description: "Tax document collection dashboard",
+  description: SITE_DESCRIPTION,
+  // Only explicitly listed marketing pages opt into indexing. This also keeps
+  // new dashboard pages, sign-in, and client upload links out of search.
+  robots: { index: false, follow: true },
   manifest: "/site.webmanifest",
   icons: {
     icon: [
@@ -49,7 +54,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={cn("h-full", "font-sans", neueMontreal.variable, denton.variable)}>
       <body className="min-h-full flex flex-col">
-        <ClerkProvider>
+        <ClerkProvider waitlistUrl="/waitlist" signInUrl="/sign-in" signUpUrl="/sign-up">
           <AppShell>{children}</AppShell>
         </ClerkProvider>
       </body>

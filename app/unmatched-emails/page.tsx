@@ -200,6 +200,7 @@ function ClientPicker({
                 <Input
                   autoFocus
                   placeholder="Type a name or email…"
+                  aria-label="Search clients"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   className="h-7"
@@ -318,6 +319,7 @@ function TriageActions({
               autoFocus
               required
               placeholder="Jane Doe"
+              aria-label="New client name"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               className="h-8"
@@ -393,6 +395,7 @@ export default function UnmatchedEmailsPage() {
         </h1>
         <p className="text-sm text-muted-foreground">
           Inbound mail whose sender didn&apos;t match any client profile.
+          Unmatched emails are automatically removed after 14 days.
         </p>
       </div>
 

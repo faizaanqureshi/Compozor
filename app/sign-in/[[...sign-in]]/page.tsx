@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { SignIn } from "@clerk/nextjs";
 import { AuroraBackground } from "@/components/aurora-background";
 
@@ -28,6 +29,10 @@ export default async function SignInPage({
           forceRedirectUrl={meaningfulRedirect(redirect_url)}
           fallbackRedirectUrl="/clients"
         />
+      </div>
+      <div className="absolute inset-x-0 bottom-6 flex justify-center gap-4 text-xs text-muted-foreground">
+        <Link href="/privacy" className="hover:text-foreground">Privacy Policy</Link>
+        <Link href="/terms" className="hover:text-foreground">Terms &amp; Conditions</Link>
       </div>
     </div>
   );
