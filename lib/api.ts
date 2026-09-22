@@ -116,6 +116,17 @@ export interface Organization {
   reminder_interval_days: number | null;
   practice_description: string | null;
   jurisdiction: string | null;
+  // The signed-in person's own name, distinct from `name` (the firm).
+  contact_name: string | null;
+  // Canonical form is always exactly 10 raw digits (e.g. "9057490504"),
+  // never pre-formatted - see lib/phone.ts for formatting/parsing this
+  // for display and input.
+  phone: string | null;
+  practice_type: string | null;
+  // User-authored, deterministically appended to outbound emails by the
+  // backend - never AI-written. Null/empty means the backend falls back
+  // to a generated "Best,\n{contact_name or name}".
+  email_signature: string | null;
   onboarding_completed_at: string | null;
 }
 
@@ -388,6 +399,10 @@ export const updateMyOrganization = (input: {
   reminder_interval_days?: number | null;
   practice_description?: string;
   jurisdiction?: string;
+  contact_name?: string;
+  phone?: string;
+  practice_type?: string;
+  email_signature?: string;
   onboarding_completed?: boolean;
 }) => request<Organization>("/organizations/me", json("PATCH", input));
 

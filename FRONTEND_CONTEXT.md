@@ -83,21 +83,33 @@ sign-in and route to an onboarding flow if it's `null`.
    "Faizaan's Organization") when the org is auto-created - it's real data
    from day one, just not what the firm is actually called. Collect the
    real name and send it via `PATCH /organizations/me` with `{ "name": "..." }`.
-   This is what gets used as the firm's sign-off name in every AI-drafted
-   email, so it's worth getting before any client-facing email goes out,
-   not left as the Clerk-derived placeholder.
+   `Organization.name` is exclusively the *firm's* name - it is never
+   reused for the signed-in person's own name (see `contact_name` below),
+   and every deterministic email sign-off/fallback keys off that
+   distinction (see "Email sign-off" below).
 
-2. **Practice description + jurisdiction.** These feed directly into every AI
-   prompt in the system (how the AI describes the firm to clients, which
-   government/regulatory sources it treats as authoritative when using web
-   search). A category picker (Accounting, Immigration Law, Mortgage/Lending,
-   Other) is a reasonable UI to *seed* a good default sentence, but the
-   picker's label itself is never sent to the backend - what actually gets
-   stored (and what should be editable/reviewable by the user before
-   continuing) is the descriptive sentence in `practice_description`.
+2. **Practice type, description, and jurisdiction.** `practice_description`
+   and `jurisdiction` feed directly into every AI prompt in the system (how
+   the AI describes the firm to clients, which government/regulatory
+   sources it treats as authoritative when using web search).
+   `practice_type` (e.g. "Accounting", "Immigration law", or free custom
+   text) is a separate, independently persisted broad classification - not
+   derived from `practice_description` and not required to be one of a
+   fixed set of values (no enum; arbitrary industries are supported). The
+   frontend's category-picker presets and their `practice_description` seed
+   text live in one shared place (`lib/practice-types.ts` in the frontend
+   repo) reused by both onboarding and Settings, so picking "Immigration
+   law" produces the same seeded description sentence wherever it's picked
+   from. Selecting a preset sends both `practice_type` (the preset's label,
+   or the user's own text if "Other") and the seeded/edited
+   `practice_description` via the same `PATCH /organizations/me` call.
    `jurisdiction` is a separate field/question (e.g. a country field) since
    it drives a different thing (source authority) than the practice
-   description does.
+   description does. Changing an *already-set* `practice_type` later
+   (Settings, not first-time onboarding) is a deliberate action worth a
+   confirmation prompt client-side, since it materially changes the AI's
+   framing of the business - the backend itself does not gate or warn on
+   this, it's a frontend UX concern only.
 
 3. **Connect Gmail.** `GET /organizations/me/gmail/connect` →
    `authorization_url`, redirect the browser there (full page nav, not a
@@ -129,10 +141,37 @@ sign-in and route to an onboarding flow if it's `null`.
    returns a non-null `onboarding_completed_at` and the frontend can route
    straight to the normal app on sign-in.
 
+**Everything above stays editable after onboarding** (Settings, not just
+the onboarding wizard) via the same `PATCH /organizations/me` - editing
+these fields later never resets `onboarding_completed_at`, disconnects
+mailboxes, or touches clients/packages/workflows/automation settings; it's
+a plain partial update of whichever fields are included in the body.
+
+**Profile fields not collected during onboarding, but persisted on
+`Organization` and editable via the same endpoint (Settings only):**
+
+- `contact_name` - the signed-in *person's* own name (e.g. "Omar
+  Abdulrahman"), distinct from `Organization.name` (the firm, e.g. "Smith &
+  Associates"). Never conflate the two. Not sourced from Clerk
+  automatically; Clerk's own name (`useUser().fullName` client-side) is a
+  reasonable one-time prefill suggestion in a form, nothing more - once
+  `contact_name` is saved, it's the only source of truth for it.
+- `phone` - canonical stored form is always exactly 10 raw digits, North
+  American format only (e.g. `"9057490504"`), never pre-formatted with
+  punctuation. The backend normalizes/validates on `PATCH` (strips
+  non-digits, drops a leading country-code "1" if 11 digits were given,
+  rejects anything that isn't then exactly 10 digits with a 400 rather
+  than silently truncating it) - see `_normalize_phone` in
+  `app/routers/organizations.py`. Format for display client-side (e.g.
+  `"(905) 749-0504"`); never store the formatted form.
+- `email_signature` - plain text, user-authored, deterministically
+  appended to outbound client-facing emails by the backend (see "Email
+  sign-off" below) - the AI never writes its own closing.
+
 ## Data model
 
 ```
-Organization (a firm; has automation_level, reminder_interval_days, practice_description, jurisdiction, onboarding_completed_at)
+Organization (a firm; has automation_level, reminder_interval_days, practice_type, practice_description, jurisdiction, contact_name, phone, email_signature, onboarding_completed_at)
   ├── Client (belongs to one org; tracks last_reminder_sent_at)
   │     ├── ChecklistItem (a document type needed from this client)
   │     │     └── Document (an uploaded/classified file, optionally linked to a ChecklistItem; has its own `year`)
@@ -184,6 +223,34 @@ user can see exactly why something did or didn't send itself.
 **Exception:** a Q&A answer where the AI could only find lower-quality
 sources is always excluded from autosend regardless of confidence or
 automation level — see Q&A section below.
+
+## Email sign-off
+
+`Organization.email_signature` (plain text, editable via `PATCH
+/organizations/me`) is deterministically appended to every client-facing
+outbound email by the backend, never written by the AI. See
+`app/services/email_signature.py` (`resolve_signature`,
+`append_signature`) and its call sites: `create_checklist_reminder_email`,
+`create_commitment_followup_email`, `create_batch_receipt`,
+`create_draft_email`, `create_received_acknowledgment_email`,
+`create_supplementary_document_email`, `create_unsupported_file_email`
+(all in `email_draft.py`/`document_pipeline.py`), and
+`create_qa_draft_email` (`email_reply_pipeline.py`) - every one of these
+appends the signature exactly once, at the point the `EmailLog` row is
+created, never at edit/send/retry time, so what a user reviews in a draft
+is exactly what gets sent (no "signature appears only after sending"
+mismatch, no duplicate signatures on retry/regenerate).
+
+**Fallback when `email_signature` is unset:** `"Best,\n{contact_name}"` if
+`contact_name` is set, else `"Best,\n{name}"` (the firm name). Once a user
+explicitly saves a custom `email_signature`, it's authoritative and is
+never auto-overwritten by later edits to `contact_name`/`name`/other
+profile fields.
+
+The AI-drafted email prompts (`email_draft.py`, `qa_answer.py`) are
+explicitly instructed not to write their own closing/sign-off line, since
+the backend always appends the real one - don't reintroduce sign-off
+language into a prompt without also accounting for this.
 
 ## Client matching & threading (inbound Gmail mail)
 
@@ -325,8 +392,8 @@ Bearer <clerk-session-token>` header - omitted for brevity.
 
 ### Organizations
 
-- `GET /organizations/me` → `{ id, name, automation_level, reminder_interval_days, practice_description, jurisdiction, onboarding_completed_at }`. Auto-creates the org on first call for a new Clerk user (see "Auth" above) - there's no separate create endpoint.
-- `PATCH /organizations/me` — body can include any subset: `{ "name", "automation_level", "reminder_interval_days", "practice_description", "jurisdiction", "onboarding_completed" }`. Only included fields are updated. `onboarding_completed` (bool) is a write-only convenience field, not returned - it sets `onboarding_completed_at` to now (`true`) or clears it (`false`).
+- `GET /organizations/me` → `{ id, name, automation_level, reminder_interval_days, practice_description, jurisdiction, contact_name, phone, practice_type, email_signature, onboarding_completed_at }`. Auto-creates the org on first call for a new Clerk user (see "Auth" above) - there's no separate create endpoint.
+- `PATCH /organizations/me` — body can include any subset: `{ "name", "automation_level", "reminder_interval_days", "practice_description", "jurisdiction", "contact_name", "phone", "practice_type", "email_signature", "onboarding_completed" }`. Only included fields are updated. `onboarding_completed` (bool) is a write-only convenience field, not returned - it sets `onboarding_completed_at` to now (`true`) or clears it (`false`). String fields are trimmed server-side; blank optional strings clear to `null` (blank `name` is rejected - it's required). `phone` is normalized/validated to exactly 10 digits (see "Onboarding" above) - a non-10-digit value is rejected with 400, never silently truncated. `contact_name`, `practice_type`, and `email_signature` each have a generous but real max length, also enforced with a 400 on overflow.
 - `DELETE /organizations/me` → 204. **Will 500 if any client, inbox connection, or unmatched email still references it** (FK constraint, no cascade) — delete/reassign those first.
 
 ### Clients
