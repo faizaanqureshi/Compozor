@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
 import { useClerk, useUser } from "@clerk/nextjs";
@@ -8,16 +8,21 @@ import { Check, Loader2, Pencil } from "lucide-react";
 import { GmailIcon } from "@/components/icons/gmail";
 import { OutlookIcon } from "@/components/icons/outlook";
 import { SectionCard } from "@/components/section-card";
-import { inboxConnectionsKey, organizationKey } from "@/lib/swr-keys";
+import { calendarConnectionsKey, inboxConnectionsKey, organizationKey } from "@/lib/swr-keys";
 import {
   ApiError,
   AutomationLevel,
+  CalendarConnection,
   InboxConnection,
   Organization,
+  deleteCalendarConnection,
   deleteInboxConnection,
   getGmailConnectUrl,
+  getGoogleCalendarConnectUrl,
+  getOutlookCalendarConnectUrl,
   getOutlookConnectUrl,
   getMyOrganization,
+  listCalendarConnections,
   listInboxConnections,
   updateMyOrganization,
 } from "@/lib/api";
@@ -689,6 +694,136 @@ function MailboxSection({
   );
 }
 
+function CalendarSection({
+  organization,
+  connections,
+  error,
+  connecting,
+  deletingId,
+  savingTimezone,
+  onConnect,
+  onDelete,
+  onSaveTimezone,
+}: {
+  organization: Organization | null;
+  connections: CalendarConnection[] | null;
+  error: string | null;
+  connecting: boolean;
+  deletingId: number | null;
+  savingTimezone: boolean;
+  onConnect: (provider: "google" | "outlook") => void;
+  onDelete: (id: number) => void;
+  onSaveTimezone: (timezone: string) => void;
+}) {
+  const hasConnections = connections !== null && connections.length > 0;
+  // Same "offer whichever provider isn't connected yet" pattern as
+  // MailboxSection - one calendar connection per provider, not a picker
+  // among several calendars on the same account (see CalendarConnection's
+  // calendar_id, hardcoded to "primary"/the default calendar for v1).
+  const missingProviders = connections === null ? [] : (["google", "outlook"] as const).filter(
+    (provider) => !connections.some((connection) => connection.provider === provider)
+  );
+  // Intl.supportedValuesOf is a browser-native list of every real IANA
+  // name - no bundled timezone data needed, and it can never drift out of
+  // sync with what the backend's own zoneinfo.available_timezones() check
+  // accepts (see app/routers/organizations.py).
+  const timezones = useMemo(() => {
+    try {
+      return Intl.supportedValuesOf("timeZone");
+    } catch {
+      return [];
+    }
+  }, []);
+
+  return (
+    <SectionCard title="Calendar">
+      <p className="text-sm text-muted-foreground">
+        Connect a calendar so the AI can propose real open times when a client tries to schedule a meeting by
+        email - see it on a client&apos;s page once a meeting is proposed or confirmed.
+      </p>
+      {error && <p className="text-sm text-destructive">{error}</p>}
+
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="org-timezone">Timezone</Label>
+        <select
+          id="org-timezone"
+          className="h-9 w-full max-w-sm rounded-md border border-input bg-transparent px-3 text-sm disabled:opacity-50"
+          value={organization?.timezone ?? ""}
+          disabled={savingTimezone || !organization}
+          onChange={(e) => onSaveTimezone(e.target.value)}
+        >
+          <option value="" disabled>
+            Select a timezone…
+          </option>
+          {timezones.map((tz) => (
+            <option key={tz} value={tz}>
+              {tz}
+            </option>
+          ))}
+        </select>
+        <p className="text-xs text-muted-foreground">
+          Required before meeting times can be proposed to clients.
+        </p>
+      </div>
+
+      {connections === null ? (
+        <Skeleton className="h-16 w-full rounded-lg" />
+      ) : hasConnections ? (
+        <div className="flex flex-col divide-y divide-border/50 rounded-lg border border-border/60 animate-blur-in-sm">
+          {connections!.map((conn) => (
+            <div key={conn.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+              <div className="flex flex-wrap items-center gap-2.5">
+                {conn.provider === "outlook" ? <OutlookIcon className="size-5 shrink-0 text-foreground" /> : <GmailIcon className="size-5 shrink-0" />}
+                <span className="break-all text-sm font-medium">{conn.calendar_email}</span>
+                <span className="text-xs text-muted-foreground">{conn.provider === "outlook" ? "Outlook" : "Google"}</span>
+                {conn.status === "needs_reauth" ? (
+                  <span className="inline-flex items-center gap-1.5 text-xs font-medium text-accent">
+                    <span className="size-1.5 rounded-full bg-accent" />
+                    needs reauth
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 text-xs font-medium text-accent">
+                    <span className="size-1.5 rounded-full bg-accent" />
+                    connected
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-4">
+                {conn.status === "needs_reauth" && (
+                  <Button variant="ghost" size="sm" disabled={connecting} onClick={() => onConnect(conn.provider)}>
+                    {connecting ? "Redirecting…" : "Reconnect"}
+                  </Button>
+                )}
+                <button
+                  onClick={() => onDelete(conn.id)}
+                  disabled={deletingId === conn.id}
+                  className="text-xs font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline disabled:opacity-50"
+                >
+                  {deletingId === conn.id ? "Removing…" : "Disconnect"}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="flex flex-col items-start gap-3 rounded-lg border border-dashed border-border/60 px-4 py-6 animate-blur-in-sm">
+          <p className="text-sm text-muted-foreground">No calendar connected.</p>
+        </div>
+      )}
+      {missingProviders.length > 0 && (
+        <div className="flex flex-wrap gap-3">
+          {missingProviders.map((provider) => (
+            <Button key={provider} variant="outline" onClick={() => onConnect(provider)} disabled={connecting}>
+              {provider === "outlook" ? <OutlookIcon className="size-4" /> : <GmailIcon className="size-4" />}
+              {connecting ? "Redirecting…" : `Connect ${provider === "outlook" ? "Outlook" : "Google"} Calendar`}
+            </Button>
+          ))}
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
 const legalLinks = [
   { href: "/privacy", label: "Privacy Policy" },
   { href: "/terms", label: "Terms & Conditions" },
@@ -735,6 +870,16 @@ export default function SettingsPage() {
   const [connecting, setConnecting] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
+  const {
+    data: calendarConnections,
+    error: calendarConnectionsFetchError,
+    mutate: mutateCalendarConnections,
+  } = useSWR(calendarConnectionsKey(), listCalendarConnections);
+  const [calendarError, setCalendarError] = useState<string | null>(null);
+  const [calendarConnecting, setCalendarConnecting] = useState(false);
+  const [calendarDeletingId, setCalendarDeletingId] = useState<number | null>(null);
+  const [savingTimezone, setSavingTimezone] = useState(false);
+
   const orgErrorMessage =
     orgError ??
     (orgFetchError
@@ -748,6 +893,13 @@ export default function SettingsPage() {
       ? connectionsFetchError instanceof ApiError
         ? connectionsFetchError.message
         : String(connectionsFetchError)
+      : null);
+  const calendarErrorMessage =
+    calendarError ??
+    (calendarConnectionsFetchError
+      ? calendarConnectionsFetchError instanceof ApiError
+        ? calendarConnectionsFetchError.message
+        : String(calendarConnectionsFetchError)
       : null);
 
   const onChangeAutomation = async (level: AutomationLevel) => {
@@ -847,6 +999,43 @@ export default function SettingsPage() {
     }
   };
 
+  const onConnectCalendar = async (provider: "google" | "outlook") => {
+    setCalendarConnecting(true);
+    setCalendarError(null);
+    try {
+      const { authorization_url } = await (provider === "outlook" ? getOutlookCalendarConnectUrl() : getGoogleCalendarConnectUrl());
+      window.location.href = authorization_url;
+    } catch (e) {
+      setCalendarError(e instanceof ApiError ? e.message : String(e));
+      setCalendarConnecting(false);
+    }
+  };
+
+  const onDeleteCalendarConnection = async (id: number) => {
+    setCalendarDeletingId(id);
+    try {
+      await deleteCalendarConnection(id);
+      mutateCalendarConnections();
+    } catch (e) {
+      setCalendarError(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setCalendarDeletingId(null);
+    }
+  };
+
+  const onSaveTimezone = async (timezone: string) => {
+    setSavingTimezone(true);
+    setOrgError(null);
+    try {
+      const updated = await updateMyOrganization({ timezone });
+      mutateOrg(updated, { revalidate: false });
+    } catch (e) {
+      setOrgError(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setSavingTimezone(false);
+    }
+  };
+
   return (
     <div className="flex w-full flex-col gap-12">
       <div className="flex flex-col gap-2">
@@ -905,6 +1094,18 @@ export default function SettingsPage() {
           deletingId={deletingId}
           onConnect={onConnect}
           onDelete={onDelete}
+        />
+
+        <CalendarSection
+          organization={org ?? null}
+          connections={calendarConnections ?? null}
+          error={calendarErrorMessage}
+          connecting={calendarConnecting}
+          deletingId={calendarDeletingId}
+          savingTimezone={savingTimezone}
+          onConnect={onConnectCalendar}
+          onDelete={onDeleteCalendarConnection}
+          onSaveTimezone={onSaveTimezone}
         />
 
         <LegalLinksSection />
