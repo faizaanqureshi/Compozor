@@ -162,7 +162,7 @@ function YourProfileSection({
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="contact-name">Name</Label>
-            <Input id="contact-name" placeholder="e.g. Omar Abdulrahman" value={contactName}
+            <Input id="contact-name" placeholder="e.g. Jane Doe" value={contactName}
               onChange={(e) => setContactName(e.target.value)} />
           </div>
           <div className="flex flex-col gap-1.5">
@@ -170,7 +170,7 @@ function YourProfileSection({
             <Input
               id="contact-phone"
               type="tel"
-              placeholder="e.g. (905) 749-0504"
+              placeholder="e.g. (416) 000-1234"
               value={phoneDigits.length > 10 ? phoneDigits : formatPhoneDisplay(phoneDigits)}
               onChange={(e) => onPhoneChange(e.target.value)}
               aria-invalid={Boolean(phoneError)}
