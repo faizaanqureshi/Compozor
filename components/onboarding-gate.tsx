@@ -6,7 +6,7 @@ import { useAuth } from "@clerk/nextjs";
 import { getMyOrganization } from "@/lib/api";
 import { isProductTourPending } from "@/components/product-tour";
 
-const EXEMPT_PREFIXES = ["/sign-in", "/sign-up"];
+const EXEMPT_PREFIXES = ["/sign-in", "/sign-up", "/privacy", "/terms", "/cookies"];
 
 const STORAGE_KEY = "onboarding-complete";
 

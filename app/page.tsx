@@ -1,6 +1,7 @@
 import { LandingNav } from "@/components/landing-nav";
 import { LandingHero } from "@/components/landing-hero";
 import { AuroraBackground } from "@/components/aurora-background";
+import { SiteFooter } from "@/components/site-footer";
 
 export default function Home() {
   return (
@@ -10,6 +11,7 @@ export default function Home() {
         <LandingNav />
         <LandingHero />
       </div>
+      <SiteFooter />
     </div>
   );
 }

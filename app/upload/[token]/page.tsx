@@ -10,6 +10,7 @@ import {
   UploadCloud,
   XCircle,
 } from "lucide-react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -594,10 +595,17 @@ function StatusBadge({
 
 function PublicShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-full w-full items-start justify-center bg-background px-4 py-10 sm:py-16">
+    <div className="flex min-h-full w-full flex-col items-center gap-4 bg-background px-4 py-10 sm:py-16">
       <div className="flex w-full max-w-xl flex-col gap-6 rounded-2xl bg-card p-6 ring-1 ring-foreground/10 sm:p-8">
         {children}
       </div>
+      <p className="text-xs text-muted-foreground">
+        By uploading, you agree to Compozor&apos;s{" "}
+        <Link href="/privacy" className="underline underline-offset-2 hover:text-foreground">
+          Privacy Policy
+        </Link>
+        .
+      </p>
     </div>
   );
 }
