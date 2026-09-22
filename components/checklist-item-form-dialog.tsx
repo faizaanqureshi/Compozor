@@ -1,12 +1,16 @@
 "use client";
 
 import { useState } from "react";
+import useSWR from "swr";
 import {
   ApiError,
   ChecklistItem,
   createChecklistItem,
   editChecklistItem,
+  getMyOrganization,
 } from "@/lib/api";
+import { organizationKey } from "@/lib/swr-keys";
+import { exampleDocTypesFor } from "@/lib/practice-types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -41,6 +45,8 @@ export function ChecklistItemFormDialog({
   onSaved: () => void;
 }) {
   const isEdit = item !== undefined;
+  const { data: org } = useSWR(organizationKey(), getMyOrganization);
+  const docTypePlaceholder = exampleDocTypesFor(org?.practice_type);
   const [docTypeNeeded, setDocTypeNeeded] = useState(item?.doc_type_needed ?? "");
   const [description, setDescription] = useState(item?.description ?? "");
   const [startDate, setStartDate] = useState(item?.expected_date_range_start ?? "");
@@ -159,7 +165,7 @@ export function ChecklistItemFormDialog({
                   id="checklist-item-doc-type"
                   required
                   autoFocus
-                  placeholder="e.g. T4, T4A, T5, NOA, bank_statement, qbo_export, receipt"
+                  placeholder={docTypePlaceholder}
                   value={docTypeNeeded}
                   onChange={(e) => setDocTypeNeeded(e.target.value)}
                 />

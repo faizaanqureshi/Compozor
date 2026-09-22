@@ -1,14 +1,18 @@
 "use client";
 
 import { useState } from "react";
+import useSWR from "swr";
 import { Plus, X } from "lucide-react";
 import {
   ApiError,
   Package,
   PackageDocumentInput,
   createPackage,
+  getMyOrganization,
   updatePackage,
 } from "@/lib/api";
+import { organizationKey } from "@/lib/swr-keys";
+import { exampleDocTypeFor } from "@/lib/practice-types";
 import { Button, buttonVariants } from "@/components/ui/button";
 import type { VariantProps } from "class-variance-authority";
 import { Input } from "@/components/ui/input";
@@ -40,6 +44,8 @@ export function PackageFormDialog({
   variant?: VariantProps<typeof buttonVariants>["variant"];
 }) {
   const isEdit = pkg !== undefined;
+  const { data: org } = useSWR(organizationKey(), getMyOrganization);
+  const docTypePlaceholder = `Doc type (e.g. ${exampleDocTypeFor(org?.practice_type)})`;
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(pkg?.name ?? "");
   const [rows, setRows] = useState<DocRow[]>(
@@ -152,7 +158,7 @@ export function PackageFormDialog({
                       <Input
                         value={row.doc_type_needed}
                         onChange={(e) => updateRow(i, { doc_type_needed: e.target.value })}
-                        placeholder="Doc type (e.g. T4)"
+                        placeholder={docTypePlaceholder}
                         aria-label={`Doc type, row ${i + 1}`}
                       />
                       <Input
