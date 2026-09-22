@@ -936,13 +936,11 @@ export const deleteInboxConnection = (connectionId: number) =>
 export const watchInboxConnection = (connectionId: number) =>
   request<void>(`/inbox-connections/${connectionId}/watch`, { method: "POST" });
 
-// ---------- Google Calendar connections ----------
-
-export const getGoogleCalendarConnectUrl = () =>
-  request<{ authorization_url: string }>("/organizations/me/calendar/connect");
-
-export const getOutlookCalendarConnectUrl = () =>
-  request<{ authorization_url: string }>("/organizations/me/outlook-calendar/connect", { credentials: "include" });
+// ---------- Calendar connections ----------
+//
+// No separate connect URL - connecting Gmail or Outlook (above) now grants
+// calendar scopes in the same consent, so a CalendarConnection appears
+// automatically alongside the InboxConnection. See calendar_connections.py.
 
 export const listCalendarConnections = () =>
   request<CalendarConnection[]>("/calendar-connections");
