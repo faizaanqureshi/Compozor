@@ -674,13 +674,8 @@ export default function EmailLogPage() {
               Delete {selectedKeys.size} thread{selectedKeys.size === 1 ? "" : "s"}?
             </DialogTitle>
             <DialogDescription>
-              {selectedKeys.size === 1 ? "This thread moves" : "These threads move"} to the
-              Archive and disappear from this list. Restore{" "}
-              {selectedKeys.size === 1 ? "it" : "them"} from the Archive button above within 7
-              days, or {selectedKeys.size === 1 ? "it's" : "they're"} permanently deleted. Any
-              received document, tracked commitment, or memory note that came from one of these
-              messages is kept either way - it just loses the link back to the email it arrived
-              through.
+              {selectedKeys.size === 1 ? "This thread" : "These threads"} will be archived for 7
+              days, then deleted permanently.
             </DialogDescription>
           </DialogHeader>
           {bulkDeleteError && <p className="text-sm text-destructive">{bulkDeleteError}</p>}

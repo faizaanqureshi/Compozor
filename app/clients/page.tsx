@@ -1141,11 +1141,8 @@ function BulkDeleteClientsButton({
               Delete {clientIds.length} client{clientIds.length === 1 ? "" : "s"}?
             </DialogTitle>
             <DialogDescription>
-              {clientIds.length === 1 ? "This client moves" : "These clients move"} to the Archive
-              and disappear from this list. Restore{clientIds.length === 1 ? " it" : " them"} from
-              the Archive button above within 7 days, or {clientIds.length === 1 ? "it's" : "they're"}{" "}
-              permanently deleted along with all checklist items, uploaded documents, email logs,
-              memory notes, and workflow/package assignments.
+              {clientIds.length === 1 ? "This client" : "These clients"} will be archived for 7
+              days, then deleted permanently.
             </DialogDescription>
           </DialogHeader>
           {error && <p className="text-sm text-destructive">{error}</p>}
