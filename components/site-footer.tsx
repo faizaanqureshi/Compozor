@@ -26,7 +26,6 @@ export function SiteFooter() {
         </nav>
       </div>
       <p className="text-center text-xs text-muted-foreground sm:text-left">
-        Canada ·{" "}
         <a href="mailto:info@compozor.com" className="hover:text-foreground">
           info@compozor.com
         </a>

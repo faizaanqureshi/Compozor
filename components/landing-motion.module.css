@@ -1,0 +1,313 @@
+.pending {
+  opacity: 0;
+  transform: translate3d(0, 12px, 0);
+}
+
+.revealed {
+  animation: reveal 850ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.pending[data-reveal="focus"] {
+  filter: blur(3px);
+  transform: translate3d(0, 16px, 0);
+}
+
+.revealed[data-reveal="focus"] {
+  animation-name: focus-reveal;
+  animation-duration: 1000ms;
+}
+
+@keyframes focus-reveal {
+  0% {
+    opacity: 0;
+    filter: blur(3px);
+    transform: translate3d(0, 16px, 0);
+  }
+  45% {
+    opacity: 1;
+    filter: blur(0);
+  }
+  100% {
+    opacity: 1;
+    filter: blur(0);
+    transform: none;
+  }
+}
+
+.revealed[data-reveal="later"] {
+  animation-delay: 120ms;
+}
+
+/* Panels crossfade while the containing layout eases to its new height. */
+.transitionFrame {
+  min-width: 0;
+  overflow: clip;
+  overflow-clip-margin: 4px;
+}
+
+.transitionContent {
+  display: flow-root;
+  min-width: 0;
+}
+
+.panelGroup {
+  position: relative;
+}
+
+.panelGroup > [data-slot="tabs-content"] {
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    opacity 400ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 550ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.panelGroup > [data-starting-style] {
+  opacity: 0;
+  transform: translateY(6px);
+}
+
+.panelGroup > [data-ending-style] {
+  position: absolute;
+  inset: 0 0 auto;
+  opacity: 0;
+  transform: translateY(-4px);
+  pointer-events: none;
+  transition-duration: 180ms;
+}
+
+.disclosure {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows 550ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 350ms ease;
+}
+
+.disclosure[data-open="true"] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+.disclosureChevron {
+  transition: transform 450ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.faq [data-slot="accordion-content"] {
+  height: var(--accordion-panel-height);
+  opacity: 1;
+  animation: none;
+  transition:
+    height 500ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 350ms ease;
+}
+
+.faq [data-slot="accordion-content"][data-starting-style],
+.faq [data-slot="accordion-content"][data-ending-style] {
+  height: 0;
+  opacity: 0;
+}
+
+.faq [data-slot="accordion-content"] > div {
+  height: auto;
+}
+
+/* Keep one chevron mounted so expansion rotates instead of swapping icons. */
+.faq [data-slot="accordion-trigger"] > svg:first-of-type {
+  display: block;
+  transition: transform 450ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.faq [data-slot="accordion-trigger"][aria-expanded="true"] > svg:first-of-type {
+  transform: rotate(180deg);
+}
+.faq [data-slot="accordion-trigger"] > svg:last-of-type {
+  display: none;
+}
+
+.menu {
+  animation-duration: 300ms;
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pending:focus-within,
+.pending[data-reveal="focus"]:focus-within {
+  opacity: 1;
+  transform: none;
+  filter: none;
+}
+
+@keyframes reveal {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 12px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+
+.header {
+  transition: transform 650ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.nav {
+  max-width: 72rem;
+  padding-block: 1rem;
+  transition:
+    max-width 650ms cubic-bezier(0.16, 1, 0.3, 1),
+    padding 650ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.logo {
+  height: 1.75rem;
+  transition: height 650ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.header[data-compact="true"] {
+  transform: translateY(-6px);
+}
+.header[data-compact="true"] .nav {
+  max-width: 60rem;
+  padding-block: 0.5rem;
+}
+.header[data-compact="true"] .logo {
+  height: 1.5rem;
+}
+
+@media (min-width: 640px) {
+  .nav {
+    padding-block: 1.125rem;
+  }
+  .logo {
+    height: 2rem;
+  }
+  .header[data-compact="true"] .nav {
+    padding-block: 0.625rem;
+  }
+  .header[data-compact="true"] .logo {
+    height: 1.625rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panelGroup > [data-slot="tabs-content"],
+  .disclosure,
+  .disclosureChevron,
+  .faq [data-slot="accordion-content"],
+  .faq [data-slot="accordion-trigger"] > svg:first-of-type {
+    transition: none;
+  }
+  .menu {
+    animation: none;
+  }
+  .pending,
+  .revealed,
+  .pending[data-reveal="focus"],
+  .revealed[data-reveal="focus"] {
+    opacity: 1;
+    transform: none;
+    filter: none;
+    animation: none;
+  }
+  .header,
+  .nav,
+  .logo {
+    transition: none;
+  }
+}
+
+@media print {
+  .pending,
+  .revealed,
+  .pending[data-reveal="focus"],
+  .revealed[data-reveal="focus"] {
+    opacity: 1;
+    transform: none;
+    filter: none;
+    animation: none;
+  }
+}
+
+/* Keep control and anchor motion local to this marketing surface. */
+:global(html):has(.page) {
+  scroll-behavior: smooth;
+}
+.page :is(button, a, [role="tab"]),
+.page [role="tab"]::after {
+  transition-duration: 300ms;
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+.page a {
+  transition-property: color, background-color, border-color, opacity;
+}
+@media (prefers-reduced-motion: reduce) {
+  :global(html):has(.page) {
+    scroll-behavior: auto;
+  }
+  .page :is(button, a, [role="tab"]),
+  .page [role="tab"]::after {
+    transition: none;
+  }
+}
+
+/* Chart marks reveal once. Axes, captions, and exact values remain stationary. */
+.chart [data-chart-part="bar-x"] {
+  transform-origin: left center;
+}
+.chart [data-chart-part="bar-y"] {
+  transform-origin: center bottom;
+}
+.chart[data-chart-state="pending"] [data-chart-part="bar-x"] {
+  transform: scaleX(0);
+}
+.chart[data-chart-state="pending"] [data-chart-part="bar-y"] {
+  transform: scaleY(0);
+}
+.chart[data-chart-state="pending"] [data-chart-part="stroke"] {
+  stroke-dashoffset: 1;
+}
+.chart[data-chart-state="pending"] :is([data-chart-part="wash"], [data-chart-part="point"]) {
+  opacity: 0;
+}
+.chart[data-chart-state="revealed"] [data-chart-part="bar-x"] {
+  animation: chart-bar-x 850ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.chart[data-chart-state="revealed"] [data-chart-part="bar-y"] {
+  animation: chart-bar-y 850ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.chart[data-chart-state="revealed"] [data-chart-part="stroke"] {
+  animation: chart-stroke 1100ms cubic-bezier(0.33, 1, 0.68, 1) both;
+}
+.chart[data-chart-state="revealed"] [data-chart-part="wash"] {
+  animation: chart-fade 900ms ease 180ms both;
+}
+.chart[data-chart-state="revealed"] [data-chart-part="point"] {
+  animation: chart-fade 450ms ease both;
+}
+@keyframes chart-bar-x {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+@keyframes chart-bar-y {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+}
+@keyframes chart-stroke {
+  from { stroke-dashoffset: 1; }
+  to { stroke-dashoffset: 0; }
+}
+@keyframes chart-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce), print {
+  .chart[data-chart-state] [data-chart-part] {
+    animation: none;
+    transform: none;
+    opacity: 1;
+    stroke-dashoffset: 0;
+  }
+}

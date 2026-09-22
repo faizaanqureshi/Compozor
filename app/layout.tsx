@@ -29,7 +29,7 @@ const denton = localFont({
 
 export const metadata: Metadata = {
   title: "Compozor",
-  description: "Tax document collection dashboard",
+  description: "Client communication, document collection, and workflows for professional service firms.",
   manifest: "/site.webmanifest",
   icons: {
     icon: [
@@ -49,7 +49,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={cn("h-full", "font-sans", neueMontreal.variable, denton.variable)}>
       <body className="min-h-full flex flex-col">
-        <ClerkProvider>
+        <ClerkProvider waitlistUrl="/waitlist" signInUrl="/sign-in" signUpUrl="/sign-up">
           <AppShell>{children}</AppShell>
         </ClerkProvider>
       </body>

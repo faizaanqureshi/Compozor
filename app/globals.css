@@ -5,6 +5,9 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+    --color-marketing-forest: var(--marketing-forest);
+    --color-marketing-sage: var(--marketing-sage);
+    --color-marketing-brass: var(--marketing-brass);
     --font-heading: var(--font-sans);
     --font-sans: var(--font-sans);
     --color-sidebar-ring: var(--sidebar-ring);
@@ -50,6 +53,10 @@
 }
 
 :root {
+    /* Homepage: richer evergreen surfaces and readable brass on dark backgrounds. */
+    --marketing-forest: oklch(0.27 0.038 170);
+    --marketing-sage: oklch(0.91 0.022 160);
+    --marketing-brass: oklch(0.72 0.108 83);
     /* Old-money palette anchored on the brand mark, #122023 (deep teal-charcoal),
        paired with warm ivory/champagne neutrals and a brass-gold accent -
        evergreen/navy + brass is the classic "old money" combination. */
@@ -188,4 +195,12 @@
 
 .bg-grain {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Stronger body-copy contrast is scoped to marketing, not the app. */
+.marketing-page {
+  --muted-foreground: oklch(0.42 0.018 170);
+}
+.dark .marketing-page {
+  --muted-foreground: oklch(0.78 0.022 87);
 }

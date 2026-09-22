@@ -9,19 +9,14 @@ import { OnboardingGate } from "@/components/onboarding-gate";
 import { ProductTour } from "@/components/product-tour";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
-// The public /upload/[token] page must work without a Clerk session and
-// without the internal app chrome (nav rail, onboarding gate, product
-// tour) - it's reached by a client, not a signed-in firm user. Keeping this
-// check here (rather than restructuring the whole app into route groups)
-// means every other route keeps its existing layout untouched.
-function isPublicUploadRoute(pathname: string | null): boolean {
-  return pathname?.startsWith("/upload/") ?? false;
-}
+import { isStandalonePublicPage } from "@/lib/public-routes";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
-  if (isPublicUploadRoute(pathname)) {
+  // Public marketing and client-upload pages never load app onboarding or
+  // the product tour, including for an already signed-in visitor.
+  if (isStandalonePublicPage(pathname)) {
     return <>{children}</>;
   }
 
