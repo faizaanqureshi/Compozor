@@ -543,6 +543,9 @@ export const listArchivedClients = () => request<Client[]>("/clients/archived");
 export const restoreClients = (clientIds: number[]) =>
   request<Client[]>("/clients/restore", json("POST", { client_ids: clientIds }));
 
+export const purgeClients = (clientIds: number[]) =>
+  request<void>("/clients/purge", json("POST", { client_ids: clientIds }));
+
 // ---------- Checklist items ----------
 
 export const listChecklistItems = (clientId: number) =>
@@ -752,6 +755,9 @@ export const listArchivedEmailLog = () => request<EmailLogEntry[]>("/email-log/a
 
 export const restoreEmailLogEntries = (emailLogIds: number[]) =>
   request<EmailLogEntry[]>("/email-log/restore", json("POST", { email_log_ids: emailLogIds }));
+
+export const purgeEmailLogEntries = (emailLogIds: number[]) =>
+  request<void>("/email-log/purge", json("POST", { email_log_ids: emailLogIds }));
 
 export const sendEmailLogEntry = (clientId: number, emailLogId: number) =>
   request<EmailLogEntry>(

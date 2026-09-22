@@ -17,6 +17,7 @@ import {
   listArchivedEmailLog,
   listClients,
   listEmailLog,
+  purgeEmailLogEntries,
   resolveEmailLogEntry,
   restoreEmailLogEntries,
   sendEmailLogEntry,
@@ -27,6 +28,7 @@ import { cn, formatRelativeTime } from "@/lib/utils";
 import { AgentActivityDisclosure, TraceStep } from "@/components/agent-activity-disclosure";
 import { EmailDraftEditor } from "@/components/email-draft-editor";
 import { Linkify } from "@/components/linkify";
+import { PurgeConfirmDialog } from "@/components/purge-confirm-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -155,6 +157,10 @@ function ArchivedEmailLogDialog({
   const [open, setOpen] = useState(false);
   const [threads, setThreads] = useState<Thread[] | null>(null);
   const [restoringKey, setRestoringKey] = useState<string | null>(null);
+  const [restoringAll, setRestoringAll] = useState(false);
+  const [purging, setPurging] = useState(false);
+  const [confirmDeleteKey, setConfirmDeleteKey] = useState<string | null>(null);
+  const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = () => {
@@ -184,6 +190,38 @@ function ArchivedEmailLogDialog({
     }
   };
 
+  const onRestoreAll = async () => {
+    if (!threads || threads.length === 0) return;
+    setRestoringAll(true);
+    setError(null);
+    try {
+      await restoreEmailLogEntries(threads.flatMap((t) => t.messages.map((m) => m.id)));
+      refresh();
+      onRestored();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setRestoringAll(false);
+    }
+  };
+
+  const onDeletePermanently = async (emailLogIds: number[]) => {
+    setPurging(true);
+    setError(null);
+    try {
+      await purgeEmailLogEntries(emailLogIds);
+      setConfirmDeleteKey(null);
+      setConfirmDeleteAll(false);
+      refresh();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setPurging(false);
+    }
+  };
+
+  const threadToDelete = threads?.find((t) => t.key === confirmDeleteKey) ?? null;
+
   return (
     <>
       <Button variant="outline" size="sm" onClick={openDialog}>
@@ -197,7 +235,7 @@ function ArchivedEmailLogDialog({
             <DialogTitle>Archive</DialogTitle>
             <DialogDescription>
               Deleted threads stay here for 7 days before being permanently removed - restore one
-              to bring it back exactly as it was.
+              to bring it back exactly as it was, or delete it for good right away.
             </DialogDescription>
           </DialogHeader>
 
@@ -209,40 +247,82 @@ function ArchivedEmailLogDialog({
           ) : threads.length === 0 ? (
             <p className="text-sm text-muted-foreground">Nothing archived.</p>
           ) : (
-            <div className="flex max-h-96 flex-col gap-1 overflow-y-auto">
-              {threads.map((thread) => {
-                const latest = thread.messages[thread.messages.length - 1];
-                return (
-                  <div
-                    key={thread.key}
-                    className="flex items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-sm hover:bg-muted"
-                  >
-                    <span className="flex min-w-0 flex-col">
-                      <span className="truncate font-medium">
-                        {thread.subject ?? "(no subject)"}
-                      </span>
-                      <span className="truncate text-xs text-muted-foreground">
-                        {clientsById[thread.clientId]?.name ?? "Unknown client"} · Deleted{" "}
-                        {latest.archived_at ? formatRelativeTime(latest.archived_at) : ""}
-                      </span>
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="shrink-0"
-                      disabled={restoringKey === thread.key}
-                      onClick={() => onRestore(thread)}
+            <>
+              <div className="flex items-center justify-end gap-1.5">
+                <Button variant="ghost" size="sm" onClick={onRestoreAll} disabled={restoringAll}>
+                  {restoringAll ? "Restoring…" : "Restore all"}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-destructive hover:bg-destructive/10"
+                  onClick={() => setConfirmDeleteAll(true)}
+                >
+                  Delete all
+                </Button>
+              </div>
+              <div className="flex max-h-96 flex-col gap-1 overflow-y-auto">
+                {threads.map((thread) => {
+                  const latest = thread.messages[thread.messages.length - 1];
+                  return (
+                    <div
+                      key={thread.key}
+                      className="flex items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-sm hover:bg-muted"
                     >
-                      {restoringKey === thread.key ? "Restoring…" : "Restore"}
-                    </Button>
-                  </div>
-                );
-              })}
-            </div>
+                      <span className="flex min-w-0 flex-col">
+                        <span className="truncate font-medium">
+                          {thread.subject ?? "(no subject)"}
+                        </span>
+                        <span className="truncate text-xs text-muted-foreground">
+                          {clientsById[thread.clientId]?.name ?? "Unknown client"} · Deleted{" "}
+                          {latest.archived_at ? formatRelativeTime(latest.archived_at) : ""}
+                        </span>
+                      </span>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={restoringKey === thread.key}
+                          onClick={() => onRestore(thread)}
+                        >
+                          {restoringKey === thread.key ? "Restoring…" : "Restore"}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="icon-sm"
+                          className="text-destructive hover:bg-destructive/10"
+                          title="Delete permanently"
+                          onClick={() => setConfirmDeleteKey(thread.key)}
+                        >
+                          <Trash2 />
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
           )}
           {error && <p className="text-sm text-destructive">{error}</p>}
         </DialogContent>
       </Dialog>
+
+      <PurgeConfirmDialog
+        open={confirmDeleteKey !== null}
+        onOpenChange={(next) => !next && setConfirmDeleteKey(null)}
+        count={1}
+        itemLabel="thread"
+        purging={purging}
+        onConfirm={() => threadToDelete && onDeletePermanently(threadToDelete.messages.map((m) => m.id))}
+      />
+      <PurgeConfirmDialog
+        open={confirmDeleteAll}
+        onOpenChange={setConfirmDeleteAll}
+        count={threads?.length ?? 0}
+        itemLabel="thread"
+        purging={purging}
+        onConfirm={() => threads && onDeletePermanently(threads.flatMap((t) => t.messages.map((m) => m.id)))}
+      />
     </>
   );
 }
