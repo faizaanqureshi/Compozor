@@ -678,6 +678,7 @@ export default function ClientsPage() {
               <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-foreground/50" />
               <Input
                 placeholder="Search clients…"
+                aria-label="Search clients"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="w-full border-none bg-muted/60 pl-8 shadow-none focus-visible:ring-1 focus-visible:ring-ring/30 sm:w-56"

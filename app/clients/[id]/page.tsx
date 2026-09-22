@@ -827,12 +827,14 @@ function ChecklistCard({
             required
             autoFocus
             placeholder="Doc type (e.g. T4, T4A, T5, NOA, bank_statement, qbo_export, receipt)"
+            aria-label="Document type"
             value={docTypeNeeded}
             onChange={(e) => setDocTypeNeeded(e.target.value)}
             className="flex-1"
           />
           <Input
             placeholder="Description (optional)"
+            aria-label="Description (optional)"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             className="flex-1"
@@ -847,6 +849,7 @@ function ChecklistCard({
             onClick={() => setShowAddForm(false)}
           >
             <X />
+            <span className="sr-only">Cancel</span>
           </Button>
         </form>
       ) : (
