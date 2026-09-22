@@ -47,26 +47,26 @@ export function LandingWorkSample() {
           </div>
           <TabsList
             aria-label="Compare a work sample with a client report"
-            className="h-auto justify-start rounded-4xl border border-border p-1"
+            className="h-auto! w-full justify-start sm:w-auto rounded-4xl border border-border p-1"
           >
             <TabsTrigger
               value="sample"
-              className="min-h-8 flex-none rounded-4xl px-3 text-xs"
+              className="min-h-11 flex-1 rounded-4xl px-3 text-xs sm:min-h-8 sm:flex-none"
             >
               Reference layout
             </TabsTrigger>
             <TabsTrigger
               value="report"
-              className="min-h-8 flex-none rounded-4xl px-3 text-xs"
+              className="min-h-11 flex-1 rounded-4xl px-3 text-xs sm:min-h-8 sm:flex-none"
             >
               Prepared report
             </TabsTrigger>
           </TabsList>
         </div>
         <div className="grid lg:grid-cols-[280px_minmax(0,1fr)]">
-          <aside className="grid content-start gap-7 p-5 sm:grid-cols-2 sm:p-8 lg:grid-cols-1 lg:gap-9">
+          <aside className="order-last grid content-start gap-7 p-5 lg:order-first sm:grid-cols-2 sm:p-8 lg:grid-cols-1 lg:gap-9">
             <div>
-              <p className="text-[0.625rem] uppercase tracking-widest text-marketing-forest dark:text-marketing-brass">
+              <p className="text-[0.6875rem] sm:text-[0.625rem] uppercase tracking-widest text-marketing-forest dark:text-marketing-brass">
                 01 / The material
               </p>
               <div className="mt-4 space-y-4">
@@ -85,7 +85,7 @@ export function LandingWorkSample() {
                     />
                     <div>
                       <p className="text-xs">{name}</p>
-                      <p className="mt-1 text-[0.625rem] leading-relaxed text-muted-foreground">
+                      <p className="mt-1 text-[0.6875rem] sm:text-[0.625rem] leading-relaxed text-muted-foreground">
                         {detail}
                       </p>
                     </div>
@@ -94,14 +94,14 @@ export function LandingWorkSample() {
               </div>
             </div>
             <div>
-              <p className="text-[0.625rem] uppercase tracking-widest text-marketing-forest dark:text-marketing-brass">
+              <p className="text-[0.6875rem] sm:text-[0.625rem] uppercase tracking-widest text-marketing-forest dark:text-marketing-brass">
                 02 / Your instructions
               </p>
               <blockquote className="mt-4 border-l border-marketing-brass/60 pl-4 text-sm leading-relaxed text-foreground">
                 “Summarize expenses by category. Show the spending trend, retain
                 our format, and include source references and review notes.”
               </blockquote>
-              <div className="mt-6 space-y-2 text-[0.625rem] text-muted-foreground">
+              <div className="mt-6 space-y-2 text-[0.6875rem] sm:text-[0.625rem] text-muted-foreground">
                 <p className="flex items-center gap-2">
                   <Check className="size-3" aria-hidden />
                   Client data supplies the facts
@@ -118,20 +118,20 @@ export function LandingWorkSample() {
               {(["sample", "report"] as const).map((mode) => (
                 <TabsContent key={mode} value={mode} className="min-w-0">
                   <article
-                    className={`${depth.paper} rounded-lg border border-border bg-card p-5 text-foreground sm:p-8`}
+                    className={`${depth.paper} rounded-lg border border-border bg-card p-4 text-foreground sm:p-8`}
                   >
                     <header className="flex items-center justify-between gap-4 border-b border-border pb-5">
                       <span className="text-xs uppercase tracking-widest">
                         North & Co.
                       </span>
-                      <span className="text-[0.625rem] uppercase tracking-widest text-muted-foreground">
+                      <span className="text-[0.6875rem] sm:text-[0.625rem] uppercase tracking-widest text-muted-foreground">
                         {mode === "sample"
                           ? "Reference layout"
                           : "Illustrative report"}
                       </span>
                     </header>
                     <div className="my-6">
-                      <p className="text-[0.625rem] uppercase tracking-widest text-muted-foreground">
+                      <p className="text-[0.6875rem] sm:text-[0.625rem] uppercase tracking-widest text-muted-foreground">
                         Monthly financial overview
                       </p>
                       <h3 className="mt-2 text-2xl font-light tracking-tight sm:text-3xl">
@@ -143,7 +143,7 @@ export function LandingWorkSample() {
                           : "Avery Williams · August 2026"}
                       </p>
                     </div>
-                    <div className="grid grid-cols-3 gap-3 border-y border-border py-5">
+                    <div className={`${material.metrics} grid grid-cols-3 gap-3 border-y border-border py-5`}>
                       <Metric
                         label="Total expenses"
                         value={mode === "sample" ? "—" : money(exampleExpenseTotal)}
@@ -162,7 +162,7 @@ export function LandingWorkSample() {
                       <SpendingTrend sample={mode === "sample"} />
                     </div>
                     <div className="border-t border-border pt-5">
-                      <p className="text-[0.625rem] uppercase tracking-widest text-muted-foreground">
+                      <p className="text-[0.6875rem] sm:text-[0.625rem] uppercase tracking-widest text-muted-foreground">
                         Observations & review notes
                       </p>
                       <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
@@ -198,7 +198,7 @@ export function LandingWorkSample() {
                         >
                           <div className="min-h-0 overflow-hidden">
                             <div className="overflow-x-auto pt-3">
-                              <table className="w-full text-left text-[0.625rem]">
+                              <table className="w-full text-left text-[0.6875rem] sm:text-[0.625rem]">
                                 <caption className="pb-3 text-left text-muted-foreground">
                                   Selected entries from the illustrative source ledger
                                 </caption>
@@ -249,7 +249,7 @@ export function LandingWorkSample() {
                         </div>
                       </>
                     )}
-                    <footer className="mt-5 flex flex-wrap justify-between gap-2 border-t border-border pt-4 text-[0.625rem] text-muted-foreground">
+                    <footer className="mt-5 flex flex-wrap justify-between gap-2 border-t border-border pt-4 text-[0.6875rem] sm:text-[0.625rem] text-muted-foreground">
                       <span>Prepared for professional review</span>
                       <span>01 / Monthly overview</span>
                     </footer>

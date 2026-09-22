@@ -54,7 +54,7 @@ export function LandingNav() {
     >
       <nav
         aria-label="Main navigation"
-        className={`${styles.nav} ${glass.light} flex w-full items-center justify-between gap-4 rounded-full px-5 sm:px-6`}
+        className={`${styles.nav} ${glass.light} flex w-full items-center justify-between gap-2 rounded-full px-3 sm:gap-4 sm:px-6`}
       >
         <Link href="/" aria-label="Compozor home" className="shrink-0">
           <Image
@@ -77,17 +77,17 @@ export function LandingNav() {
             </a>
           ))}
         </div>
-        <div className="flex items-center gap-4 sm:gap-6">
+        <div className="flex items-center gap-1 sm:gap-6">
           <Show when="signed-out">
             <Link
               href="/sign-in"
-              className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+              className="hidden text-sm text-muted-foreground transition-colors hover:text-foreground sm:block"
             >
               Sign in
             </Link>
           </Show>
           <Show when="signed-in">
-            <Link href="/clients" className="flex items-center gap-1.5 text-sm">
+            <Link href="/clients" className="hidden items-center gap-1.5 text-sm sm:flex">
               <span>Dashboard</span>
               <ArrowRight className="hidden size-3.5 sm:block" aria-hidden />
             </Link>
@@ -95,20 +95,20 @@ export function LandingNav() {
           <Button
             nativeButton={false}
             render={<Link href="/demo" />}
-            className={`${depth.primaryAction} hidden h-9 bg-marketing-forest px-4 text-sidebar-foreground hover:bg-marketing-forest/90 sm:inline-flex`}
+            className={`${depth.primaryAction} h-11 bg-marketing-forest px-3 text-xs text-sidebar-foreground hover:bg-marketing-forest/90 sm:h-9 sm:px-4 sm:text-sm`}
           >
             Book a demo
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger
               render={
-                <Button variant="ghost" size="icon" className="lg:hidden" />
+                <Button variant="ghost" size="icon" className="size-11 lg:hidden" />
               }
             >
               <Menu />
               <span className="sr-only">Open menu</span>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className={`${styles.menu} ${glass.light} w-52`}>
+            <DropdownMenuContent align="end" className={`${styles.menu} ${glass.light} w-60 [&_[role=menuitem]]:min-h-11 [&_[role=menuitem]]:px-3`}>
               {links.map((link) => (
                 <DropdownMenuItem
                   key={link.href}
@@ -123,6 +123,16 @@ export function LandingNav() {
               <DropdownMenuItem render={<Link href="/waitlist" />}>
                 Join the waitlist
               </DropdownMenuItem>
+              <Show when="signed-out">
+                <DropdownMenuItem className="sm:hidden" render={<Link href="/sign-in" />}>
+                  Sign in
+                </DropdownMenuItem>
+              </Show>
+              <Show when="signed-in">
+                <DropdownMenuItem className="sm:hidden" render={<Link href="/clients" />}>
+                  Dashboard
+                </DropdownMenuItem>
+              </Show>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

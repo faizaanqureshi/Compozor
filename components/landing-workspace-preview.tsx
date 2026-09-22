@@ -21,7 +21,7 @@ import { buttonVariants } from "@/components/ui/button";
 /** Static product illustration. Controls are visual details, not live app actions. */
 export function LandingWorkspacePreview() {
   return (
-    <figure data-reveal className="mx-auto mt-12 w-full max-w-[112rem] px-3 sm:mt-16 sm:px-5 lg:px-6">
+    <figure data-reveal className="mx-auto mt-8 w-full max-w-[112rem] px-3 sm:mt-16 sm:px-5 lg:px-6">
       <div className={`${depth.stage} ${styles.stage} overflow-hidden rounded-xl bg-marketing-forest`}>
         <div className={`${depth.workspace} ${styles.workspace} relative z-10 grid overflow-hidden rounded-lg border border-sidebar-foreground/20 bg-card md:grid-cols-[150px_1fr] lg:grid-cols-[175px_1fr]`}>
           <div className="hidden flex-col bg-sidebar px-4 py-6 text-sidebar-foreground md:flex">
@@ -62,7 +62,7 @@ export function LandingWorkspacePreview() {
                 Illustrative preview
               </span>
             </div>
-            <div className="flex flex-1 flex-col p-5 sm:p-7 lg:py-9">
+            <div className="flex flex-1 flex-col p-4 sm:p-7 lg:py-9">
               <div className="mb-7 flex flex-wrap items-center lg:mb-10 justify-between gap-3">
                 <div>
                   <h2 className="text-xl font-normal tracking-tight sm:text-2xl">
@@ -116,7 +116,7 @@ export function LandingWorkspacePreview() {
                       aria-hidden
                     />
                     <span>
-                      Follow-up sent. Remaining receipts received and matched.
+                      Compozor requested the correct period, checked the replacement, and started the workflow.
                     </span>
                   </div>
                   <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -145,7 +145,7 @@ export function LandingWorkspacePreview() {
                   </div>
                   <ul className="mt-5 space-y-2.5 text-xs lg:flex lg:flex-1 lg:flex-col lg:justify-center lg:gap-4 lg:space-y-0 lg:py-5">
                     {[
-                      "Transactions extracted",
+                      "Started after requirements were met",
                       "Report prepared in your format",
                       "Output checks complete",
                     ].map((text) => (
@@ -175,7 +175,7 @@ export function LandingWorkspacePreview() {
           </div>
         </div>
       </div>
-      <figcaption className="mt-4 flex flex-wrap justify-between gap-2 text-xs text-muted-foreground">
+      <figcaption className="mt-4 flex flex-wrap justify-between gap-2 px-3 text-xs leading-relaxed sm:px-0 text-muted-foreground">
         <span>Every conversation, document, and next step in context.</span>
         <span>Static product preview · Fictional client data</span>
       </figcaption>

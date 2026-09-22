@@ -68,11 +68,11 @@ export function LandingPractices() {
   return (
     <section
       id="for-firms"
-      className="mx-auto max-w-7xl scroll-mt-24 px-6 py-20 sm:px-10 sm:py-28"
+      className="mx-auto max-w-7xl scroll-mt-24 px-6 py-14 sm:px-10 sm:py-28"
     >
       <div
         data-reveal="focus"
-        className="mb-12 flex flex-col justify-between gap-6 md:flex-row md:items-end"
+        className="mb-8 flex sm:mb-12 flex-col justify-between gap-6 md:flex-row md:items-end"
       >
         <div>
           <p className="text-xs uppercase tracking-widest text-marketing-forest dark:text-marketing-brass">
@@ -93,7 +93,7 @@ export function LandingPractices() {
         <Tabs
           defaultValue="accounting"
           orientation="vertical"
-          className="grid gap-10 lg:grid-cols-[260px_minmax(0,1fr)] lg:gap-16"
+          className="grid gap-7 sm:gap-10 lg:grid-cols-[260px_minmax(0,1fr)] lg:gap-16"
         >
           <div>
             <TabsList
@@ -105,7 +105,7 @@ export function LandingPractices() {
                 <TabsTrigger
                   key={p.id}
                   value={p.id}
-                  className="group min-h-20 justify-start gap-4 rounded-none border-x-0 border-t-0 border-b border-border px-0 py-5 text-left text-base font-normal whitespace-normal after:hidden data-active:text-marketing-forest dark:data-active:text-marketing-brass"
+                  className="group min-h-14 sm:min-h-20 justify-start gap-4 rounded-none border-x-0 border-t-0 border-b border-border px-0 py-3 sm:py-5 text-left text-base font-normal whitespace-normal after:hidden data-active:text-marketing-forest dark:data-active:text-marketing-brass"
                 >
                   <span className="text-[0.625rem] tabular-nums text-muted-foreground">
                     0{i + 1}
@@ -177,7 +177,7 @@ export function LandingPractices() {
                       </p>
                       {p.id === "accounting" && (
                         <>
-                          <div className="grid grid-cols-3 gap-4 border-y border-border py-5">
+                          <div className="grid grid-cols-3 gap-2 sm:gap-4 border-y border-border py-5">
                             <Metric label="Expenses" value="$1,340" />
                             <Metric label="Receipts" value="08" />
                             <Metric label="Categories" value="03" />

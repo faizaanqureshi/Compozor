@@ -12,7 +12,7 @@ import {
 export function LandingFaq() {
   return (
     <section
-      className={`${styles.faq} mx-auto grid max-w-7xl gap-10 px-6 py-20 sm:px-10 sm:py-28 md:grid-cols-[0.7fr_1fr] md:gap-24`}
+      className={`${styles.faq} mx-auto grid max-w-7xl gap-10 px-6 py-14 sm:px-10 sm:py-28 md:grid-cols-[0.7fr_1fr] md:gap-24`}
     >
       <h2 data-reveal="focus" className="text-3xl font-light tracking-tight">
         A few things

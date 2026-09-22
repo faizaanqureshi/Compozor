@@ -309,6 +309,10 @@ a package, correcting a document, or turning a sample into a client deliverable.
 Keep them clearly labeled as fictional examples, run them locally in the browser,
 and do not imply they send email or execute real workflows. Practice selectors
 should change the sources and deliverable together, not just the industry label.
+Lead the walkthrough with a complete client conversation, the agent's correction,
+and the resulting deliverable. Keep firm setup as optional supporting detail.
+Name the automation settings used in the example, and label controls as ways to
+explore the preview rather than manual steps required to make the agent proceed.
 
 Homepage interactions share a 300ms control transition and 400–550ms content
 transition. Use `LandingTransition` for changing demo heights, with Base UI’s
@@ -352,3 +356,11 @@ panel. Its report sits inside a muted champagne-gold mineral frame, a companion
 to the green hero texture. Keep the material confined to the space around solid
 paper; never behind text or charts. Use `landing-work-sample.module.css` with the
 same increased-contrast, reduced-transparency, and print fallbacks as the hero.
+
+On phones, keep the floating navigation compact with a visible demo action and
+sign-in/dashboard access inside the menu. Give mobile navigation and report tabs
+44px tap targets. Shorten section spacing without shrinking body copy. Present
+the sample report before its supporting material below the desktop breakpoint;
+on phones, show the expense total above the secondary metrics rather than
+squeezing three labels into one row. Retain the desktop compositions and texture
+frames, and verify at 320px as well as typical phone, tablet, and desktop widths.

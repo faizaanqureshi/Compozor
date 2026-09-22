@@ -14,7 +14,7 @@ export function MarketingActions({
 }) {
   return (
     <div
-      className={cn("flex flex-wrap items-center gap-x-7 gap-y-4", className)}
+      className={cn("flex flex-wrap items-center gap-x-5 gap-y-3 sm:gap-x-7 sm:gap-y-4", className)}
     >
       <Button
         nativeButton={false}
@@ -33,7 +33,7 @@ export function MarketingActions({
       <Link
         href="/waitlist"
         className={cn(
-          "rounded-sm py-2 text-sm underline-offset-4 transition-colors hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring",
+          "inline-flex min-h-11 items-center rounded-sm py-2 text-sm underline-offset-4 transition-colors hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring",
           inverse && glass.dark,
           inverse && glass.action,
         )}

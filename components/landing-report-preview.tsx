@@ -28,7 +28,7 @@ export const money = (value: number) =>
 export function ExpenseBreakdown({ sample = false }: { sample?: boolean }) {
   return (
     <LandingChart enabled={!sample}>
-      <figcaption className="mb-5 text-[0.625rem] uppercase tracking-widest text-muted-foreground">
+      <figcaption className="mb-5 text-[0.6875rem] sm:text-[0.625rem] uppercase tracking-widest text-muted-foreground">
         Spending by category
       </figcaption>
       <div className="space-y-4">
@@ -59,7 +59,7 @@ export function ExpenseBreakdown({ sample = false }: { sample?: boolean }) {
           </div>
         ))}
       </div>
-      <p className="mt-4 text-[0.625rem] text-muted-foreground">
+      <p className="mt-4 text-[0.6875rem] sm:text-[0.625rem] text-muted-foreground">
         {sample
           ? "Chart placement from your sample"
           : "Share of the month’s total · CAD"}
@@ -87,7 +87,7 @@ const line = spending
 export function SpendingTrend({ sample = false }: { sample?: boolean }) {
   return (
     <LandingChart enabled={!sample}>
-      <figcaption className="mb-3 text-[0.625rem] uppercase tracking-widest text-muted-foreground">
+      <figcaption className="mb-3 text-[0.6875rem] sm:text-[0.625rem] uppercase tracking-widest text-muted-foreground">
         Cumulative spend · August
       </figcaption>
       <svg
@@ -155,7 +155,7 @@ export function SpendingTrend({ sample = false }: { sample?: boolean }) {
           </text>
         </g>
       </svg>
-      <p className="text-[0.625rem] text-muted-foreground">
+      <p className="text-[0.6875rem] sm:text-[0.625rem] text-muted-foreground">
         {sample
           ? "Client figures appear in the prepared version"
           : "8 illustrative purchases · statement and receipt data"}
@@ -172,7 +172,7 @@ export function EvidenceIndex() {
         <Metric label="Source files" value="05" />
         <Metric label="Review notes" value="01" />
       </div>
-      <p className="mt-7 text-[0.625rem] uppercase tracking-widest text-muted-foreground">
+      <p className="mt-7 text-[0.6875rem] sm:text-[0.625rem] uppercase tracking-widest text-muted-foreground">
         Evidence map
       </p>
       <ol className="mt-4">
@@ -205,7 +205,7 @@ export function EvidenceIndex() {
             </span>
             <div>
               <p className="text-sm">{title}</p>
-              <p className="mt-1 text-[0.625rem] leading-relaxed text-muted-foreground">
+              <p className="mt-1 text-[0.6875rem] sm:text-[0.625rem] leading-relaxed text-muted-foreground">
                 {source}
               </p>
               <p className="mt-2 text-xs leading-relaxed">{note}</p>
@@ -214,7 +214,7 @@ export function EvidenceIndex() {
         ))}
       </ol>
       <div className="mt-5 border-l-2 border-accent bg-muted/40 px-4 py-3">
-        <p className="text-[0.625rem] uppercase tracking-widest text-muted-foreground">
+        <p className="text-[0.6875rem] sm:text-[0.625rem] uppercase tracking-widest text-muted-foreground">
           For the reviewer
         </p>
         <p className="mt-2 text-xs leading-relaxed">
@@ -239,10 +239,10 @@ export function IncomeSummary() {
         <Metric label="Periods reviewed" value="03" />
       </div>
       <LandingChart className="mt-7">
-        <figcaption className="text-[0.625rem] uppercase tracking-widest text-muted-foreground">
+        <figcaption className="text-[0.6875rem] sm:text-[0.625rem] uppercase tracking-widest text-muted-foreground">
           Gross pay & recorded deposits
         </figcaption>
-        <div className="mt-4 flex flex-wrap gap-4 text-[0.625rem] text-muted-foreground">
+        <div className="mt-4 flex flex-wrap gap-4 text-[0.6875rem] sm:text-[0.625rem] text-muted-foreground">
           <span className="flex items-center gap-2">
             <i className="size-2 bg-chart-2" aria-hidden />
             Gross pay
@@ -277,7 +277,7 @@ export function IncomeSummary() {
                 />
               </div>
               <p className="mt-3 text-center text-xs">{m.month}</p>
-              <p className="mt-1 text-center text-[0.625rem] tabular-nums text-muted-foreground">
+              <p className="mt-1 text-center text-[0.6875rem] sm:text-[0.625rem] tabular-nums text-muted-foreground">
                 {money(m.pay)} / {money(m.deposit)}
               </p>
             </div>
@@ -288,7 +288,7 @@ export function IncomeSummary() {
         Gross pay and bank deposits shown separately. Differences may reflect
         payroll deductions; no equivalence is assumed.
       </p>
-      <div className="mt-5 border-t border-border pt-4 text-[0.625rem] leading-relaxed text-muted-foreground">
+      <div className="mt-5 border-t border-border pt-4 text-[0.6875rem] sm:text-[0.625rem] leading-relaxed text-muted-foreground">
         Sources: Pay_statements.pdf · pp. 1–3; Bank_statements.pdf ·
         June–August. Prepared for advisor review, not an eligibility decision.
       </div>
@@ -298,8 +298,8 @@ export function IncomeSummary() {
 
 export function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div>
-      <p className="text-[0.625rem] uppercase tracking-widest text-muted-foreground">
+    <div className="min-w-0">
+      <p className="min-h-8 text-[0.6875rem] uppercase tracking-normal text-muted-foreground sm:min-h-0 sm:text-[0.625rem] sm:tracking-widest">
         {label}
       </p>
       <p className="mt-2 text-2xl font-light tabular-nums tracking-tight sm:text-3xl">
@@ -389,7 +389,7 @@ export function ExpenseAllocation() {
         </text>
       </svg>
       <div className="min-w-0 flex-1">
-        <figcaption className="mb-4 text-[0.625rem] uppercase tracking-widest text-muted-foreground">
+        <figcaption className="mb-4 text-[0.6875rem] sm:text-[0.625rem] uppercase tracking-widest text-muted-foreground">
           Expense composition
         </figcaption>
         <dl className="space-y-3">

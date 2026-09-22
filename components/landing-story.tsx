@@ -12,16 +12,19 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { LandingAgentExample } from "@/components/landing-agent-example";
+import motion from "@/components/landing-motion.module.css";
 import { LandingTransition } from "@/components/landing-transition";
 
 const steps = [
   {
-    id: "setup",
-    title: "Define",
-    heading: "Your process. Ready for the next client.",
+    id: "overview",
+    title: "The loop",
+    heading: "The back-and-forth, handled.",
     description:
-      "Build a reusable package with the documents you need and the work to follow. Assign it to a client, with requirements specific to their engagement.",
-    note: "Define the checklist, reporting period, and workflow once. Reuse them across your practice.",
+      "Your client sends the wrong statement. Compozor catches the mismatch, explains what’s needed, and checks the replacement. Once the requirements are met, your workflow prepares the report.",
+    note: "You define the requirements and choose what runs automatically. Your team handles the decisions that need professional judgment.",
   },
   {
     id: "collect",
@@ -74,7 +77,7 @@ function ExampleFile({
 
 export function LandingStory() {
   const sectionRef = useRef<HTMLElement>(null);
-  const [step, setStep] = useState("setup");
+  const [step, setStep] = useState("overview");
   const advanceFocus = useRef(false);
   const goToStep = (next: string) => {
     advanceFocus.current = next !== step;
@@ -103,13 +106,11 @@ export function LandingStory() {
     return () => cancelAnimationFrame(frame);
   }, [step]);
   const [reply, setReply] = useState(false);
-  const [correction, setCorrection] = useState(false);
   const [corrected, setCorrected] = useState(false);
   const [report, setReport] = useState(false);
   const restart = () => {
-    goToStep("setup");
+    goToStep("overview");
     setReply(false);
-    setCorrection(false);
     setCorrected(false);
     setReport(false);
   };
@@ -118,13 +119,13 @@ export function LandingStory() {
     <section
       id="how-it-works"
       ref={sectionRef}
-      className="scroll-mt-24 border-t border-border bg-card py-20 sm:py-28"
+      className="scroll-mt-24 border-t border-border bg-card py-14 sm:py-28"
     >
       <div className="mx-auto max-w-7xl px-6 sm:px-10">
         <div data-reveal="focus" className="flex flex-col justify-between gap-6 md:flex-row md:items-end">
           <div>
             <p className="text-xs uppercase tracking-widest text-marketing-forest dark:text-marketing-brass">
-              A quieter way to get the work done
+              AI that follows the work through
             </p>
             <h2 className="mt-5 max-w-2xl text-4xl leading-tight font-thin tracking-tight sm:text-5xl [font-family:var(--font-denton)]">
               From the first request
@@ -133,16 +134,15 @@ export function LandingStory() {
             </h2>
           </div>
           <p className="max-w-xs text-sm leading-relaxed text-muted-foreground">
-            Follow a client through Compozor.
-            <br />
-            Try each step of the example below.
+            One connected process, from client conversation to prepared work.
+            Explore what Compozor handles along the way.
           </p>
         </div>
         <Tabs
           data-reveal
           value={step}
           onValueChange={(v) => setStep(String(v))}
-          className="mt-10 gap-10 sm:mt-12"
+          className="mt-7 gap-6 sm:mt-12 sm:gap-10"
         >
           <TabsList
             variant="line"
@@ -153,7 +153,7 @@ export function LandingStory() {
               <TabsTrigger
                 key={item.id}
                 value={item.id}
-                className="justify-start gap-2 rounded-none px-1 py-4 text-sm after:bottom-0! after:bg-marketing-forest data-active:text-marketing-forest sm:gap-4 dark:data-active:text-marketing-brass dark:after:bg-marketing-brass"
+                className="min-h-14 flex-col items-start justify-center gap-1 rounded-none px-1 py-3 text-sm sm:flex-row sm:items-center sm:justify-start sm:py-4 after:bottom-0! after:bg-marketing-forest data-active:text-marketing-forest sm:gap-4 dark:data-active:text-marketing-brass dark:after:bg-marketing-brass"
               >
                 <span className="text-[0.625rem] text-muted-foreground sm:text-xs">
                   0{i + 1}
@@ -181,13 +181,28 @@ export function LandingStory() {
                   <p className="mt-7 border-l border-accent pl-4 text-sm leading-relaxed text-muted-foreground">
                     {item.note}
                   </p>
+                  {item.id === "overview" && (
+                    <Accordion className={`${motion.faq} mt-6 border-t border-border`}>
+                      <AccordionItem value="setup">
+                        <AccordionTrigger className="min-h-11 py-4 font-normal">
+                          What your firm sets up
+                        </AccordionTrigger>
+                        <AccordionContent className="pb-4 text-sm leading-relaxed text-muted-foreground">
+                          Define the documents and reporting period, attach your
+                          workflow instructions and work sample, then assign the
+                          package to a client. Enable automatic replies and
+                          workflow execution, or keep either under manual control.
+                        </AccordionContent>
+                      </AccordionItem>
+                    </Accordion>
+                  )}
                 </div>
                 <div className="min-w-0 overflow-hidden rounded-xl border border-border bg-background">
                   <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-4 sm:px-7">
                     <div>
                       <p className="text-sm">Avery Williams</p>
                       <p className="mt-1 text-[0.625rem] uppercase tracking-widest text-muted-foreground">
-                        Interactive example
+                        Illustrative AI activity
                       </p>
                     </div>
                     <Button
@@ -199,43 +214,17 @@ export function LandingStory() {
                       <RotateCcw className="size-3.5" />
                     </Button>
                   </div>
-                  <LandingTransition changeKey={`${reply}-${correction}-${corrected}-${report}`}>
+                  <LandingTransition changeKey={`${reply}-${corrected}-${report}`}>
                     <div className="p-5 sm:p-7">
-                      {item.id === "setup" && (
+                      {item.id === "overview" && (
                         <>
-                          <p className="text-[0.625rem] uppercase tracking-widest text-muted-foreground">
-                            Reusable package
-                          </p>
-                          <h4 className="mt-2 text-xl tracking-tight">
-                            Monthly bookkeeping
-                          </h4>
-                          <div className="mt-3">
-                            <ExampleFile
-                              name="Bank statement"
-                              detail="August 2026 · all pages"
-                            />
-                            <ExampleFile
-                              name="Expense receipts"
-                              detail="Supporting receipts for the reporting period"
-                            />
-                          </div>
-                          <div className="mt-5 flex items-start gap-3 rounded-lg border border-border bg-card p-4">
-                            <FileSpreadsheet
-                              className="mt-0.5 size-4 text-marketing-forest dark:text-marketing-brass"
-                              aria-hidden
-                            />
-                            <div>
-                              <p className="text-sm">Monthly expense report</p>
-                              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                                Workflow attached · firm’s workbook as the sample
-                              </p>
-                            </div>
-                          </div>
+                          <LandingAgentExample />
                           <Button
-                            className="mt-6 gap-3"
+                            variant="outline"
+                            className="mt-6 min-h-11 gap-3"
                             onClick={() => goToStep("collect")}
                           >
-                            Assign example package <ArrowRight aria-hidden />
+                            Explore the conversation <ArrowRight aria-hidden />
                           </Button>
                         </>
                       )}
@@ -243,7 +232,7 @@ export function LandingStory() {
                         <>
                           <div className="flex items-center gap-2 text-xs text-muted-foreground">
                             <Mail className="size-3.5" aria-hidden />
-                            Your firm → Avery
+                            Compozor → Avery · on your firm’s behalf
                           </div>
                           <h4 className="mt-4 text-base">
                             A quick reminder for August
@@ -285,7 +274,7 @@ export function LandingStory() {
                             }
                           >
                             {reply
-                              ? "Check these documents"
+                              ? "See the document checks"
                               : "See the client’s reply"}
                             <ArrowRight aria-hidden />
                           </Button>
@@ -322,13 +311,13 @@ export function LandingStory() {
                             }
                             complete={corrected}
                           />
-                          {correction && !corrected && (
+                          {!corrected && (
                             <div
                               className="mt-4 rounded-lg border border-border bg-card p-4"
                               aria-live="polite"
                             >
                               <p className="text-xs text-muted-foreground">
-                                Correction request · example draft
+                                Compozor → Avery · correction explained
                               </p>
                               <p className="mt-2 text-sm leading-relaxed">
                                 Thanks, Avery. The statement covers July. Could you
@@ -339,25 +328,24 @@ export function LandingStory() {
                           )}
                           {corrected && (
                             <p className="mt-5 text-sm text-success" role="status">
-                              Corrected statement received. Both requirements are
-                              satisfied.
+                              Compozor checked the August statement. Both requirements
+                              are satisfied; the automatic workflow can begin.
                             </p>
                           )}
                           <Button
                             className="mt-6 gap-3"
-                            onClick={() =>
-                              corrected
-                                ? goToStep("prepare")
-                                : correction
-                                  ? setCorrected(true)
-                                  : setCorrection(true)
-                            }
+                            onClick={() => {
+                              if (corrected) {
+                                setReport(true);
+                                goToStep("prepare");
+                              } else {
+                                setCorrected(true);
+                              }
+                            }}
                           >
                             {corrected
-                              ? "Continue to the workflow"
-                              : correction
-                                ? "See the corrected upload"
-                                : "See the correction request"}
+                              ? "See the workflow result"
+                              : "See the corrected upload"}
                             <ArrowRight aria-hidden />
                           </Button>
                         </>
@@ -449,7 +437,8 @@ export function LandingStory() {
                     </div>
                   </LandingTransition>
                   <div className="border-t border-border px-5 py-3 text-[0.625rem] leading-relaxed text-muted-foreground sm:px-7">
-                    Illustrative journey with fictional data. No emails are sent.
+                    Fictional example with automation enabled. Buttons explore
+                    the preview; no emails are sent or workflows run here.
                   </div>
                 </div>
               </TabsContent>
