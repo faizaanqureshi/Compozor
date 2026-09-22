@@ -172,11 +172,7 @@ export default function ClientDetailPage({
   const [workflowError, setWorkflowError] = useState<string | null>(null);
   const [workflowRuns, setWorkflowRuns] = useState<WorkflowRun[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // null = no manual override yet, so visibility just follows whether a
-  // package has been assigned - once one has, the row collapses to keep
-  // the checklist front and center, and "Edit package"/"Done" toggle it
-  // back open on demand.
-  const [packageRowOverride, setPackageRowOverride] = useState<boolean | null>(null);
+  const [assignPackageOpen, setAssignPackageOpen] = useState(false);
   const router = useRouter();
   const workflowRefreshRef = useRef<ReturnType<typeof createSnapshotRefresh<[WorkflowRun[], ClientWorkflowAssignment[]]>> | null>(null);
 
@@ -234,9 +230,6 @@ export default function ClientDetailPage({
     refreshWorkflowRuns();
   };
   useEffect(refreshClient, [refreshClient]);
-
-  const hasPackageItems = checklist?.items.some((i) => i.package_name) ?? false;
-  const showPackageRow = packageRowOverride ?? !hasPackageItems;
 
   if (error && !client) return <p className="text-sm text-destructive">{error}</p>;
 
@@ -308,17 +301,25 @@ export default function ClientDetailPage({
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
-      {client !== null && showPackageRow && (
-        <PackageQuickAssignRow
-          clientId={clientId}
-          assignedPackageIds={client.assigned_package_ids}
-          checklist={checklist}
-          onAssigned={() => {
-            refresh();
-            setPackageRowOverride(false);
-          }}
-          onDone={hasPackageItems ? () => setPackageRowOverride(false) : undefined}
-        />
+      {client !== null && (
+        <>
+          <div className="flex items-center justify-end gap-1.5">
+            <Button variant="outline" onClick={() => setAssignPackageOpen(true)}>
+              <Plus />
+              Assign package
+            </Button>
+            <PackageFormDialog onSaved={refresh} variant="outline" />
+          </div>
+
+          <AssignPackagePopup
+            open={assignPackageOpen}
+            onOpenChange={setAssignPackageOpen}
+            clientId={clientId}
+            assignedPackageIds={client.assigned_package_ids}
+            checklist={checklist}
+            onAssigned={refresh}
+          />
+        </>
       )}
 
       <ChecklistCard
@@ -326,7 +327,7 @@ export default function ClientDetailPage({
         checklist={checklist}
         documents={documents}
         onChange={refresh}
-        onEditPackage={() => setPackageRowOverride(true)}
+        onEditPackage={() => setAssignPackageOpen(true)}
       />
 
       <WaitingOnCard
@@ -826,12 +827,14 @@ function ChecklistCard({
             required
             autoFocus
             placeholder="Doc type (e.g. T4, T4A, T5, NOA, bank_statement, qbo_export, receipt)"
+            aria-label="Document type"
             value={docTypeNeeded}
             onChange={(e) => setDocTypeNeeded(e.target.value)}
             className="flex-1"
           />
           <Input
             placeholder="Description (optional)"
+            aria-label="Description (optional)"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             className="flex-1"
@@ -846,6 +849,7 @@ function ChecklistCard({
             onClick={() => setShowAddForm(false)}
           >
             <X />
+            <span className="sr-only">Cancel</span>
           </Button>
         </form>
       ) : (
@@ -898,8 +902,6 @@ function ChecklistCard({
   );
 }
 
-const PACKAGE_ROW_VISIBLE_COUNT = 3;
-
 function PackageAssignCard({
   pkg,
   clientId,
@@ -947,22 +949,28 @@ function PackageAssignCard({
   );
 }
 
-function PackageQuickAssignRow({
+// Replaces the old always-visible "3 boxes in a row" package section so the
+// checklist is the first thing a client's page shows - assigning, editing,
+// and changing a client's package(s) all happen through this one dialog
+// instead, opened from the "Assign package" button above the checklist or
+// "Edit package" on the checklist card itself once one's assigned.
+function AssignPackagePopup({
+  open,
+  onOpenChange,
   clientId,
   assignedPackageIds,
   checklist,
   onAssigned,
-  onDone,
 }: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   clientId: number;
   assignedPackageIds: number[];
   checklist: ChecklistSummary | null;
   onAssigned: () => void;
-  onDone?: () => void;
 }) {
   const [packages, setPackages] = useState<Package[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [showMore, setShowMore] = useState(false);
 
   const refreshPackages = () => {
     listPackages()
@@ -970,7 +978,9 @@ function PackageQuickAssignRow({
       .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
   };
 
-  useEffect(refreshPackages, []);
+  useEffect(() => {
+    if (open) refreshPackages();
+  }, [open]);
 
   // Which of this package's specific document lines are already checked
   // for this client - lets a card for an already-assigned package open
@@ -982,92 +992,53 @@ function PackageQuickAssignRow({
     }
   }
 
-  // Assigned packages float to the front so "Edit package" always shows
-  // the client's current selection right away, without having to dig into
-  // "Show more" first.
+  // Assigned packages float to the front so it's obvious at a glance what's
+  // already selected when reopening this to edit.
   const sorted = packages
     ? [...packages].sort(
         (a, b) => Number(assignedPackageIds.includes(b.id)) - Number(assignedPackageIds.includes(a.id))
       )
     : null;
-  const visible = sorted?.slice(0, PACKAGE_ROW_VISIBLE_COUNT) ?? [];
-  const remaining = sorted?.slice(PACKAGE_ROW_VISIBLE_COUNT) ?? [];
 
   return (
-    <SectionCard
-      title="Assign a package"
-      subtitle="Click a package to add its documents to this client."
-      action={
-        <div className="flex items-center gap-1.5">
-          {remaining.length > 0 && (
-            <Button variant="ghost" size="sm" onClick={() => setShowMore(true)}>
-              Show more
-            </Button>
-          )}
-          <PackageFormDialog
-            onSaved={refreshPackages}
-            variant="outline"
-          />
-          {onDone && (
-            <Button variant="ghost" size="sm" onClick={onDone}>
-              Done
-            </Button>
-          )}
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle className="pr-8">Assign a package</DialogTitle>
+          <DialogDescription>
+            Click a package to add its documents to this client, or change what&apos;s selected.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex justify-end">
+          <PackageFormDialog onSaved={refreshPackages} variant="outline" />
         </div>
-      }
-    >
-      {packages === null ? (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {[0, 1, 2].map((i) => (
-            <Skeleton key={i} className="h-28 w-full rounded-xl" />
-          ))}
-        </div>
-      ) : packages.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          No packages yet - use &quot;Create New Package&quot; above to create one.
-        </p>
-      ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {visible.map((pkg) => (
-            <PackageAssignCard
-              key={pkg.id}
-              pkg={pkg}
-              clientId={clientId}
-              isSelected={assignedPackageIds.includes(pkg.id)}
-              currentDocumentIds={currentDocIdsByPackage[pkg.id]}
-              onAssigned={onAssigned}
-            />
-          ))}
-        </div>
-      )}
-      {error && <p className="text-sm text-destructive">{error}</p>}
-
-      <Dialog open={showMore} onOpenChange={setShowMore}>
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>More packages</DialogTitle>
-            <DialogDescription>
-              Click a package to add its documents to this client.
-            </DialogDescription>
-          </DialogHeader>
+        {packages === null ? (
           <div className="grid max-h-[60vh] grid-cols-1 gap-3 overflow-y-auto sm:grid-cols-2">
-            {remaining.map((pkg) => (
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} className="h-28 w-full rounded-xl" />
+            ))}
+          </div>
+        ) : packages.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No packages yet - use &quot;Create New Package&quot; above to create one.
+          </p>
+        ) : (
+          <div className="grid max-h-[60vh] grid-cols-1 gap-3 overflow-y-auto sm:grid-cols-2">
+            {sorted!.map((pkg) => (
               <PackageAssignCard
                 key={pkg.id}
                 pkg={pkg}
                 clientId={clientId}
                 isSelected={assignedPackageIds.includes(pkg.id)}
                 currentDocumentIds={currentDocIdsByPackage[pkg.id]}
-                onAssigned={() => {
-                  setShowMore(false);
-                  onAssigned();
-                }}
+                onAssigned={onAssigned}
               />
             ))}
           </div>
-        </DialogContent>
-      </Dialog>
-    </SectionCard>
+        )}
+        {error && <p className="text-sm text-destructive">{error}</p>}
+      </DialogContent>
+    </Dialog>
   );
 }
 

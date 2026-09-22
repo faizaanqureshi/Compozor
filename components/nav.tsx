@@ -71,7 +71,10 @@ export function Nav() {
     pathname === "/" ||
     pathname.startsWith("/sign-in") ||
     pathname.startsWith("/sign-up") ||
-    pathname.startsWith("/onboarding")
+    pathname.startsWith("/onboarding") ||
+    pathname.startsWith("/privacy") ||
+    pathname.startsWith("/terms") ||
+    pathname.startsWith("/cookies")
   )
     return null;
 
@@ -161,14 +164,14 @@ export function Nav() {
                 !collapsed && "xl:justify-start xl:px-2.5",
                 active
                   ? "bg-sidebar-foreground/[0.06] font-medium text-sidebar-foreground"
-                  : "text-sidebar-foreground/40 hover:text-sidebar-foreground/70"
+                  : "text-sidebar-foreground/55 hover:text-sidebar-foreground/70"
               )}
             >
               <Icon
                 className={cn(
                   "size-[15px] shrink-0 md:size-[18px]",
                   !collapsed && "xl:size-[15px]",
-                  active ? "text-sidebar-foreground/80" : "text-sidebar-foreground/30"
+                  active ? "text-sidebar-foreground/80" : "text-sidebar-foreground/40"
                 )}
               />
               <span className={cn("truncate md:hidden", !collapsed && "xl:inline")}>

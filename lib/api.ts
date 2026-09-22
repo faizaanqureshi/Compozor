@@ -23,23 +23,33 @@ async function responseError(res: Response): Promise<ApiError> {
   return new ApiError(res.status, message);
 }
 
-// Clerk's browser SDK attaches itself to `window.Clerk`; this is the
-// documented way to grab a session token outside of a React hook, which
-// we need since these functions are called directly from useEffect rather
-// than through a component. On a hard refresh `window.Clerk` may exist but
-// still be re-validating the session, so we must await `load()` before
-// reading `session` — otherwise a signed-in user briefly looks signed-out.
+type ClerkGlobal = {
+  loaded?: boolean;
+  load?: () => Promise<void>;
+  session?: { getToken: () => Promise<string | null> };
+};
+
+// On a hard refresh, Clerk's bootstrap script hasn't run yet, so
+// `window.Clerk` itself is briefly undefined - not just unloaded. Bailing out
+// as soon as that's true (rather than waiting for the script to attach it)
+// made every early fetch (e.g. onboarding's on-mount load) race the page
+// load: lose the race and the backend's 401 forced a sign-out redirect for a
+// user who was, in fact, signed in. Poll for the global for a couple seconds
+// before giving up, in addition to the existing `load()` wait below for once
+// it exists but hasn't finished validating the session.
+async function waitForClerkGlobal(timeoutMs = 3000): Promise<ClerkGlobal | undefined> {
+  const deadline = Date.now() + timeoutMs;
+  while (true) {
+    const clerk = (window as unknown as { Clerk?: ClerkGlobal }).Clerk;
+    if (clerk) return clerk;
+    if (Date.now() >= deadline) return undefined;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+}
+
 async function getAuthToken(): Promise<string | null> {
   if (typeof window === "undefined") return null;
-  const clerk = (
-    window as unknown as {
-      Clerk?: {
-        loaded?: boolean;
-        load?: () => Promise<void>;
-        session?: { getToken: () => Promise<string | null> };
-      };
-    }
-  ).Clerk;
+  const clerk = await waitForClerkGlobal();
   if (!clerk) return null;
   if (!clerk.loaded && clerk.load) await clerk.load();
   if (!clerk.session) return null;

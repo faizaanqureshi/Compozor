@@ -1,5 +1,5 @@
-import { SignUp } from "@clerk/nextjs";
 import { AuroraBackground } from "@/components/aurora-background";
+import { SignUpConsentGate } from "@/components/sign-up-consent-gate";
 
 // See app/sign-in - a redirect_url of "/" comes from buttons clicked on the
 // landing page, and the query param outranks fallbackRedirectUrl in Clerk's
@@ -20,11 +20,8 @@ export default async function SignUpPage({
   return (
     <div className="fixed inset-0 isolate overflow-hidden bg-background">
       <AuroraBackground />
-      <div className="relative flex h-full items-center justify-center">
-        <SignUp
-          forceRedirectUrl={meaningfulRedirect(redirect_url)}
-          fallbackRedirectUrl="/clients"
-        />
+      <div className="relative flex h-full items-center justify-center px-4">
+        <SignUpConsentGate forceRedirectUrl={meaningfulRedirect(redirect_url)} />
       </div>
     </div>
   );

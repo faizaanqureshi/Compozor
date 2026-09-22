@@ -798,6 +798,7 @@ function ThreadRow({
         checked={checked}
         onClick={(e) => e.stopPropagation()}
         onChange={onCheck}
+        aria-label={`Select conversation with ${client?.name ?? `#${thread.clientId}`}`}
         className="mt-1 size-3.5 shrink-0 accent-foreground"
       />
       <span className={cn("mt-1.5 size-1.5 shrink-0 rounded-full", statusToneClasses[tone])} />

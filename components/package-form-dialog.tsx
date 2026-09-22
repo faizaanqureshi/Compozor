@@ -153,10 +153,12 @@ export function PackageFormDialog({
                         value={row.doc_type_needed}
                         onChange={(e) => updateRow(i, { doc_type_needed: e.target.value })}
                         placeholder="Doc type (e.g. T4)"
+                        aria-label={`Doc type, row ${i + 1}`}
                       />
                       <Input
                         value={row.description ?? ""}
                         onChange={(e) => updateRow(i, { description: e.target.value })}
+                        aria-label={`Description, row ${i + 1}`}
                         placeholder="Description (optional)"
                       />
                       <label className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -177,6 +179,7 @@ export function PackageFormDialog({
                       disabled={rows.length === 1}
                     >
                       <X />
+                      <span className="sr-only">Remove row {i + 1}</span>
                     </Button>
                   </div>
                 ))}
