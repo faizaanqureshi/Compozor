@@ -87,9 +87,6 @@ export interface PublicChecklistItem {
   doc_type_needed: string;
   description: string | null;
   status: "missing" | "received" | "wrong";
-  expected_date_range_start: string | null;
-  expected_date_range_end: string | null;
-  package_name: string | null;
 }
 
 export interface PublicChecklist {
