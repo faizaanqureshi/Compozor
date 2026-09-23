@@ -14,3 +14,9 @@ test("unfinished validation is explicit and carries its reason", () => {
   assert.equal(documentValidation({ validation_status: "processing" }).label, "Validating");
   assert.equal(documentValidation(null).label, "Not validated");
 });
+
+test("an old accepted file cannot claim a changed requirement is collected", () => {
+  const result = documentValidation({ validation_status: "accepted" }, false);
+  assert.equal(result.status, "needs_review");
+  assert.match(result.reasons[0], /current request/);
+});

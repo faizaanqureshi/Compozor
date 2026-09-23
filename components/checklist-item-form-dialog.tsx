@@ -1,5 +1,6 @@
 "use client";
 
+import { requirementChanged } from "@/lib/checklist-requirements";
 import { useState } from "react";
 import useSWR from "swr";
 import {
@@ -74,10 +75,10 @@ export function ChecklistItemFormDialog({
     onOpenChange(next);
   };
 
-  // Only the requirement name defines what document satisfies it - the
-  // description is context and the deadline is a due date, so neither can
-  // un-receive an item (mirrors backend edit_checklist_item).
-  const isMaterial = isEdit && docTypeNeeded.trim() !== item!.doc_type_needed;
+  // Both name and description define the document; the deadline only defines when it is due.
+  const isMaterial = isEdit && requirementChanged(item!, {
+    doc_type_needed: docTypeNeeded, description,
+  });
 
   const performSave = async (notifyClient: boolean, confirmMaterialNow = confirmedMaterial) => {
     setSubmitting(true);

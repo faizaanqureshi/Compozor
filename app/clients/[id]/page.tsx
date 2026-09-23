@@ -1815,14 +1815,14 @@ function DocumentVaultCard({
                     <div className="text-xs font-normal text-muted-foreground">{doc.classified_type}</div>
                   )}
                   <div className="mt-2 md:hidden">
-                    <DocumentValidationResult metadata={doc.extracted_metadata} />
+                    <DocumentValidationResult metadata={doc.extracted_metadata} collected={item?.status === "received"} />
                   </div>
                 </td>
                 <td className="hidden py-2 pr-4 text-muted-foreground md:table-cell">
                   {sourceChannelLabel(doc.source_channel)}
                 </td>
                 <td className="hidden py-2 pr-4 md:table-cell">
-                  <DocumentValidationResult metadata={doc.extracted_metadata} />
+                  <DocumentValidationResult metadata={doc.extracted_metadata} collected={item?.status === "received"} />
                 </td>
                 <td className="hidden py-2 pr-4 text-right text-muted-foreground md:table-cell">
                   {doc.year ?? "—"}
@@ -1954,7 +1954,7 @@ function DocumentActions({
           <span className="sr-only">Document actions</span>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          {validationStatus !== "accepted" && (
+          {!satisfiesReceivedItem && (
             <DropdownMenuItem onClick={onValidate}>Retry validation</DropdownMenuItem>
           )}
           <DropdownMenuItem onClick={onStartRename}>Rename document</DropdownMenuItem>
