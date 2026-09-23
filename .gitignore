@@ -24,6 +24,13 @@
 .DS_Store
 *.pem
 
+# design references containing real/sensitive third-party data - shared for
+# inspiration only, never meant for source control
+docs/design-reference/*.xlsx
+
+# Office lock/temp files
+**/~$*
+
 # debug
 npm-debug.log*
 yarn-debug.log*

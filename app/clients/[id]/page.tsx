@@ -732,6 +732,9 @@ function ChecklistCard({
               Status
             </th>
             <th className="py-1.5 pr-4 pb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+              Deadline
+            </th>
+            <th className="py-1.5 pr-4 pb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
               Wrong attempts
             </th>
             <th className="py-1.5 pr-4 pb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
@@ -760,6 +763,15 @@ function ChecklistCard({
                 </td>
                 <td className="py-2 pr-4">
                   <StatusPill status={item.status} />
+                </td>
+                <td className="py-2 pr-4 text-muted-foreground">
+                  {item.expected_date_range_end
+                    ? new Date(`${item.expected_date_range_end}T00:00:00`).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      })
+                    : "—"}
                 </td>
                 <td className="py-2 pr-4 text-muted-foreground">
                   {item.wrong_attempt_count}
@@ -797,7 +809,7 @@ function ChecklistCard({
           })}
           {checklist?.items.length === 0 && (
             <tr>
-              <td colSpan={6} className="py-4 text-muted-foreground">
+              <td colSpan={7} className="py-4 text-muted-foreground">
                 No checklist items yet.
               </td>
             </tr>

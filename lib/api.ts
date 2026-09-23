@@ -168,6 +168,7 @@ export interface ChecklistItem {
   // - drives whether editing it warns before saving. See
   // ChecklistItem.possibly_communicated on the backend.
   possibly_communicated: boolean;
+  created_at: string;
 }
 
 export interface ChecklistSummary {
