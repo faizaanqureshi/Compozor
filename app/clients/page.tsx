@@ -38,7 +38,6 @@ import {
   listInboxConnections,
   purgeClients,
   restoreClients,
-  sendChecklistReminder,
   unassignPackageFromClient,
   unassignWorkflowFromClient,
   watchInboxConnection,
@@ -176,10 +175,6 @@ export default function ClientsPage() {
   const [companyName, setCompanyName] = useState("");
   const [status, setStatus] = useState<ClientStatus>("active");
   const [submitting, setSubmitting] = useState(false);
-
-  const [reminderState, setReminderState] = useState<
-    Record<number, "sending" | "sent">
-  >({});
 
   const [gmailBanner, setGmailBanner] = useState<
     { type: "success" | "error"; message: string } | null
@@ -415,27 +410,6 @@ export default function ClientsPage() {
     }
   };
 
-  const sendReminder = async (e: React.MouseEvent, clientId: number) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setReminderState((prev) => ({ ...prev, [clientId]: "sending" }));
-    try {
-      await sendChecklistReminder(clientId);
-      setReminderState((prev) => ({ ...prev, [clientId]: "sent" }));
-      // Refreshes client.last_reminder_sent_at from the server, which is
-      // what actually drives the 12h cooldown - the local "sent" state above
-      // is just the immediate in-session feedback until this lands.
-      mutateClients();
-    } catch (e) {
-      setReminderState((prev) => {
-        const next = { ...prev };
-        delete next[clientId];
-        return next;
-      });
-      setError(e instanceof ApiError ? e.message : String(e));
-    }
-  };
-
   return (
     <div className="relative isolate flex min-h-full w-full flex-col gap-8">
       {gmailBanner && (
@@ -567,8 +541,6 @@ export default function ClientsPage() {
         <UrgencyDashboard
           clients={clients}
           loading={loading}
-          reminderState={reminderState}
-          onSendReminder={sendReminder}
         />
       </section>
 
