@@ -166,7 +166,6 @@ export interface ChecklistItem {
   client_id: number;
   doc_type_needed: string;
   status: ChecklistItemStatus;
-  expected_date_range_start: string | null;
   expected_date_range_end: string | null;
   description: string | null;
   wrong_attempt_count: number;
@@ -174,7 +173,6 @@ export interface ChecklistItem {
   package_id: number | null;
   package_name: string | null;
   package_document_id: number | null;
-  last_communicated_at: string | null;
   // Whether the client may already have been told about this exact
   // requirement (set once, or a conservative legacy fallback server-side)
   // - drives whether editing it warns before saving. See
@@ -610,7 +608,6 @@ export const createChecklistItem = (
   input: {
     doc_type_needed: string;
     status?: ChecklistItemStatus;
-    expected_date_range_start?: string;
     expected_date_range_end?: string;
     description?: string;
   }
@@ -633,10 +630,9 @@ export const updateChecklistItem = (
 export interface ChecklistItemEditInput {
   doc_type_needed?: string;
   description?: string;
-  expected_date_range_start?: string | null;
   expected_date_range_end?: string | null;
-  // Must be true to proceed with a material edit (doc_type_needed or
-  // either date) to a Received item - the backend 409s otherwise. Set this
+  // Must be true to proceed with a material edit (a doc_type_needed
+  // change) to a Received item - the backend 409s otherwise. Set this
   // only after the user has confirmed the "already marked as received"
   // warning.
   confirm_material?: boolean;
@@ -675,7 +671,6 @@ export const sendChecklistItemReminder = (clientId: number, itemId: number) =>
 export interface ExtractedChecklistItem {
   doc_type_needed: string;
   description: string | null;
-  expected_date_range_start: string | null;
   expected_date_range_end: string | null;
 }
 

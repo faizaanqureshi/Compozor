@@ -49,12 +49,8 @@ export function ChecklistItemFormDialog({
   const docTypePlaceholder = exampleDocTypesFor(org?.practice_type);
   const [docTypeNeeded, setDocTypeNeeded] = useState(item?.doc_type_needed ?? "");
   const [description, setDescription] = useState(item?.description ?? "");
-  // Deadline maps to the existing expected_date_range_end column - the
-  // separate expected_date_range_start field (a "document must cover this
-  // period" concept, still used by document_validation.py for items set
-  // before this simplification) has no UI here anymore. Saving through
-  // this form always clears it going forward - see performSave - rather
-  // than leaving a stale, now-invisible value in place.
+  // Deadline is stored as expected_date_range_end - a due date only;
+  // document validation ignores it.
   const [deadline, setDeadline] = useState(item?.expected_date_range_end ?? "");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -78,13 +74,10 @@ export function ChecklistItemFormDialog({
     onOpenChange(next);
   };
 
-  // Only the fields that actually define what document satisfies this
-  // requirement count as material - description is supporting context,
-  // never material (see backend edit_checklist_item's _MATERIAL_FIELDS).
-  const isMaterial =
-    isEdit &&
-    (docTypeNeeded.trim() !== item!.doc_type_needed ||
-      (deadline || null) !== (item!.expected_date_range_end || null));
+  // Only the requirement name defines what document satisfies it - the
+  // description is context and the deadline is a due date, so neither can
+  // un-receive an item (mirrors backend edit_checklist_item).
+  const isMaterial = isEdit && docTypeNeeded.trim() !== item!.doc_type_needed;
 
   const performSave = async (notifyClient: boolean, confirmMaterialNow = confirmedMaterial) => {
     setSubmitting(true);
@@ -94,7 +87,6 @@ export function ChecklistItemFormDialog({
         await editChecklistItem(clientId, item!.id, {
           doc_type_needed: docTypeNeeded.trim(),
           description: description.trim(),
-          expected_date_range_start: null,
           expected_date_range_end: deadline || null,
           confirm_material: confirmMaterialNow,
           notify_client: notifyClient,
