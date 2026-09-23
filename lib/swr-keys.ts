@@ -13,6 +13,10 @@ export const organizationKey = () => ["organization"] as const;
 
 export const inboxConnectionsKey = () => ["inbox-connections"] as const;
 
+export const calendarConnectionsKey = () => ["calendar-connections"] as const;
+
+export const clientMeetingsKey = (clientId: number) => ["client-meetings", clientId] as const;
+
 export const unmatchedEmailsKey = (filters?: {
   review_status?: InboundEmailReviewStatus;
   category?: InboundEmailCategory;

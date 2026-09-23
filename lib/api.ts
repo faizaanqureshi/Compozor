@@ -108,6 +108,8 @@ export type InboundEmailCategory =
   | "other";
 export type InboundEmailReviewStatus = "needs_review" | "dismissed";
 export type CommitmentStatus = "pending" | "fulfilled" | "cancelled" | "escalated";
+export type CalendarConnectionStatus = "active" | "needs_reauth";
+export type MeetingRequestStatus = "proposed" | "confirmed" | "expired" | "cancelled";
 
 export interface Organization {
   id: number;
@@ -127,6 +129,10 @@ export interface Organization {
   // backend - never AI-written. Null/empty means the backend falls back
   // to a generated "Best,\n{contact_name or name}".
   email_signature: string | null;
+  // IANA name (e.g. "America/Toronto"), not a UTC offset. Null until set
+  // in Settings > Google Calendar - meeting-scheduling slot proposals
+  // don't run until this is set.
+  timezone: string | null;
   onboarding_completed_at: string | null;
 }
 
@@ -341,6 +347,40 @@ export interface InboxConnection {
   status: InboxConnectionStatus;
 }
 
+export interface CalendarConnection {
+  provider: "google" | "outlook";
+  id: number;
+  organization_id: number;
+  calendar_email: string;
+  status: CalendarConnectionStatus;
+  created_at: string;
+}
+
+export interface MeetingSlot {
+  slot_id: string;
+  start: string;
+  end: string;
+}
+
+export interface MeetingRequest {
+  id: number;
+  client_id: number;
+  status: MeetingRequestStatus;
+  purpose: string | null;
+  duration_minutes: number;
+  proposed_slots: MeetingSlot[] | null;
+  confirmed_start: string | null;
+  confirmed_end: string | null;
+  calendar_event_id: string | null;
+  expires_at: string | null;
+  last_nudge_sent_at: string | null;
+  created_at: string;
+  // Best-effort live events.get() overlay - see get_client_meetings on the
+  // backend. Null when there's no booked event yet, or the live check
+  // failed; otherwise Google's own event status ("confirmed"/"cancelled").
+  live_calendar_status: string | null;
+}
+
 // unpriced_call_count on every usage aggregate below: how many calls in
 // that bucket have no cost figure (a model the backend's pricing table
 // doesn't know yet - see openai_pricing.py). Nonzero means cost_usd
@@ -429,6 +469,7 @@ export const updateMyOrganization = (input: {
   phone?: string;
   practice_type?: string;
   email_signature?: string;
+  timezone?: string;
   onboarding_completed?: boolean;
 }) => request<Organization>("/organizations/me", json("PATCH", input));
 
@@ -844,6 +885,11 @@ export const resolveClientCommitment = (
     json("POST", { status })
   );
 
+// ---------- Client meetings ----------
+
+export const listClientMeetings = (clientId: number) =>
+  request<MeetingRequest[]>(`/clients/${clientId}/meetings`);
+
 // ---------- Unmatched inbound emails ----------
 
 export const listUnmatchedInboundEmails = (filters?: {
@@ -895,6 +941,18 @@ export const deleteInboxConnection = (connectionId: number) =>
 
 export const watchInboxConnection = (connectionId: number) =>
   request<void>(`/inbox-connections/${connectionId}/watch`, { method: "POST" });
+
+// ---------- Calendar connections ----------
+//
+// No separate connect URL - connecting Gmail or Outlook (above) now grants
+// calendar scopes in the same consent, so a CalendarConnection appears
+// automatically alongside the InboxConnection. See calendar_connections.py.
+
+export const listCalendarConnections = () =>
+  request<CalendarConnection[]>("/calendar-connections");
+
+export const deleteCalendarConnection = (connectionId: number) =>
+  request<void>(`/calendar-connections/${connectionId}`, { method: "DELETE" });
 
 // ---------- Admin (internal usage/cost dashboard) ----------
 //

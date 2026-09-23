@@ -34,6 +34,8 @@ import {
   DocumentOut,
   DocumentUploadResult,
   EmailThread,
+  MeetingRequest,
+  MeetingRequestStatus,
   Package,
   UploadLinkEvent,
   WorkflowRun,
@@ -49,6 +51,7 @@ import {
   listChecklistItems,
   listClientCommitments,
   listClientDocuments,
+  listClientMeetings,
   listClientMemoryNotes,
   listClientUploadLinkEvents,
   listClientWorkflowRuns,
@@ -171,6 +174,7 @@ export default function ClientDetailPage({
   const [commitments, setCommitments] = useState<ClientCommitment[] | null>(
     null
   );
+  const [meetings, setMeetings] = useState<MeetingRequest[] | null>(null);
   const [workflowAssignments, setWorkflowAssignments] = useState<ClientWorkflowAssignment[] | null>(null);
   const [workflowError, setWorkflowError] = useState<string | null>(null);
   const [workflowRuns, setWorkflowRuns] = useState<WorkflowRun[] | null>(null);
@@ -225,6 +229,9 @@ export default function ClientDetailPage({
       .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
     listClientCommitments(clientId)
       .then(setCommitments)
+      .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
+    listClientMeetings(clientId)
+      .then(setMeetings)
       .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
   }, [clientId]);
 
@@ -345,6 +352,8 @@ export default function ClientDetailPage({
         threads={threads}
         onChange={refresh}
       />
+
+      <MeetingCard meetings={meetings} />
 
       <DocumentVaultCard
         clientId={clientId}
@@ -1137,6 +1146,109 @@ function CommitmentPill({ status }: { status: CommitmentStatus }) {
     >
       {commitmentLabels[status]}
     </span>
+  );
+}
+
+const meetingPillClasses: Record<MeetingRequestStatus, string> = {
+  proposed: "bg-amber-500/20 text-amber-900 dark:bg-amber-500/15 dark:text-amber-300",
+  confirmed: "bg-accent/15 text-accent",
+  expired: "bg-muted text-muted-foreground",
+  cancelled: "bg-muted text-muted-foreground",
+};
+
+const meetingLabels: Record<MeetingRequestStatus, string> = {
+  proposed: "Proposed",
+  confirmed: "Confirmed",
+  expired: "Expired",
+  cancelled: "Cancelled",
+};
+
+function MeetingStatusPill({ meeting }: { meeting: MeetingRequest }) {
+  // live_calendar_status is a fresh events.get() read (see
+  // get_client_meetings on the backend) - a staff member cancelling the
+  // event directly in Google Calendar shows up here on next load even
+  // though meeting.status itself still says "confirmed" (nothing syncs
+  // that column back; see MeetingRequest's design notes).
+  const cancelledInCalendar = meeting.live_calendar_status === "cancelled" && meeting.status !== "cancelled";
+  const status = cancelledInCalendar ? "cancelled" : meeting.status;
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium",
+        meetingPillClasses[status]
+      )}
+    >
+      {cancelledInCalendar ? "Cancelled in Calendar" : meetingLabels[status]}
+    </span>
+  );
+}
+
+function formatMeetingTime(startIso: string, endIso: string): string {
+  const start = new Date(startIso);
+  const end = new Date(endIso);
+  const dateLabel = start.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
+  const timeLabel = `${start.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}–${end.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`;
+  return `${dateLabel}, ${timeLabel}`;
+}
+
+function MeetingCard({ meetings }: { meetings: MeetingRequest[] | null }) {
+  return (
+    <SectionCard
+      title="Meetings"
+      subtitle="Meeting times proposed or confirmed with this client over email."
+    >
+      {meetings === null ? (
+        <div className="flex flex-col gap-2">
+          <Skeleton className="h-9 w-full" />
+          <Skeleton className="h-9 w-full" />
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table
+            className="w-full min-w-[560px] border-collapse text-sm animate-blur-in-sm"
+            style={{ animationDelay: "90ms" }}
+          >
+            <thead>
+              <tr className="border-b border-border text-left">
+                <th className="py-1.5 pr-4 pb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                  Purpose
+                </th>
+                <th className="py-1.5 pr-4 pb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                  Time
+                </th>
+                <th className="py-1.5 pr-0 pb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                  Status
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {meetings.map((m) => (
+                <tr key={m.id} className="border-b border-border/40">
+                  <td className="py-2 pr-4 font-medium">{m.purpose ?? "Meeting"}</td>
+                  <td className="py-2 pr-4 text-muted-foreground">
+                    {m.status === "confirmed" && m.confirmed_start && m.confirmed_end
+                      ? formatMeetingTime(m.confirmed_start, m.confirmed_end)
+                      : m.proposed_slots && m.proposed_slots.length > 0
+                      ? `${m.proposed_slots.length} time${m.proposed_slots.length === 1 ? "" : "s"} proposed, awaiting reply`
+                      : "—"}
+                  </td>
+                  <td className="py-2 pr-0">
+                    <MeetingStatusPill meeting={m} />
+                  </td>
+                </tr>
+              ))}
+              {meetings.length === 0 && (
+                <tr>
+                  <td colSpan={3} className="py-4 text-muted-foreground">
+                    No meetings proposed with this client yet.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </SectionCard>
   );
 }
 

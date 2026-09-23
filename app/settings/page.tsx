@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
 import { useClerk, useUser } from "@clerk/nextjs";
@@ -8,16 +8,19 @@ import { Check, Loader2, Pencil } from "lucide-react";
 import { GmailIcon } from "@/components/icons/gmail";
 import { OutlookIcon } from "@/components/icons/outlook";
 import { SectionCard } from "@/components/section-card";
-import { inboxConnectionsKey, organizationKey } from "@/lib/swr-keys";
+import { calendarConnectionsKey, inboxConnectionsKey, organizationKey } from "@/lib/swr-keys";
 import {
   ApiError,
   AutomationLevel,
+  CalendarConnection,
   InboxConnection,
   Organization,
+  deleteCalendarConnection,
   deleteInboxConnection,
   getGmailConnectUrl,
   getOutlookConnectUrl,
   getMyOrganization,
+  listCalendarConnections,
   listInboxConnections,
   updateMyOrganization,
 } from "@/lib/api";
@@ -596,47 +599,132 @@ function ReminderSection({
   );
 }
 
-function MailboxSection({
-  connections,
+type MailProvider = "gmail" | "outlook";
+
+interface MergedConnection {
+  provider: MailProvider;
+  email: string;
+  inboxId: number | null;
+  calendarId: number | null;
+  needsReauth: boolean;
+}
+
+// Gmail and Outlook connections are one combined "Connect Google"/"Connect
+// Outlook" click on the backend now (see gmail_oauth.py's GMAIL_SCOPES /
+// outlook_client.py's SCOPES - one consent grant covers both mail and
+// calendar), so the two API resources are merged into one row per account
+// here rather than shown as two separate lists the client has to reconcile
+// themselves.
+function mergeConnections(
+  inboxConnections: InboxConnection[],
+  calendarConnections: CalendarConnection[]
+): MergedConnection[] {
+  const calendarProviderFor: Record<MailProvider, CalendarConnection["provider"]> = {
+    gmail: "google",
+    outlook: "outlook",
+  };
+  return inboxConnections.map((inbox) => {
+    const provider = (inbox.provider ?? "gmail") as MailProvider;
+    const calendar = calendarConnections.find(
+      (c) =>
+        c.provider === calendarProviderFor[provider] &&
+        c.calendar_email.toLowerCase() === inbox.email_address.toLowerCase()
+    );
+    return {
+      provider,
+      email: inbox.email_address,
+      inboxId: inbox.id,
+      calendarId: calendar?.id ?? null,
+      needsReauth: inbox.status === "needs_reauth" || calendar?.status === "needs_reauth",
+    };
+  });
+}
+
+function ConnectionsSection({
+  organization,
+  inboxConnections,
+  calendarConnections,
   error,
   connecting,
   deletingId,
+  savingTimezone,
   onConnect,
   onDelete,
+  onSaveTimezone,
 }: {
-  connections: InboxConnection[] | null;
+  organization: Organization | null;
+  inboxConnections: InboxConnection[] | null;
+  calendarConnections: CalendarConnection[] | null;
   error: string | null;
   connecting: boolean;
   deletingId: number | null;
-  onConnect: (provider: "gmail" | "outlook") => void;
-  onDelete: (id: number) => void;
+  savingTimezone: boolean;
+  onConnect: (provider: MailProvider) => void;
+  onDelete: (connection: MergedConnection) => void;
+  onSaveTimezone: (timezone: string) => void;
 }) {
-  const hasConnections = connections && connections.length > 0;
-  const missingProviders = connections === null ? [] : (["gmail", "outlook"] as const).filter(
-    (provider) => !connections.some((connection) => (connection.provider ?? "gmail") === provider)
-  );
+  const loaded = inboxConnections !== null && calendarConnections !== null;
+  const merged = loaded ? mergeConnections(inboxConnections!, calendarConnections!) : [];
+  const missingProviders = loaded ? (["gmail", "outlook"] as const).filter(
+    (provider) => !merged.some((connection) => connection.provider === provider)
+  ) : [];
+  // Intl.supportedValuesOf is a browser-native list of every real IANA
+  // name - no bundled timezone data needed, and it can never drift out of
+  // sync with what the backend's own zoneinfo.available_timezones() check
+  // accepts (see app/routers/organizations.py).
+  const timezones = useMemo(() => {
+    try {
+      return Intl.supportedValuesOf("timeZone");
+    } catch {
+      return [];
+    }
+  }, []);
 
   return (
-    <SectionCard title="Mailbox connections">
+    <SectionCard title="Connections">
+      <p className="text-sm text-muted-foreground">
+        Connect Gmail or Outlook once to read/reply to client email and let the AI propose real open meeting
+        times from that same account&apos;s calendar - no separate calendar connection needed.
+      </p>
       {error && <p className="text-sm text-destructive">{error}</p>}
 
-      {connections === null ? (
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="org-timezone">Timezone</Label>
+        <select
+          id="org-timezone"
+          className="h-9 w-full max-w-sm rounded-md border border-input bg-transparent px-3 text-sm disabled:opacity-50"
+          value={organization?.timezone ?? ""}
+          disabled={savingTimezone || !organization}
+          onChange={(e) => onSaveTimezone(e.target.value)}
+        >
+          <option value="" disabled>
+            Select a timezone…
+          </option>
+          {timezones.map((tz) => (
+            <option key={tz} value={tz}>
+              {tz}
+            </option>
+          ))}
+        </select>
+        <p className="text-xs text-muted-foreground">
+          Required before meeting times can be proposed to clients.
+        </p>
+      </div>
+
+      {!loaded ? (
         <Skeleton className="h-16 w-full rounded-lg" />
-      ) : hasConnections ? (
+      ) : merged.length > 0 ? (
         <div
           className="flex flex-col divide-y divide-border/50 rounded-lg border border-border/60 animate-blur-in-sm"
           style={{ animationDelay: "200ms" }}
         >
-          {connections!.map((conn) => (
-            <div
-              key={conn.id}
-              className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
-            >
+          {merged.map((conn) => (
+            <div key={`${conn.provider}:${conn.email}`} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
               <div className="flex flex-wrap items-center gap-2.5">
                 {conn.provider === "outlook" ? <OutlookIcon className="size-5 shrink-0 text-foreground" /> : <GmailIcon className="size-5 shrink-0" />}
-                <span className="break-all text-sm font-medium">{conn.email_address}</span>
-                <span className="text-xs text-muted-foreground">{conn.provider === "outlook" ? "Outlook" : "Gmail"}</span>
-                {conn.status === "needs_reauth" ? (
+                <span className="break-all text-sm font-medium">{conn.email}</span>
+                <span className="text-xs text-muted-foreground">{conn.provider === "outlook" ? "Outlook" : "Google"}</span>
+                {conn.needsReauth ? (
                   <span className="inline-flex items-center gap-1.5 text-xs font-medium text-accent">
                     <span className="size-1.5 rounded-full bg-accent" />
                     needs reauth
@@ -649,18 +737,18 @@ function MailboxSection({
                 )}
               </div>
               <div className="flex items-center gap-4">
-                {conn.status === "needs_reauth" && (
-                  <Button variant="ghost" size="sm" disabled={connecting} onClick={() => onConnect(conn.provider ?? "gmail")}>
+                {conn.needsReauth && (
+                  <Button variant="ghost" size="sm" disabled={connecting} onClick={() => onConnect(conn.provider)}>
                     {connecting ? "Redirecting…" : "Reconnect"}
                   </Button>
                 )}
-              <button
-                onClick={() => onDelete(conn.id)}
-                disabled={deletingId === conn.id}
-                className="text-xs font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline disabled:opacity-50"
-              >
-                {deletingId === conn.id ? "Removing…" : "Disconnect"}
-              </button>
+                <button
+                  onClick={() => onDelete(conn)}
+                  disabled={deletingId === (conn.inboxId ?? conn.calendarId)}
+                  className="text-xs font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline disabled:opacity-50"
+                >
+                  {deletingId === (conn.inboxId ?? conn.calendarId) ? "Removing…" : "Disconnect"}
+                </button>
               </div>
             </div>
           ))}
@@ -670,8 +758,7 @@ function MailboxSection({
           className="flex flex-col items-start gap-3 rounded-lg border border-dashed border-border/60 px-4 py-6 animate-blur-in-sm"
           style={{ animationDelay: "200ms" }}
         >
-          <p className="text-sm text-muted-foreground">No mailbox connected.</p>
-
+          <p className="text-sm text-muted-foreground">Nothing connected yet.</p>
         </div>
       )}
       {missingProviders.length > 0 && (
@@ -679,7 +766,7 @@ function MailboxSection({
           {missingProviders.map((provider) => (
             <Button key={provider} variant="outline" onClick={() => onConnect(provider)} disabled={connecting}>
               {provider === "gmail" ? <GmailIcon className="size-4" /> : <OutlookIcon className="size-4" />}
-              {connecting ? "Redirecting…" : `Connect ${provider === "gmail" ? "Gmail" : "Outlook"}`}
+              {connecting ? "Redirecting…" : `Connect ${provider === "gmail" ? "Google" : "Outlook"}`}
             </Button>
           ))}
         </div>
@@ -731,9 +818,15 @@ export default function SettingsPage() {
     error: connectionsFetchError,
     mutate: mutateConnections,
   } = useSWR(inboxConnectionsKey(), listInboxConnections);
-  const [gmailError, setGmailError] = useState<string | null>(null);
+  const {
+    data: calendarConnections,
+    error: calendarConnectionsFetchError,
+    mutate: mutateCalendarConnections,
+  } = useSWR(calendarConnectionsKey(), listCalendarConnections);
+  const [connectionsError, setConnectionsError] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [savingTimezone, setSavingTimezone] = useState(false);
 
   const orgErrorMessage =
     orgError ??
@@ -742,12 +835,16 @@ export default function SettingsPage() {
         ? orgFetchError.message
         : String(orgFetchError)
       : null);
-  const gmailErrorMessage =
-    gmailError ??
+  const connectionsErrorMessage =
+    connectionsError ??
     (connectionsFetchError
       ? connectionsFetchError instanceof ApiError
         ? connectionsFetchError.message
         : String(connectionsFetchError)
+      : calendarConnectionsFetchError
+      ? calendarConnectionsFetchError instanceof ApiError
+        ? calendarConnectionsFetchError.message
+        : String(calendarConnectionsFetchError)
       : null);
 
   const onChangeAutomation = async (level: AutomationLevel) => {
@@ -823,27 +920,52 @@ export default function SettingsPage() {
     }
   };
 
+  // One click now grants both mail and calendar scopes together (see
+  // gmail_oauth.py's GMAIL_SCOPES / outlook_client.py's SCOPES) - no
+  // separate "Connect Calendar" URL to fetch.
   const onConnect = async (provider: "gmail" | "outlook") => {
     setConnecting(true);
-    setGmailError(null);
+    setConnectionsError(null);
     try {
       const { authorization_url } = await (provider === "outlook" ? getOutlookConnectUrl() : getGmailConnectUrl());
       window.location.href = authorization_url;
     } catch (e) {
-      setGmailError(e instanceof ApiError ? e.message : String(e));
+      setConnectionsError(e instanceof ApiError ? e.message : String(e));
       setConnecting(false);
     }
   };
 
-  const onDelete = async (id: number) => {
+  // Deleting either half of a connection cascades to remove both on the
+  // backend (see calendar_client.disconnect) - refresh both caches either way.
+  const onDeleteConnection = async (connection: MergedConnection) => {
+    const id = connection.inboxId ?? connection.calendarId;
+    if (id === null) return;
     setDeletingId(id);
     try {
-      await deleteInboxConnection(id);
+      if (connection.inboxId !== null) {
+        await deleteInboxConnection(connection.inboxId);
+      } else if (connection.calendarId !== null) {
+        await deleteCalendarConnection(connection.calendarId);
+      }
       mutateConnections();
+      mutateCalendarConnections();
     } catch (e) {
-      setGmailError(e instanceof ApiError ? e.message : String(e));
+      setConnectionsError(e instanceof ApiError ? e.message : String(e));
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const onSaveTimezone = async (timezone: string) => {
+    setSavingTimezone(true);
+    setOrgError(null);
+    try {
+      const updated = await updateMyOrganization({ timezone });
+      mutateOrg(updated, { revalidate: false });
+    } catch (e) {
+      setOrgError(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setSavingTimezone(false);
     }
   };
 
@@ -854,7 +976,7 @@ export default function SettingsPage() {
           Settings
         </h1>
         <p className="text-sm text-muted-foreground">
-          Your profile, organization details, email sign-off, automation, reminders, and mailbox connections.
+          Your profile, organization details, email sign-off, automation, reminders, and connections.
         </p>
       </div>
 
@@ -898,13 +1020,17 @@ export default function SettingsPage() {
           onSaveInterval={onSaveInterval}
         />
 
-        <MailboxSection
-          connections={connections ?? null}
-          error={gmailErrorMessage}
+        <ConnectionsSection
+          organization={org ?? null}
+          inboxConnections={connections ?? null}
+          calendarConnections={calendarConnections ?? null}
+          error={connectionsErrorMessage}
           connecting={connecting}
           deletingId={deletingId}
+          savingTimezone={savingTimezone}
           onConnect={onConnect}
-          onDelete={onDelete}
+          onDelete={onDeleteConnection}
+          onSaveTimezone={onSaveTimezone}
         />
 
         <LegalLinksSection />
