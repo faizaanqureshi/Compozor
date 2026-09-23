@@ -106,11 +106,6 @@ export function UrgencyDashboard({
     return { total: rows.length, overdue, dueSoon, onTrack, clientsNeedingAction };
   }, [rows]);
 
-  // Read once via a lazy useState initializer, not a bare Date.now() call in
-  // the render body - React's purity rules flag calling an impure function
-  // during render, and this is the documented escape hatch for it.
-  const [now] = useState(() => Date.now());
-
   const sortedRows = useMemo(() => {
     const dir = sort.direction === "asc" ? 1 : -1;
     const byDeadline = (a: OutstandingRow, b: OutstandingRow) => {
@@ -264,7 +259,6 @@ export function UrgencyDashboard({
                     <UrgencyRow
                       key={row.item.id}
                       row={row}
-                      now={now}
                       reminderState={reminderState}
                       onSendReminder={onSendReminder}
                     />
@@ -414,35 +408,17 @@ function SortableTh({
   );
 }
 
-const REMINDER_COOLDOWN_MS = 12 * 60 * 60 * 1000;
-
-// Real, server-tracked cooldown (Client.last_reminder_sent_at), not just a
-// disabled-until-reload local flag - a page refresh or a second tab must not
-// let someone re-send within the window. The backend enforces the same 12h
-// window independently (POST /clients/{id}/checklist-reminder returns 429),
-// so this is the matching UI, not the only guard.
-function reminderCooldownHoursLeft(client: Client, now: number): number | null {
-  if (!client.last_reminder_sent_at) return null;
-  const elapsed = now - new Date(client.last_reminder_sent_at).getTime();
-  if (elapsed >= REMINDER_COOLDOWN_MS) return null;
-  return Math.ceil((REMINDER_COOLDOWN_MS - elapsed) / (60 * 60 * 1000));
-}
-
 function UrgencyRow({
   row,
-  now,
   reminderState,
   onSendReminder,
 }: {
   row: OutstandingRow;
-  now: number;
   reminderState: Record<number, "sending" | "sent">;
   onSendReminder: (e: React.MouseEvent, clientId: number) => void;
 }) {
   const meta = TIER_META[row.tier];
   const state = reminderState[row.client.id];
-  const cooldownHoursLeft = reminderCooldownHoursLeft(row.client, now);
-  const onCooldown = state === "sent" || cooldownHoursLeft !== null;
 
   return (
     <tr className="animate-blur-in-sm border-b border-border/40 text-xs transition-colors last:border-0 hover:bg-muted/30">
@@ -481,11 +457,10 @@ function UrgencyRow({
           variant="ghost"
           size="sm"
           className="h-6 px-2 text-xs"
-          disabled={state === "sending" || onCooldown}
-          title={cooldownHoursLeft !== null ? `You can remind again in about ${cooldownHoursLeft}h` : undefined}
+          disabled={state === "sending" || state === "sent"}
           onClick={(e) => onSendReminder(e, row.client.id)}
         >
-          {state === "sending" ? "Sending…" : onCooldown ? "Sent" : "Remind"}
+          {state === "sending" ? "Sending…" : state === "sent" ? "Sent" : "Remind"}
         </Button>
       </td>
     </tr>

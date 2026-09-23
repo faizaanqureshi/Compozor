@@ -422,9 +422,6 @@ export default function ClientsPage() {
     try {
       await sendChecklistReminder(clientId);
       setReminderState((prev) => ({ ...prev, [clientId]: "sent" }));
-      // Refreshes client.last_reminder_sent_at from the server, which is
-      // what actually drives the 12h cooldown - the local "sent" state above
-      // is just the immediate in-session feedback until this lands.
       mutateClients();
     } catch (e) {
       setReminderState((prev) => {
