@@ -73,6 +73,7 @@ import {
   waiveChecklistItem,
 } from "@/lib/api";
 import { cn, formatPhoneNumber } from "@/lib/utils";
+import { computeTier, startOfDay, TIER_META } from "@/lib/checklist-urgency";
 import { ResumeWorkflowDialog } from "@/components/resume-workflow-dialog";
 import { AgentActivityDisclosure } from "@/components/agent-activity-disclosure";
 import { ClientWorkflowActivity } from "@/components/client-workflow-activity";
@@ -152,6 +153,32 @@ function StatusPill({ status }: { status: ChecklistItemStatus }) {
       )}
     >
       {statusLabels[status]}
+    </span>
+  );
+}
+
+// Same red/overdue, yellow/due-soon, neutral/on-track coloring as the
+// urgency dashboard (see lib/checklist-urgency.ts) - only for items still
+// outstanding, since a received item's original deadline is historical, not
+// something to flag.
+function DeadlineCell({ item, today }: { item: ChecklistItem; today: Date }) {
+  if (!item.expected_date_range_end) {
+    return <span className="text-muted-foreground">—</span>;
+  }
+  const dateText = new Date(`${item.expected_date_range_end}T00:00:00`).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+  if (item.status !== "missing" && item.status !== "wrong") {
+    return <span className="text-muted-foreground">{dateText}</span>;
+  }
+  const { tier } = computeTier(item, today);
+  const meta = TIER_META[tier];
+  return (
+    <span className={cn("flex items-center gap-1.5", meta.text)}>
+      <span className={cn("size-1.5 shrink-0 rounded-full", meta.dot)} />
+      {dateText}
     </span>
   );
 }
@@ -589,6 +616,9 @@ function ChecklistCard({
   onChange: () => void;
   onEditPackage: () => void;
 }) {
+  // Computed once, not a bare `new Date()` call in the render body - same
+  // reasoning as the urgency dashboard's own lazy-initializer pattern.
+  const today = useMemo(() => startOfDay(new Date()), []);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
@@ -764,14 +794,8 @@ function ChecklistCard({
                 <td className="py-2 pr-4">
                   <StatusPill status={item.status} />
                 </td>
-                <td className="py-2 pr-4 text-muted-foreground">
-                  {item.expected_date_range_end
-                    ? new Date(`${item.expected_date_range_end}T00:00:00`).toLocaleDateString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                        year: "numeric",
-                      })
-                    : "—"}
+                <td className="py-2 pr-4">
+                  <DeadlineCell item={item} today={today} />
                 </td>
                 <td className="py-2 pr-4 text-muted-foreground">
                   {item.wrong_attempt_count}

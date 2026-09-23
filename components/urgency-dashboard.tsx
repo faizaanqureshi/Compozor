@@ -2,19 +2,12 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowUp, Check, FileText, Users, type LucideIcon } from "lucide-react";
+import { ArrowUp, Check, ChevronRight, FileText, Users, type LucideIcon } from "lucide-react";
 import type { ChecklistItem, Client, ClientWithChecklistSummary } from "@/lib/api";
 import { cn, formatRelativeTime } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
+import { computeTier, MS_PER_DAY, startOfDay, TIER_META, TIER_RANK, type Tier } from "@/lib/checklist-urgency";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-
-// "Deadline" isn't a dedicated field anywhere in the data model - the closest
-// thing is ChecklistItem.expected_date_range_end, an AI-extracted date that's
-// null whenever a request had no date context. Treating "no deadline" the
-// same as "deadline >3 days out" (both = on_track) is deliberate, not a
-// missing-data workaround - see the design discussion on COM-8.
-type Tier = "overdue" | "due_soon" | "on_track";
 
 interface OutstandingRow {
   client: Client;
@@ -23,34 +16,19 @@ interface OutstandingRow {
   daysUntil: number | null;
 }
 
-const MS_PER_DAY = 86_400_000;
-
-function startOfDay(d: Date) {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+// One row per client in the table, not per document - a client with several
+// outstanding items no longer repeats their name once per row (see COM-8
+// follow-up); the documents themselves live in an expandable dropdown per
+// client instead.
+interface ClientGroup {
+  client: Client;
+  allItems: OutstandingRow[];
+  worstTier: Tier;
+  earliestDaysUntil: number | null;
+  oldestCreatedAt: string;
 }
 
-function computeTier(item: ChecklistItem, today: Date): { tier: Tier; daysUntil: number | null } {
-  if (!item.expected_date_range_end) return { tier: "on_track", daysUntil: null };
-  const end = startOfDay(new Date(`${item.expected_date_range_end}T00:00:00`));
-  const daysUntil = Math.round((end.getTime() - today.getTime()) / MS_PER_DAY);
-  if (daysUntil < 0) return { tier: "overdue", daysUntil };
-  if (daysUntil <= 3) return { tier: "due_soon", daysUntil };
-  return { tier: "on_track", daysUntil };
-}
-
-// Reuses the app's existing semantic tokens (DESIGN_SYSTEM.md §6) rather than
-// inventing a new severity color: destructive = broken/critical, accent =
-// needs attention, success = the calm default. Color lives only in the
-// Deadline column's dot+text - table rows themselves stay plain/neutral.
-const TIER_META: Record<Tier, { label: string; dot: string; text: string }> = {
-  overdue: { label: "Overdue", dot: "bg-destructive", text: "text-destructive" },
-  due_soon: { label: "Due soon", dot: "bg-accent", text: "text-accent" },
-  on_track: { label: "On track", dot: "bg-success", text: "text-muted-foreground" },
-};
-
-const TIER_RANK: Record<Tier, number> = { overdue: 0, due_soon: 1, on_track: 2 };
-
-type UrgencySortKey = "urgency" | "client" | "document" | "deadline" | "age";
+type UrgencySortKey = "urgency" | "client" | "deadline" | "age";
 type UrgencySort = { key: UrgencySortKey; direction: "asc" | "desc" };
 
 function deadlineLabel(row: OutstandingRow): string {
@@ -70,16 +48,25 @@ function ageLabel(row: OutstandingRow): string {
   return formatRelativeTime(row.item.created_at).replace(/^in /, "");
 }
 
+// How long outstanding requests have been sitting, bucketed - unlike a
+// by-document-type breakdown (which mostly just restates the table), this
+// answers something the table and the pie chart don't: is the backlog fresh,
+// or is it accumulating a stale tail nobody's chasing. Fixed buckets (not
+// top-N + Other) since there are only ever these five.
+const AGE_BUCKETS = [
+  { label: "0–3d", maxDays: 3 },
+  { label: "4–7d", maxDays: 7 },
+  { label: "8–14d", maxDays: 14 },
+  { label: "15–30d", maxDays: 30 },
+  { label: "30d+", maxDays: Infinity },
+] as const;
+
 export function UrgencyDashboard({
   clients,
   loading,
-  reminderState,
-  onSendReminder,
 }: {
   clients: ClientWithChecklistSummary[] | undefined;
   loading: boolean;
-  reminderState: Record<number, "sending" | "sent">;
-  onSendReminder: (e: React.MouseEvent, clientId: number) => void;
 }) {
   const [sort, setSort] = useState<UrgencySort>({ key: "urgency", direction: "asc" });
   const [filterTier, setFilterTier] = useState<Tier | null>(null);
@@ -106,38 +93,56 @@ export function UrgencyDashboard({
     return { total: rows.length, overdue, dueSoon, onTrack, clientsNeedingAction };
   }, [rows]);
 
-  // Read once via a lazy useState initializer, not a bare Date.now() call in
-  // the render body - React's purity rules flag calling an impure function
-  // during render, and this is the documented escape hatch for it.
-  const [now] = useState(() => Date.now());
+  // Grouped by client - the table shows one row per client (see ClientGroup),
+  // with that client's individual documents revealed in a per-row dropdown
+  // rather than repeating the client's name once per outstanding document.
+  const clientGroups = useMemo(() => {
+    const byClient = new Map<number, OutstandingRow[]>();
+    for (const r of rows) {
+      const list = byClient.get(r.client.id);
+      if (list) list.push(r);
+      else byClient.set(r.client.id, [r]);
+    }
+    const groups: ClientGroup[] = [];
+    for (const items of byClient.values()) {
+      let worstTier: Tier = "on_track";
+      let earliestDaysUntil: number | null = null;
+      let oldestCreatedAt = items[0].item.created_at;
+      for (const r of items) {
+        if (TIER_RANK[r.tier] < TIER_RANK[worstTier]) worstTier = r.tier;
+        if (r.daysUntil !== null && (earliestDaysUntil === null || r.daysUntil < earliestDaysUntil)) {
+          earliestDaysUntil = r.daysUntil;
+        }
+        if (r.item.created_at < oldestCreatedAt) oldestCreatedAt = r.item.created_at;
+      }
+      groups.push({ client: items[0].client, allItems: items, worstTier, earliestDaysUntil, oldestCreatedAt });
+    }
+    return groups;
+  }, [rows]);
 
-  const sortedRows = useMemo(() => {
+  const sortedGroups = useMemo(() => {
     const dir = sort.direction === "asc" ? 1 : -1;
-    const byDeadline = (a: OutstandingRow, b: OutstandingRow) => {
-      if (a.daysUntil === null && b.daysUntil === null) return 0;
-      if (a.daysUntil === null) return 1;
-      if (b.daysUntil === null) return -1;
-      return (a.daysUntil - b.daysUntil) * dir;
+    const byDeadline = (a: ClientGroup, b: ClientGroup) => {
+      if (a.earliestDaysUntil === null && b.earliestDaysUntil === null) return 0;
+      if (a.earliestDaysUntil === null) return 1;
+      if (b.earliestDaysUntil === null) return -1;
+      return (a.earliestDaysUntil - b.earliestDaysUntil) * dir;
     };
-    return [...rows].sort((a, b) => {
+    return [...clientGroups].sort((a, b) => {
       switch (sort.key) {
         case "urgency": {
-          const rankDiff = TIER_RANK[a.tier] - TIER_RANK[b.tier];
+          const rankDiff = TIER_RANK[a.worstTier] - TIER_RANK[b.worstTier];
           return rankDiff !== 0 ? rankDiff * dir : byDeadline(a, b);
         }
         case "client":
           return a.client.name.localeCompare(b.client.name) * dir;
-        case "document":
-          return a.item.doc_type_needed.localeCompare(b.item.doc_type_needed) * dir;
         case "deadline":
           return byDeadline(a, b);
         case "age":
-          return (
-            (new Date(a.item.created_at).getTime() - new Date(b.item.created_at).getTime()) * dir
-          );
+          return (new Date(a.oldestCreatedAt).getTime() - new Date(b.oldestCreatedAt).getTime()) * dir;
       }
     });
-  }, [rows, sort]);
+  }, [clientGroups, sort]);
 
   const toggleSort = (key: UrgencySortKey) => {
     setSort((prev) =>
@@ -147,23 +152,40 @@ export function UrgencyDashboard({
     );
   };
 
-  const visibleRows = useMemo(
-    () => (filterTier ? sortedRows.filter((r) => r.tier === filterTier) : sortedRows),
-    [sortedRows, filterTier]
+  // Filtering by tier drops any client with no matching document entirely,
+  // and - per the ask - the dropdown for a client that does match only shows
+  // that client's documents in the filtered tier, not their full list.
+  const visibleGroups = useMemo(() => {
+    if (!filterTier) return sortedGroups.map((g) => ({ ...g, visibleItems: g.allItems }));
+    return sortedGroups
+      .map((g) => ({ ...g, visibleItems: g.allItems.filter((r) => r.tier === filterTier) }))
+      .filter((g) => g.visibleItems.length > 0);
+  }, [sortedGroups, filterTier]);
+
+  const visibleItemCount = useMemo(
+    () => visibleGroups.reduce((sum, g) => sum + g.visibleItems.length, 0),
+    [visibleGroups]
   );
 
-  // Top 4 document types by outstanding count, everything else folded into
-  // "Other" - per the dataviz skill's series-count ladder, more than ~4
-  // categorical slices stop being a quick scan.
-  const docTypeBreakdown = useMemo(() => {
-    const counts = new Map<string, number>();
+  const [expandedClientIds, setExpandedClientIds] = useState<Set<number>>(new Set());
+  const toggleExpanded = (clientId: number) =>
+    setExpandedClientIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(clientId)) next.delete(clientId);
+      else next.add(clientId);
+      return next;
+    });
+
+  const ageBreakdown = useMemo(() => {
+    const today = startOfDay(new Date());
+    const counts = AGE_BUCKETS.map((b) => ({ label: b.label, count: 0 }));
     for (const r of rows) {
-      counts.set(r.item.doc_type_needed, (counts.get(r.item.doc_type_needed) ?? 0) + 1);
+      const created = startOfDay(new Date(r.item.created_at));
+      const daysOutstanding = Math.max(0, Math.round((today.getTime() - created.getTime()) / MS_PER_DAY));
+      const bucketIndex = AGE_BUCKETS.findIndex((b) => daysOutstanding <= b.maxDays);
+      counts[bucketIndex === -1 ? counts.length - 1 : bucketIndex].count += 1;
     }
-    const sorted = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]);
-    const top = sorted.slice(0, 4).map(([label, count]) => ({ label, count }));
-    const otherCount = sorted.slice(4).reduce((sum, [, c]) => sum + c, 0);
-    return otherCount > 0 ? [...top, { label: "Other", count: otherCount }] : top;
+    return counts;
   }, [rows]);
 
   if (loading) {
@@ -228,14 +250,14 @@ export function UrgencyDashboard({
 
       <Accordion defaultValue={["table"]} className="rounded-2xl bg-card ring-1 ring-foreground/10">
         <AccordionItem value="table" className="border-none">
-          <AccordionTrigger className="items-center px-4 py-3.5 text-xs font-medium tracking-wide text-muted-foreground uppercase hover:no-underline">
+          <AccordionTrigger className="items-center px-4 py-3.5 text-xs tracking-widest text-muted-foreground uppercase hover:no-underline">
             Outstanding documents
           </AccordionTrigger>
           <AccordionContent className="px-4 pb-4">
             {filterTier && (
               <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
                 <span>
-                  Showing {TIER_META[filterTier].label.toLowerCase()} only ({visibleRows.length})
+                  Showing {TIER_META[filterTier].label.toLowerCase()} only ({visibleItemCount})
                 </span>
                 <button
                   type="button"
@@ -247,31 +269,29 @@ export function UrgencyDashboard({
               </div>
             )}
             <div className="max-h-72 overflow-x-auto overflow-y-auto">
-              <table className="w-full min-w-[720px] border-collapse text-sm">
+              <table className="w-full min-w-[560px] border-collapse text-sm">
                 <thead className="sticky top-0 z-10 bg-card">
                   <tr className="text-left">
                     <SortableTh label="Client" sortKey="client" sort={sort} onSort={toggleSort} />
-                    <SortableTh label="Document" sortKey="document" sort={sort} onSort={toggleSort} />
-                    <SortableTh label="Deadline" sortKey="deadline" sort={sort} onSort={toggleSort} />
-                    <SortableTh label="Age" sortKey="age" sort={sort} onSort={toggleSort} />
-                    <th className="border-b border-border/70 py-1.5 text-right text-[11px] font-medium tracking-wide text-muted-foreground/70">
-                      Action
+                    <th className="border-b border-border/70 py-1.5 pr-4 text-xs tracking-widest text-muted-foreground/70 uppercase">
+                      Documents
                     </th>
+                    <SortableTh label="Age" sortKey="age" sort={sort} onSort={toggleSort} />
+                    <SortableTh label="Deadline" sortKey="deadline" sort={sort} onSort={toggleSort} />
                   </tr>
                 </thead>
                 <tbody>
-                  {visibleRows.map((row) => (
-                    <UrgencyRow
-                      key={row.item.id}
-                      row={row}
-                      now={now}
-                      reminderState={reminderState}
-                      onSendReminder={onSendReminder}
+                  {visibleGroups.map((group) => (
+                    <ClientGroupRow
+                      key={group.client.id}
+                      group={group}
+                      expanded={expandedClientIds.has(group.client.id)}
+                      onToggleExpand={() => toggleExpanded(group.client.id)}
                     />
                   ))}
-                  {visibleRows.length === 0 && (
+                  {visibleGroups.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="py-4 text-center text-xs text-muted-foreground">
+                      <td colSpan={4} className="py-4 text-center text-sm text-muted-foreground">
                         No {filterTier ? TIER_META[filterTier].label.toLowerCase() : "outstanding"} documents.
                       </td>
                     </tr>
@@ -286,7 +306,7 @@ export function UrgencyDashboard({
 
       <Accordion defaultValue={["insights"]} className="rounded-2xl bg-card ring-1 ring-foreground/10">
         <AccordionItem value="insights" className="border-none">
-          <AccordionTrigger className="items-center px-4 py-3.5 text-xs font-medium tracking-wide text-muted-foreground uppercase hover:no-underline">
+          <AccordionTrigger className="items-center px-4 py-3.5 text-xs tracking-widest text-muted-foreground uppercase hover:no-underline">
             Insights
           </AccordionTrigger>
           <AccordionContent className="px-4 pb-4">
@@ -299,9 +319,9 @@ export function UrgencyDashboard({
               </div>
               <div className="flex flex-col gap-3">
                 <span className="text-[0.625rem] tracking-widest text-muted-foreground uppercase">
-                  Outstanding documents by type{docTypeBreakdown.length >= 5 && " (top 4)"}
+                  Outstanding documents by age
                 </span>
-                <DocTypeBarChart data={docTypeBreakdown} />
+                <AgeBarChart data={ageBreakdown} />
               </div>
             </div>
           </AccordionContent>
@@ -329,14 +349,14 @@ function StatTile({
   const content = (
     <>
       <div className="flex items-start justify-between gap-2">
-        <span className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+        <span className="text-[11px] tracking-wide text-muted-foreground uppercase">
           {label}
         </span>
         {Icon && <Icon className="size-3.5 shrink-0 text-muted-foreground/50" />}
       </div>
       <span
         className={cn(
-          "text-2xl font-semibold",
+          "text-2xl font-light tracking-tight tabular-nums sm:text-3xl",
           tone === "destructive" && "text-destructive",
           tone === "accent" && "text-accent",
           tone === "success" && "text-success"
@@ -392,7 +412,7 @@ function SortableTh({
 }) {
   const active = sort.key === sortKey;
   return (
-    <th className="border-b border-border/70 py-1.5 pr-4 text-[11px] font-medium tracking-wide text-muted-foreground/70 uppercase">
+    <th className="border-b border-border/70 py-1.5 pr-4 text-xs tracking-widest text-muted-foreground/70 uppercase">
       <button
         type="button"
         onClick={() => onSort(sortKey)}
@@ -414,81 +434,105 @@ function SortableTh({
   );
 }
 
-const REMINDER_COOLDOWN_MS = 12 * 60 * 60 * 1000;
-
-// Real, server-tracked cooldown (Client.last_reminder_sent_at), not just a
-// disabled-until-reload local flag - a page refresh or a second tab must not
-// let someone re-send within the window. The backend enforces the same 12h
-// window independently (POST /clients/{id}/checklist-reminder returns 429),
-// so this is the matching UI, not the only guard.
-function reminderCooldownHoursLeft(client: Client, now: number): number | null {
-  if (!client.last_reminder_sent_at) return null;
-  const elapsed = now - new Date(client.last_reminder_sent_at).getTime();
-  if (elapsed >= REMINDER_COOLDOWN_MS) return null;
-  return Math.ceil((REMINDER_COOLDOWN_MS - elapsed) / (60 * 60 * 1000));
-}
-
-function UrgencyRow({
-  row,
-  now,
-  reminderState,
-  onSendReminder,
+function ClientGroupRow({
+  group,
+  expanded,
+  onToggleExpand,
 }: {
-  row: OutstandingRow;
-  now: number;
-  reminderState: Record<number, "sending" | "sent">;
-  onSendReminder: (e: React.MouseEvent, clientId: number) => void;
+  group: ClientGroup & { visibleItems: OutstandingRow[] };
+  expanded: boolean;
+  onToggleExpand: () => void;
 }) {
-  const meta = TIER_META[row.tier];
-  const state = reminderState[row.client.id];
-  const cooldownHoursLeft = reminderCooldownHoursLeft(row.client, now);
-  const onCooldown = state === "sent" || cooldownHoursLeft !== null;
+  const meta = TIER_META[group.worstTier];
+  const count = group.visibleItems.length;
+
+  // Worst-first within the dropdown too, independent of the outer table's
+  // sort key - there's no per-document sort control anymore, so this is
+  // always the sensible default (most urgent document for this client on top).
+  const sortedItems = useMemo(() => {
+    return [...group.visibleItems].sort((a, b) => {
+      const rankDiff = TIER_RANK[a.tier] - TIER_RANK[b.tier];
+      if (rankDiff !== 0) return rankDiff;
+      if (a.daysUntil === null && b.daysUntil === null) return 0;
+      if (a.daysUntil === null) return 1;
+      if (b.daysUntil === null) return -1;
+      return a.daysUntil - b.daysUntil;
+    });
+  }, [group.visibleItems]);
 
   return (
-    <tr className="animate-blur-in-sm border-b border-border/40 text-xs transition-colors last:border-0 hover:bg-muted/30">
-      <td className="py-1.5 pr-4">
-        <Link href={`/clients/${row.client.id}`} className="font-medium hover:underline">
-          {row.client.name}
-        </Link>
-      </td>
-      <td className="py-1.5 pr-4">
-        {row.item.doc_type_needed}
-        {row.item.package_name && (
-          <span className="ml-1.5 text-muted-foreground">· {row.item.package_name}</span>
-        )}
-        {row.item.wrong_attempt_count > 0 && (
-          <span
-            className="ml-1.5 text-accent"
-            title={
-              row.item.last_wrong_doc_type
-                ? `Last wrong submission: ${row.item.last_wrong_doc_type}`
-                : undefined
-            }
-          >
-            (resubmitted ×{row.item.wrong_attempt_count})
+    <>
+      <tr
+        className="group/row animate-blur-in-sm cursor-pointer border-b border-border/40 text-sm transition-colors last:border-0 hover:bg-muted/30"
+        onClick={onToggleExpand}
+        aria-expanded={expanded}
+      >
+        <td className="py-1.5 pr-4">
+          <div className="flex items-center gap-1.5">
+            <ChevronRight
+              className={cn(
+                "size-3 shrink-0 text-muted-foreground transition-transform",
+                expanded && "rotate-90"
+              )}
+            />
+            <Link
+              href={`/clients/${group.client.id}`}
+              onClick={(e) => e.stopPropagation()}
+              className="font-medium underline-offset-4 !no-underline group-hover/row:!underline"
+            >
+              {group.client.name}
+            </Link>
+          </div>
+        </td>
+        <td className="py-1.5 pr-4 text-muted-foreground">
+          {count} document{count === 1 ? "" : "s"}
+        </td>
+        <td className="py-1.5 pr-4 text-muted-foreground">
+          {formatRelativeTime(group.oldestCreatedAt).replace(/^in /, "")}
+        </td>
+        <td className="py-1.5 pr-4">
+          <span className={cn("flex items-center gap-1.5", meta.text)}>
+            <span className={cn("size-1.5 shrink-0 rounded-full", meta.dot)} />
+            {TIER_META[group.worstTier].label}
           </span>
-        )}
-      </td>
-      <td className="py-1.5 pr-4">
-        <span className={cn("flex items-center gap-1.5", meta.text)}>
-          <span className={cn("size-1.5 shrink-0 rounded-full", meta.dot)} />
-          {deadlineLabel(row)}
-        </span>
-      </td>
-      <td className="py-1.5 pr-4 text-muted-foreground">{ageLabel(row)}</td>
-      <td className="py-1.5 text-right">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-6 px-2 text-xs"
-          disabled={state === "sending" || onCooldown}
-          title={cooldownHoursLeft !== null ? `You can remind again in about ${cooldownHoursLeft}h` : undefined}
-          onClick={(e) => onSendReminder(e, row.client.id)}
-        >
-          {state === "sending" ? "Sending…" : onCooldown ? "Sent" : "Remind"}
-        </Button>
-      </td>
-    </tr>
+        </td>
+      </tr>
+      {expanded &&
+        sortedItems.map((row) => {
+          const itemMeta = TIER_META[row.tier];
+          return (
+            <tr key={row.item.id} className="border-b border-border/40 bg-muted/20 text-sm last:border-0">
+              <td className="py-1.5 pr-4 pl-[22px]" />
+              <td className="py-1.5 pr-4 text-foreground/90">
+                {row.item.doc_type_needed}
+                {row.item.package_name && (
+                  <span className="text-muted-foreground"> · {row.item.package_name}</span>
+                )}
+                {row.item.wrong_attempt_count > 0 && (
+                  <span
+                    className="text-accent"
+                    title={
+                      row.item.last_wrong_doc_type
+                        ? `Last wrong submission: ${row.item.last_wrong_doc_type}`
+                        : undefined
+                    }
+                  >
+                    {" "}
+                    (resubmitted ×{row.item.wrong_attempt_count})
+                  </span>
+                )}
+              </td>
+              <td className="py-1.5 pr-4 text-muted-foreground">{ageLabel(row)}</td>
+              <td className="py-1.5 pr-4">
+                <span className={cn("flex items-center gap-1.5", itemMeta.text)}>
+                  <span className={cn("size-1.5 shrink-0 rounded-full", itemMeta.dot)} />
+                  {deadlineLabel(row)}
+                </span>
+              </td>
+            </tr>
+          );
+        })}
+    </>
   );
 }
 
@@ -553,7 +597,7 @@ function UrgencyPieChart({
           })}
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-2xl font-semibold text-foreground tabular-nums">{total}</span>
+          <span className="text-2xl font-light tracking-tight text-foreground tabular-nums">{total}</span>
           <span className="text-[9px] tracking-widest text-muted-foreground uppercase">outstanding</span>
         </div>
       </div>
@@ -575,9 +619,9 @@ function UrgencyPieChart({
 }
 
 // Vertical columns (bars growing from a shared baseline) rather than
-// horizontal - doc-type labels are short (T4, NOA, receipt...), unlike the
-// long client names that made the earlier client chart horizontal.
-function DocTypeBarChart({ data }: { data: { label: string; count: number }[] }) {
+// horizontal - the bucket labels are short (0–3d, 4–7d...), unlike the long
+// client names that made the earlier client chart horizontal.
+function AgeBarChart({ data }: { data: { label: string; count: number }[] }) {
   if (data.length === 0) return <ChartEmptyState />;
   const max = Math.max(...data.map((d) => d.count), 1);
 
