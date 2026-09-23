@@ -69,9 +69,18 @@ export function ChecklistItemFormDialog({
     setShowNotifyChoice(false);
   };
 
+  // Reset whenever the parent opens the dialog. Both entry points open it
+  // by setting `open` directly and the dialog stays mounted between uses,
+  // so resetting only inside handleOpenChange left the last submission's
+  // values in the fields.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) resetForm();
+  }
+
   const handleOpenChange = (next: boolean) => {
     if (submitting) return;
-    if (next) resetForm();
     onOpenChange(next);
   };
 
