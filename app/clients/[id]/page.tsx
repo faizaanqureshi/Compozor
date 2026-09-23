@@ -678,6 +678,7 @@ function ChecklistCard({
     setError(null);
     try {
       await unassignPackageFromClient(packageId, clientId);
+      setDeselectOpen(false);
       onChange();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : String(e));
@@ -981,7 +982,10 @@ function AssignPackagePopup({
             pkg={selectedPackage}
             clientIds={[clientId]}
             currentDocumentIds={currentDocIdsByPackage[selectedPackage.id]}
-            onAssigned={onAssigned}
+            onAssigned={() => {
+              onOpenChange(false);
+              onAssigned();
+            }}
             onBack={() => setSelectedPackage(null)}
             onSavingChange={setSaving}
           />
