@@ -1,4 +1,5 @@
 import { subscribeSSE } from "./sse";
+import { signInRedirect } from "./auth-redirects";
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
@@ -26,17 +27,12 @@ async function responseError(res: Response): Promise<ApiError> {
 type ClerkGlobal = {
   loaded?: boolean;
   load?: () => Promise<void>;
-  session?: { getToken: () => Promise<string | null> };
+  session?: { getToken: (options?: { skipCache?: boolean }) => Promise<string | null> };
 };
 
-// On a hard refresh, Clerk's bootstrap script hasn't run yet, so
-// `window.Clerk` itself is briefly undefined - not just unloaded. Bailing out
-// as soon as that's true (rather than waiting for the script to attach it)
-// made every early fetch (e.g. onboarding's on-mount load) race the page
-// load: lose the race and the backend's 401 forced a sign-out redirect for a
-// user who was, in fact, signed in. Poll for the global for a couple seconds
-// before giving up, in addition to the existing `load()` wait below for once
-// it exists but hasn't finished validating the session.
+// Clerk attaches its global asynchronously on a hard refresh. Wait briefly
+// for it; an unavailable bootstrap becomes a retryable error, never an
+// anonymous API request or a forced sign-out.
 async function waitForClerkGlobal(timeoutMs = 3000): Promise<ClerkGlobal | undefined> {
   const deadline = Date.now() + timeoutMs;
   while (true) {
@@ -47,37 +43,53 @@ async function waitForClerkGlobal(timeoutMs = 3000): Promise<ClerkGlobal | undef
   }
 }
 
-async function getAuthToken(): Promise<string | null> {
+async function getAuthToken(skipCache = false): Promise<string | null> {
   if (typeof window === "undefined") return null;
   const clerk = await waitForClerkGlobal();
-  if (!clerk) return null;
+  if (!clerk) throw new ApiError(503, "Sign-in is still loading. Please try again.");
   if (!clerk.loaded && clerk.load) await clerk.load();
+  if (!clerk.loaded) throw new ApiError(503, "Sign-in is still loading. Please try again.");
   if (!clerk.session) return null;
-  return clerk.session.getToken();
+  return clerk.session.getToken(skipCache ? { skipCache: true } : undefined);
 }
 
-async function request<T>(
-  path: string,
-  init?: RequestInit
-): Promise<T> {
+function redirectSignedOutUser() {
+  if (typeof window === "undefined") return;
+  const clerk = (window as unknown as { Clerk?: ClerkGlobal }).Clerk;
+  // A rejected backend token does not mean Clerk signed the user out.
+  // Redirecting an active session creates a sign-in -> app -> sign-in loop.
+  if (!clerk?.loaded || clerk.session) return;
+  const destination = signInRedirect(window.location.pathname, window.location.search);
+  if (destination) window.location.replace(destination);
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const token = await getAuthToken();
+  if (typeof window !== "undefined" && !token) {
+    redirectSignedOutUser();
+    throw new ApiError(401, "Not authenticated");
+  }
+  const requestSession = typeof window === "undefined" ? undefined
+    : (window as unknown as { Clerk?: ClerkGlobal }).Clerk?.session;
   const headers = new Headers(init?.headers);
   if (token) headers.set("Authorization", `Bearer ${token}`);
 
-  const res = await fetch(`${API_BASE_URL}${path}`, { ...init, headers });
-
-  if (res.status === 401) {
-    if (typeof window !== "undefined") {
-      const redirect = encodeURIComponent(
-        window.location.pathname + window.location.search
-      );
-      window.location.href = `/sign-in?redirect_url=${redirect}`;
+  let res = await fetch(`${API_BASE_URL}${path}`, { ...init, headers });
+  // Refresh an expired cached token once. A second rejection is surfaced to
+  // the page, rather than repeatedly navigating a still-signed-in user.
+  if (res.status === 401 && token && requestSession === (window as unknown as { Clerk?: ClerkGlobal }).Clerk?.session) {
+    const refreshed = await getAuthToken(true);
+    // Do not replay a mutation for a different account after a session switch.
+    if (refreshed && requestSession === (window as unknown as { Clerk?: ClerkGlobal }).Clerk?.session) {
+      headers.set("Authorization", `Bearer ${refreshed}`);
+      res = await fetch(`${API_BASE_URL}${path}`, { ...init, headers });
     }
-    throw new ApiError(401, "Not authenticated");
   }
-  if (!res.ok) {
+  if (res.status === 401) {
+    redirectSignedOutUser();
     throw await responseError(res);
   }
+  if (!res.ok) throw await responseError(res);
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }

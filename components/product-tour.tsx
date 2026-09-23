@@ -4,8 +4,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePathname } from "next/navigation";
 import { ArrowRight, Check } from "lucide-react";
-import { updateMyOrganization } from "@/lib/api";
-import { markOnboardingComplete } from "@/components/onboarding-gate";
+import { useUser } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
 
 const PENDING_KEY = "product-tour-pending";
@@ -23,26 +22,20 @@ const SPOTLIGHT_PAD = 2;
 // route and the tour would never render anywhere.
 const EXEMPT_PREFIXES = ["/sign-in", "/sign-up", "/onboarding"];
 
-// Called once, right when the onboarding wizard's last step is submitted.
-// Deliberately does NOT set `onboarding_completed` on the org yet - that
-// only happens once the tour itself is finished (see finish() below), so a
-// user who closes the tab mid-tour lands right back on /onboarding's wizard
-// today, then re-enters the tour rather than skipping it (see
-// OnboardingGate, which treats this pending flag as "let them into the app,
-// the tour will gate them instead").
-export function startProductTour() {
+// The wizard persists completion before starting this optional tour. Scope
+// progress to the account so another user never inherits a pending tour.
+export function startProductTour(userId: string) {
   try {
-    localStorage.setItem(PENDING_KEY, "1");
-    localStorage.setItem(STEP_KEY, "0");
+    localStorage.setItem(`${PENDING_KEY}:${userId}`, "1");
+    localStorage.setItem(`${STEP_KEY}:${userId}`, "0");
   } catch {
-    // Storage unavailable - the tour just won't resume across reloads.
+    // Storage is optional; account setup is already saved on the server.
   }
 }
 
-export function isProductTourPending(): boolean {
-  if (typeof window === "undefined") return false;
+function isProductTourPending(userId: string): boolean {
   try {
-    return localStorage.getItem(PENDING_KEY) === "1";
+    return localStorage.getItem(`${PENDING_KEY}:${userId}`) === "1";
   } catch {
     return false;
   }
@@ -91,31 +84,18 @@ type Phase = "target" | "arrived";
 
 export function ProductTour() {
   const pathname = usePathname();
-  const [mounted, setMounted] = useState(false);
-  const [pending, setPending] = useState(false);
-  const [stepIndex, setStepIndex] = useState(0);
-  const [rect, setRect] = useState<DOMRect | null>(null);
-  const [finishing, setFinishing] = useState(false);
-  const [finishError, setFinishError] = useState<string | null>(null);
-
-  // Re-checked on every route change, not just on first mount: this
-  // component lives at the layout level so it survives client-side
-  // navigations without remounting, and it may well have first mounted
-  // before startProductTour() was ever called (e.g. while still on
-  // /onboarding) - a mount-only read would freeze `pending` at false
-  // forever and the tour would never appear once the wizard finished.
-  useEffect(() => {
-    setMounted(true);
-    setPending(isProductTourPending());
+  const { user } = useUser();
+  const userId = user?.id;
+  const [pending, setPending] = useState(() => !!userId && isProductTourPending(userId));
+  const [stepIndex, setStepIndex] = useState(() => {
     try {
-      const saved = Number(localStorage.getItem(STEP_KEY));
-      if (Number.isFinite(saved)) {
-        setStepIndex(Math.min(Math.max(saved, 0), steps.length - 1));
-      }
+      const saved = Number(localStorage.getItem(`${STEP_KEY}:${userId}`));
+      return Number.isInteger(saved) ? Math.min(Math.max(saved, 0), steps.length - 1) : 0;
     } catch {
-      // Ignore - defaults to step 0.
+      return 0;
     }
-  }, [pathname]);
+  });
+  const [rect, setRect] = useState<DOMRect | null>(null);
 
   const exempt = pathname === "/" || EXEMPT_PREFIXES.some((p) => pathname.startsWith(p));
   const step = steps[stepIndex];
@@ -127,12 +107,12 @@ export function ProductTour() {
     if (!pending || exempt) return;
     if (arrived) {
       try {
-        localStorage.setItem(STEP_KEY, String(stepIndex));
+        localStorage.setItem(`${STEP_KEY}:${userId}`, String(stepIndex));
       } catch {
         // Non-fatal - just means a refresh mid-step re-derives from stepIndex state.
       }
     }
-  }, [pending, exempt, arrived, stepIndex]);
+  }, [pending, exempt, arrived, stepIndex, userId]);
 
   useEffect(() => {
     if (!pending || exempt || !step) return;
@@ -151,7 +131,7 @@ export function ProductTour() {
     };
   }, [pending, exempt, step]);
 
-  if (!mounted || !pending || exempt || !step) return null;
+  if (!pending || exempt || !step) return null;
 
   const onNext = () => {
     const next = Math.min(stepIndex + 1, steps.length - 1);
@@ -159,29 +139,20 @@ export function ProductTour() {
     // Persist right away (not just once arrived) so a refresh between
     // clicking Next and actually navigating doesn't rewind this step.
     try {
-      localStorage.setItem(STEP_KEY, String(next));
+      localStorage.setItem(`${STEP_KEY}:${userId}`, String(next));
     } catch {
       // Non-fatal - worst case a refresh here re-shows this step's Next button.
     }
   };
 
-  const onFinish = async () => {
-    setFinishing(true);
-    setFinishError(null);
+  const onFinish = () => {
     try {
-      await updateMyOrganization({ onboarding_completed: true });
-      try {
-        localStorage.removeItem(PENDING_KEY);
-        localStorage.removeItem(STEP_KEY);
-      } catch {
-        // Non-fatal - the org update already went through.
-      }
-      markOnboardingComplete();
-      window.location.reload();
-    } catch (e) {
-      setFinishError(e instanceof Error ? e.message : String(e));
-      setFinishing(false);
+      localStorage.removeItem(`${PENDING_KEY}:${userId}`);
+      localStorage.removeItem(`${STEP_KEY}:${userId}`);
+    } catch {
+      // Still dismiss for this page if browser storage is unavailable.
     }
+    setPending(false);
   };
 
   const cardPosition = rect
@@ -257,14 +228,14 @@ export function ProductTour() {
         <h3 className="text-3xl font-thin tracking-tight [font-family:var(--font-denton)]">{step.title}</h3>
         <p className="text-sm text-muted-foreground">{step.body}</p>
 
-        {finishError && <p className="text-xs text-destructive">{finishError}</p>}
+        <Button variant="ghost" onClick={onFinish} className="self-start">Skip tour</Button>
 
         {phase === "target" ? (
           <p className="text-sm font-medium text-accent">{step.prompt}</p>
         ) : isFinalStep ? (
-          <Button onClick={onFinish} disabled={finishing} className="self-start">
-            {finishing ? "Finishing…" : "Finish tour"}
-            {!finishing && <Check />}
+          <Button onClick={onFinish} className="self-start">
+            Finish tour
+            <Check />
           </Button>
         ) : (
           <Button onClick={onNext} className="self-start">
