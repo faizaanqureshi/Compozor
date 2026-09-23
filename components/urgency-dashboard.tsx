@@ -1,11 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowUp, Check, ChevronRight, FileText, Users, type LucideIcon } from "lucide-react";
 import type { ChecklistItem, Client, ClientWithChecklistSummary } from "@/lib/api";
 import { cn, formatRelativeTime } from "@/lib/utils";
 import { computeTier, MS_PER_DAY, startOfDay, TIER_META, TIER_RANK, type Tier } from "@/lib/checklist-urgency";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
@@ -64,13 +65,31 @@ const AGE_BUCKETS = [
 export function UrgencyDashboard({
   clients,
   loading,
+  reminderState,
+  onSendReminder,
 }: {
   clients: ClientWithChecklistSummary[] | undefined;
   loading: boolean;
+  reminderState: Record<number, "sending">;
+  onSendReminder: (e: React.MouseEvent, clientId: number, itemIds: number[]) => void;
 }) {
   const [sort, setSort] = useState<UrgencySort>({ key: "urgency", direction: "asc" });
   const [filterTier, setFilterTier] = useState<Tier | null>(null);
   const toggleFilter = (tier: Tier) => setFilterTier((prev) => (prev === tier ? null : tier));
+
+  // Which outstanding items are explicitly excluded from a client's next
+  // reminder - unchecked in that client's dropdown. Empty by default, so
+  // "click Remind without touching anything" sends about all of them; ids
+  // are globally unique across clients, so one flat set is enough (see
+  // ClientGroupRow, which intersects this against its own visibleItems).
+  const [deselectedItemIds, setDeselectedItemIds] = useState<Set<number>>(new Set());
+  const toggleItemSelected = (itemId: number) =>
+    setDeselectedItemIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(itemId)) next.delete(itemId);
+      else next.add(itemId);
+      return next;
+    });
 
   const rows = useMemo(() => {
     const today = startOfDay(new Date());
@@ -92,6 +111,17 @@ export function UrgencyDashboard({
     const clientsNeedingAction = new Set(rows.map((r) => r.client.id)).size;
     return { total: rows.length, overdue, dueSoon, onTrack, clientsNeedingAction };
   }, [rows]);
+
+  // Ticks every second so the reminder cooldown countdown (15s, see the
+  // backend's MANUAL_REMINDER_COOLDOWN) actually counts down live instead of
+  // freezing at whatever moment the dashboard first mounted - fine to always
+  // run while this is on screen, a once-a-second re-render of a stat table
+  // is negligible.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Grouped by client - the table shows one row per client (see ClientGroup),
   // with that client's individual documents revealed in a per-row dropdown
@@ -269,7 +299,7 @@ export function UrgencyDashboard({
               </div>
             )}
             <div className="max-h-72 overflow-x-auto overflow-y-auto">
-              <table className="w-full min-w-[560px] border-collapse text-sm">
+              <table className="w-full min-w-[640px] border-collapse text-sm">
                 <thead className="sticky top-0 z-10 bg-card">
                   <tr className="text-left">
                     <SortableTh label="Client" sortKey="client" sort={sort} onSort={toggleSort} />
@@ -278,6 +308,9 @@ export function UrgencyDashboard({
                     </th>
                     <SortableTh label="Age" sortKey="age" sort={sort} onSort={toggleSort} />
                     <SortableTh label="Deadline" sortKey="deadline" sort={sort} onSort={toggleSort} />
+                    <th className="border-b border-border/70 py-1.5 text-right text-xs tracking-widest text-muted-foreground/70">
+                      Action
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -287,11 +320,16 @@ export function UrgencyDashboard({
                       group={group}
                       expanded={expandedClientIds.has(group.client.id)}
                       onToggleExpand={() => toggleExpanded(group.client.id)}
+                      deselectedItemIds={deselectedItemIds}
+                      onToggleItemSelected={toggleItemSelected}
+                      now={now}
+                      reminderState={reminderState}
+                      onSendReminder={onSendReminder}
                     />
                   ))}
                   {visibleGroups.length === 0 && (
                     <tr>
-                      <td colSpan={4} className="py-4 text-center text-sm text-muted-foreground">
+                      <td colSpan={5} className="py-4 text-center text-sm text-muted-foreground">
                         No {filterTier ? TIER_META[filterTier].label.toLowerCase() : "outstanding"} documents.
                       </td>
                     </tr>
@@ -434,14 +472,40 @@ function SortableTh({
   );
 }
 
+const REMINDER_COOLDOWN_MS = 60 * 1000;
+
+// Real, server-tracked cooldown (Client.last_reminder_sent_at), not just a
+// disabled-until-reload local flag - a page refresh or a second tab must not
+// let someone re-send within the window. The backend enforces the same 1min
+// window independently (POST /clients/{id}/checklist-reminder returns 429) -
+// this is a double-click/double-submit guard, not a spam-prevention
+// throttle, so it's short enough that `now` needs to actually tick (see
+// UrgencyDashboard's interval) for the countdown to recover on its own.
+function reminderCooldownSecondsLeft(client: Client, now: number): number | null {
+  if (!client.last_reminder_sent_at) return null;
+  const elapsed = now - new Date(client.last_reminder_sent_at).getTime();
+  if (elapsed >= REMINDER_COOLDOWN_MS) return null;
+  return Math.ceil((REMINDER_COOLDOWN_MS - elapsed) / 1000);
+}
+
 function ClientGroupRow({
   group,
   expanded,
   onToggleExpand,
+  deselectedItemIds,
+  onToggleItemSelected,
+  now,
+  reminderState,
+  onSendReminder,
 }: {
   group: ClientGroup & { visibleItems: OutstandingRow[] };
   expanded: boolean;
   onToggleExpand: () => void;
+  deselectedItemIds: Set<number>;
+  onToggleItemSelected: (itemId: number) => void;
+  now: number;
+  reminderState: Record<number, "sending">;
+  onSendReminder: (e: React.MouseEvent, clientId: number, itemIds: number[]) => void;
 }) {
   const meta = TIER_META[group.worstTier];
   const count = group.visibleItems.length;
@@ -459,6 +523,18 @@ function ClientGroupRow({
       return a.daysUntil - b.daysUntil;
     });
   }, [group.visibleItems]);
+
+  // What's actually about to be reminded about - everything shown, unless
+  // some documents were unchecked in the dropdown (all checked by default).
+  const selectedItemIds = sortedItems
+    .filter((row) => !deselectedItemIds.has(row.item.id))
+    .map((row) => row.item.id);
+
+  const state = reminderState[group.client.id];
+  const cooldownSecondsLeft = reminderCooldownSecondsLeft(group.client, now);
+  const onCooldown = cooldownSecondsLeft !== null;
+  const nothingSelected = selectedItemIds.length === 0;
+  const partialSelection = selectedItemIds.length > 0 && selectedItemIds.length < count;
 
   return (
     <>
@@ -496,13 +572,45 @@ function ClientGroupRow({
             {TIER_META[group.worstTier].label}
           </span>
         </td>
+        <td className="py-1.5 text-right">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 px-2 text-xs"
+            disabled={state === "sending" || onCooldown || nothingSelected}
+            title={
+              cooldownSecondsLeft !== null
+                ? `You can remind again in ${cooldownSecondsLeft}s`
+                : nothingSelected
+                  ? "Select at least one document to remind about"
+                  : undefined
+            }
+            onClick={(e) => onSendReminder(e, group.client.id, selectedItemIds)}
+          >
+            {state === "sending"
+              ? "Sending…"
+              : onCooldown
+                ? `Sent · ${cooldownSecondsLeft}s`
+                : partialSelection
+                  ? `Remind (${selectedItemIds.length})`
+                  : "Remind"}
+          </Button>
+        </td>
       </tr>
       {expanded &&
         sortedItems.map((row) => {
           const itemMeta = TIER_META[row.tier];
           return (
             <tr key={row.item.id} className="border-b border-border/40 bg-muted/20 text-sm last:border-0">
-              <td className="py-1.5 pr-4 pl-[22px]" />
+              <td className="py-1.5 pr-2 pl-[22px]">
+                <input
+                  type="checkbox"
+                  checked={!deselectedItemIds.has(row.item.id)}
+                  onChange={() => onToggleItemSelected(row.item.id)}
+                  aria-label={`Include ${row.item.doc_type_needed} in the reminder`}
+                  className="size-3.5 rounded border-input accent-primary"
+                />
+              </td>
               <td className="py-1.5 pr-4 text-foreground/90">
                 {row.item.doc_type_needed}
                 {row.item.package_name && (
@@ -529,6 +637,7 @@ function ClientGroupRow({
                   {deadlineLabel(row)}
                 </span>
               </td>
+              <td className="py-1.5" />
             </tr>
           );
         })}
