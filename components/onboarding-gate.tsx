@@ -4,131 +4,58 @@ import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 import { getMyOrganization } from "@/lib/api";
-import { isProductTourPending } from "@/components/product-tour";
+import { signInRedirect } from "@/lib/auth-redirects";
+import { onboardingDestination } from "@/lib/onboarding";
+import { Button } from "@/components/ui/button";
 
-const EXEMPT_PREFIXES = ["/sign-in", "/sign-up", "/privacy", "/terms", "/cookies"];
+type Check = {
+  userId: string;
+  pathname: string;
+  attempt: number;
+  completed?: boolean;
+  error?: string;
+};
 
-const STORAGE_KEY = "onboarding-complete";
-
-// How long a cached "complete" is trusted before re-checking the server.
-// Bounds staleness if the backend's onboarding state ever changes out from
-// under this cache (e.g. an org/DB reset during testing) - without this, a
-// stale sessionStorage flag would let an unboarded user straight into
-// gated pages indefinitely, since nothing else would ever re-validate it.
-const CACHE_TTL_MS = 10 * 60 * 1000;
-
-interface CachedStatus {
-  complete: true;
-  cachedAt: number;
-}
-
-// Re-read (and re-validate the TTL on) every call rather than freezing to a
-// module-level boolean forever once true - a long-lived tab that's never
-// reloaded still re-checks after the TTL elapses, not just on next reload.
-function readCache(): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    const raw = sessionStorage.getItem(STORAGE_KEY);
-    if (!raw) return false;
-    const parsed = JSON.parse(raw) as Partial<CachedStatus>;
-    return (
-      parsed.complete === true &&
-      typeof parsed.cachedAt === "number" &&
-      Date.now() - parsed.cachedAt < CACHE_TTL_MS
-    );
-  } catch {
-    return false;
-  }
-}
-
-export function markOnboardingComplete() {
-  try {
-    sessionStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({ complete: true, cachedAt: Date.now() } satisfies CachedStatus)
-    );
-  } catch {
-    // Storage unavailable (private mode etc.) - falls back to fetching
-    // getMyOrganization() every navigation, which is correct if slower.
-  }
-}
-
-type Status = "unknown" | "complete" | "incomplete" | "error";
-
-// Every Clerk user gets an auto-created but unconfigured Organization on
-// first authenticated API call (see FRONTEND_CONTEXT.md) - there's no
-// server-side block on hitting other endpoints before onboarding finishes,
-// so gating has to happen here, on every authenticated route. Rendering of
-// gated pages is held back until the status is known, so the user never sees
-// a flash of /clients before being redirected to /onboarding.
+// The database decides completion. Never reuse a browser-wide completion flag
+// across accounts or let a pending product tour bypass unfinished setup.
 export function OnboardingGate({ children }: { children: React.ReactNode }) {
-  const { isLoaded, isSignedIn } = useAuth();
+  const { isLoaded, isSignedIn, userId } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
-  const [status, setStatus] = useState<Status>(() =>
-    readCache() ? "complete" : "unknown"
-  );
-
-  const exempt =
-    pathname === "/" || EXEMPT_PREFIXES.some((p) => pathname.startsWith(p));
+  const [check, setCheck] = useState<Check | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const current = check?.userId === userId && check?.pathname === pathname && check?.attempt === attempt
+    ? check : null;
 
   useEffect(() => {
-    if (!isLoaded || !isSignedIn || exempt) return;
-    if (readCache()) {
-      setStatus("complete");
+    if (!isLoaded) return;
+    if (!isSignedIn || !userId) {
+      const destination = signInRedirect(pathname, window.location.search);
+      if (destination) router.replace(destination);
       return;
     }
-
     let cancelled = false;
-    getMyOrganization()
-      .then((org) => {
-        if (cancelled) return;
-        if (org.onboarding_completed_at) {
-          markOnboardingComplete();
-          setStatus("complete");
-        } else {
-          setStatus("incomplete");
-        }
-      })
-      .catch(() => {
-        // Not signed in yet from the API's perspective, or a transient
-        // failure - fail open and let the page itself surface the error.
-        if (!cancelled) setStatus("error");
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isLoaded, isSignedIn, exempt, pathname]);
+    getMyOrganization().then((org) => {
+      if (!cancelled) setCheck({ userId, pathname, attempt, completed: !!org.onboarding_completed_at });
+    }).catch((error) => {
+      if (!cancelled) setCheck({ userId, pathname, attempt, error: error instanceof Error ? error.message : "Unable to load your account." });
+    });
+    return () => { cancelled = true; };
+  }, [isLoaded, isSignedIn, userId, pathname, attempt, router]);
 
   useEffect(() => {
-    if (exempt) return;
-    // A pending product tour means the wizard is done and the user is
-    // deliberately being kept on gated pages (the tour itself gates them
-    // instead) even though onboarding_completed hasn't been set server-side
-    // yet - see startProductTour() in product-tour.tsx for why.
-    if (status === "incomplete" && pathname !== "/onboarding" && !isProductTourPending()) {
-      router.replace("/onboarding");
-    } else if (status === "complete" && pathname === "/onboarding") {
-      router.replace("/clients");
-    }
-  }, [status, exempt, pathname, router]);
+    if (!isSignedIn || !current || current.completed === undefined) return;
+    const destination = onboardingDestination(current.completed, pathname, window.location.search);
+    if (destination) router.replace(destination);
+  }, [current, isSignedIn, pathname, router]);
 
-  if (exempt || (isLoaded && !isSignedIn)) return <>{children}</>;
-
-  // The onboarding page is the safe default while status is unresolved: the
-  // only redirect away from it is for already-onboarded users, and it has its
-  // own loading skeleton.
-  if (pathname === "/onboarding") {
-    return status === "complete" ? null : <>{children}</>;
-  }
-
-  // Hold back gated pages until we know onboarding is done ("error" fails
-  // open). Covers Clerk still loading, the org fetch in flight, and the
-  // redirect to /onboarding being in progress. A pending tour is let through
-  // regardless - see the effect above.
-  if (!isLoaded || status === "unknown") return null;
-  if (status === "incomplete" && !isProductTourPending()) return null;
-
+  if (!isLoaded || !isSignedIn || !current) return null;
+  if (current.error) return (
+    <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-6">
+      <p role="alert" className="text-sm text-destructive">{current.error}</p>
+      <Button onClick={() => setAttempt((value) => value + 1)}>Try again</Button>
+    </div>
+  );
+  if (onboardingDestination(!!current.completed, pathname, "")) return null;
   return <>{children}</>;
 }

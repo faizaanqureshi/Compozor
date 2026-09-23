@@ -6,8 +6,8 @@ import { registerHooks } from 'node:module';
 const apiUrl = new URL('../lib/api.ts', import.meta.url).href;
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (context.parentURL === apiUrl && specifier === './sse') {
-      return nextResolve('./sse.ts', context);
+    if (context.parentURL?.includes('/lib/') && specifier.startsWith('./') && !specifier.endsWith('.ts')) {
+      return nextResolve(specifier + '.ts', context);
     }
     return nextResolve(specifier, context);
   },
@@ -110,4 +110,99 @@ test('API string errors render without extra JSON quotes', async () => {
   try {
     await assert.rejects(resumeWorkflowRun(1, 2, 'test'), { message: 'Reconnect this mailbox in Settings.' });
   } finally { globalThis.fetch = originalFetch; }
+});
+
+async function withBrowser(clerk, path, run) {
+  const originalWindow = globalThis.window;
+  const originalFetch = globalThis.fetch;
+  const redirects = [];
+  const url = new URL(path, 'https://www.compozor.com');
+  globalThis.window = { Clerk: clerk, location: { pathname: url.pathname, search: url.search, replace: (url) => redirects.push(url) } };
+  try { await run(redirects); }
+  finally { globalThis.fetch = originalFetch; if (originalWindow === undefined) delete globalThis.window; else globalThis.window = originalWindow; }
+}
+
+for (const path of ['/sign-in?redirect_url=%2Fsign-in', '/sign-up/verify']) {
+  test(`signed-out calls on ${path} neither fetch nor navigate`, () => withBrowser({ loaded: true }, path, async (redirects) => {
+    let fetched = false;
+    globalThis.fetch = async () => { fetched = true; return new Response('', { status: 401 }); };
+    await assert.rejects(resumeWorkflowRun(1, 2, 'test'), { status: 401 });
+    assert.equal(fetched, false);
+    assert.deepEqual(redirects, []);
+  }));
+}
+
+test('signed-out protected requests preserve the original destination without calling the API', () => withBrowser({ loaded: true }, '/clients/27?tab=files', async (redirects) => {
+  globalThis.fetch = async () => assert.fail('must not send an anonymous private request');
+  await assert.rejects(resumeWorkflowRun(1, 2, 'test'), { status: 401 });
+  assert.deepEqual(redirects, ['/sign-in?redirect_url=%2Fclients%2F27%3Ftab%3Dfiles']);
+}));
+
+test('requests wait for Clerk initialization before obtaining a token', () => {
+  const clerk = { loaded: false, async load() { await new Promise(r => setTimeout(r, 10)); this.loaded = true; this.session = { getToken: async () => 'ready-token' }; } };
+  return withBrowser(clerk, '/onboarding', async (redirects) => {
+    globalThis.fetch = async (_url, init) => { assert.equal(init.headers.get('Authorization'), 'Bearer ready-token'); return Response.json({ ok: true }); };
+    assert.deepEqual(await resumeWorkflowRun(1, 2, 'test'), { ok: true });
+    assert.deepEqual(redirects, []);
+  });
+});
+
+test('expired tokens are refreshed once and the request body is retained', () => {
+  let tokenCalls = 0;
+  return withBrowser({ loaded: true, session: { async getToken(options) { tokenCalls++; if (tokenCalls === 2) assert.deepEqual(options, { skipCache: true }); return tokenCalls === 1 ? 'old' : 'fresh'; } } }, '/clients', async (redirects) => {
+    let requests = 0;
+    globalThis.fetch = async (_url, init) => {
+      requests++;
+      assert.deepEqual(JSON.parse(init.body), { context: 'resume' });
+      assert.equal(init.headers.get('Authorization'), requests === 1 ? 'Bearer old' : 'Bearer fresh');
+      return requests === 1 ? new Response('', { status: 401 }) : Response.json({ ok: true });
+    };
+    assert.deepEqual(await resumeWorkflowRun(1, 2, 'resume'), { ok: true });
+    assert.equal(requests, 2);
+    assert.deepEqual(redirects, []);
+  });
+});
+
+test('persistent backend 401 with an active Clerk session is an error, not a navigation loop', () => withBrowser({ loaded: true, session: { getToken: async () => 'token' } }, '/clients', async (redirects) => {
+  let requests = 0;
+  globalThis.fetch = async () => { requests++; return Response.json({ detail: 'Not signed in' }, { status: 401 }); };
+  await assert.rejects(resumeWorkflowRun(1, 2, 'test'), { status: 401, message: 'Not signed in' });
+  assert.equal(requests, 2);
+  assert.deepEqual(redirects, []);
+}));
+
+test('an expired Clerk session redirects once after the rejected request', () => {
+  const clerk = { loaded: true, session: { getToken: async () => 'old' } };
+  return withBrowser(clerk, '/clients', async (redirects) => {
+    globalThis.fetch = async () => { clerk.session = undefined; return new Response('', { status: 401 }); };
+    await assert.rejects(resumeWorkflowRun(1, 2, 'test'), { status: 401 });
+    assert.deepEqual(redirects, ['/sign-in?redirect_url=%2Fclients']);
+  });
+});
+
+test('an unavailable Clerk bootstrap never sends anonymous requests or redirects', () => withBrowser({ loaded: false }, '/onboarding', async (redirects) => {
+  globalThis.fetch = async () => assert.fail('must wait for authentication');
+  await assert.rejects(resumeWorkflowRun(1, 2, 'test'), { status: 503 });
+  assert.deepEqual(redirects, []);
+}));
+
+test('a session temporarily returning no token does not trigger a sign-in loop', () => withBrowser({ loaded: true, session: { getToken: async () => null } }, '/clients', async (redirects) => {
+  globalThis.fetch = async () => assert.fail('must not send a tokenless request');
+  await assert.rejects(resumeWorkflowRun(1, 2, 'test'), { status: 401 });
+  assert.deepEqual(redirects, []);
+}));
+
+test('a rejected mutation is never replayed under a newly selected account', () => {
+  const clerk = { loaded: true, session: { getToken: async () => 'user-a-token' } };
+  return withBrowser(clerk, '/clients', async (redirects) => {
+    let requests = 0;
+    globalThis.fetch = async () => {
+      requests++;
+      clerk.session = { getToken: async () => 'user-b-token' };
+      return new Response('', { status: 401 });
+    };
+    await assert.rejects(resumeWorkflowRun(1, 2, 'test'), { status: 401 });
+    assert.equal(requests, 1);
+    assert.deepEqual(redirects, []);
+  });
 });

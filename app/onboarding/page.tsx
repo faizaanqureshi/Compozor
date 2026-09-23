@@ -26,6 +26,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
+import { mailboxResult, withoutMailboxResult } from "@/lib/onboarding";
 import { startProductTour } from "@/components/product-tour";
 
 const automationOptions: { value: AutomationLevel; label: string; description: string }[] = [
@@ -110,8 +111,8 @@ export default function OnboardingPage() {
   // with several employees (each their own Compozor account/instance, once
   // that exists) can each carry their own name against the same org,
   // rather than this doubling as the firm's own identity.
-  const [contactName, setContactName] = useState("");
-  const contactNameTouched = useRef(false);
+  const [contactName, setContactName] = useState<string | null>(null);
+  const resolvedContactName = contactName ?? org?.contact_name ?? user?.fullName ?? "";
   const [phoneDigits, setPhoneDigits] = useState("");
   const [phoneError, setPhoneError] = useState<string | null>(null);
   const [practiceDescription, setPracticeDescription] = useState("");
@@ -120,7 +121,8 @@ export default function OnboardingPage() {
   const [practiceError, setPracticeError] = useState<string | null>(null);
 
   const [connecting, setConnecting] = useState(false);
-  const [gmailError, setGmailError] = useState<string | null>(null);
+  const [callbackResult] = useState(() => typeof window === "undefined" ? null : mailboxResult(window.location.search));
+  const [gmailError, setGmailError] = useState<string | null>(callbackResult?.error ?? null);
 
   const [automationLevel, setAutomationLevel] =
     useState<AutomationLevel>("no_automation");
@@ -130,10 +132,11 @@ export default function OnboardingPage() {
   const load = () => {
     Promise.all([getMyOrganization(), listInboxConnections()])
       .then(([nextOrg, nextConnections]) => {
+        setLoadError(null);
         setOrg(nextOrg);
+        setAutomationLevel(nextOrg.automation_level);
         setConnections(nextConnections);
         setName((prev) => (nameTouched.current || prev ? prev : nextOrg.name));
-        setContactName((prev) => (contactNameTouched.current || prev ? prev : nextOrg.contact_name ?? ""));
         setPhoneDigits((prev) => (prev ? prev : nextOrg.phone ?? ""));
       })
       .catch((e) => setLoadError(e instanceof ApiError ? e.message : String(e)));
@@ -141,16 +144,11 @@ export default function OnboardingPage() {
 
   useEffect(load, []);
 
-  // Clerk's own name is a convenience starting point, same as Settings'
-  // "Your profile" edit does - never overwrites an already-persisted
-  // contact_name, and only applies once (contactNameTouched), so typing
-  // something different and it loading a beat later can't clobber it.
-  // Separate from `load` above since `user` can become available on its
-  // own schedule, after org data has already loaded.
   useEffect(() => {
-    if (contactNameTouched.current || org?.contact_name) return;
-    if (user?.fullName) setContactName(user.fullName);
-  }, [user?.fullName, org?.contact_name]);
+    if (callbackResult) {
+      window.history.replaceState({}, "", window.location.pathname + withoutMailboxResult(window.location.search) + window.location.hash);
+    }
+  }, [callbackResult]);
 
   const step: Step | null = !org
     ? null
@@ -192,7 +190,7 @@ export default function OnboardingPage() {
     try {
       const updated = await updateMyOrganization({
         name: name.trim(),
-        contact_name: contactName.trim(),
+        contact_name: resolvedContactName.trim(),
         phone: phoneDigits,
         practice_type: practiceType,
         practice_description: practiceDescription.trim(),
@@ -222,12 +220,11 @@ export default function OnboardingPage() {
     setFinishing(true);
     setFinishError(null);
     try {
-      await updateMyOrganization({ automation_level: automationLevel });
-      // Deliberately not marking onboarding complete yet - that only happens
-      // once the guided product tour finishes (see ProductTour.onFinish),
-      // so a user who bails mid-tour lands back in the wizard, then the
-      // tour, rather than skipping straight into the app.
-      startProductTour();
+      await updateMyOrganization({
+        automation_level: automationLevel,
+        onboarding_completed: true,
+      });
+      if (user) startProductTour(user.id);
       router.replace("/clients");
     } catch (e) {
       setFinishError(e instanceof ApiError ? e.message : String(e));
@@ -248,7 +245,14 @@ export default function OnboardingPage() {
           </p>
         </div>
 
-        {loadError && <p className="text-sm text-destructive">{loadError}</p>}
+        {loadError && (
+          <div className="flex flex-col items-start gap-3">
+            <p role="alert" className="text-sm text-destructive">{loadError}</p>
+            <Button variant="outline" onClick={load}>Try again</Button>
+          </div>
+        )}
+        {gmailError && <p role="alert" className="text-sm text-destructive">{gmailError}</p>}
+        {callbackResult?.success && <p role="status" className="text-sm text-muted-foreground">{callbackResult.success}</p>}
 
         {!step ? (
           <div className="flex flex-col gap-4">
@@ -271,10 +275,9 @@ export default function OnboardingPage() {
                       id="contact-name"
                       required
                       placeholder="e.g. Jane Doe"
-                      value={contactName}
+                      value={resolvedContactName}
                       onChange={(e) => {
                         setContactName(e.target.value);
-                        contactNameTouched.current = true;
                       }}
                     />
                   </div>
@@ -395,10 +398,6 @@ export default function OnboardingPage() {
                     Without it connected, the inbox pipeline has nothing to watch.
                   </p>
                 </div>
-
-                {gmailError && (
-                  <p className="text-sm text-destructive">{gmailError}</p>
-                )}
 
                 <div className="flex flex-col items-start gap-3 rounded-lg border border-dashed border-border bg-muted/40 px-4 py-6">
                   <p className="text-sm text-muted-foreground">

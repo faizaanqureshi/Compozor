@@ -58,11 +58,11 @@ const adminLink = { href: "/admin", label: "Admin", icon: Landmark, tourId: "adm
 //  - xl and up: docked, and the user can expand/collapse it via `collapsed`.
 export function Nav() {
   const pathname = usePathname();
-  const { user } = useUser();
+  const { user, isLoaded, isSignedIn } = useUser();
   // Shares its SWR cache entry with the Settings page (same key) - editing
   // your name or firm name there updates this instantly everywhere else,
   // with no polling or extra plumbing needed.
-  const { data: org } = useSWR(organizationKey(), getMyOrganization);
+  const { data: org } = useSWR(isLoaded && isSignedIn ? organizationKey() : null, getMyOrganization);
   const [collapsed, setCollapsed] = useState(false);
   const { mobileOpen, setMobileOpen } = useMobileNav();
   const visibleLinks = isAdminEmail(user?.primaryEmailAddress?.emailAddress)
