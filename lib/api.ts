@@ -788,10 +788,16 @@ export const submitEmailReply = (
 
 // ---------- Checklist reminders ----------
 
-export const sendChecklistReminder = (clientId: number) =>
-  request<EmailLogEntry>(`/clients/${clientId}/checklist-reminder`, {
-    method: "POST",
-  });
+// itemIds narrows the reminder to a chosen subset of a client's outstanding
+// items (one email covering just those) - omitted/empty means all of them,
+// the original whole-checklist behavior. See send_checklist_reminder on the
+// backend for how a subset is validated (silently dropped if not actually
+// outstanding for this client, never an error).
+export const sendChecklistReminder = (clientId: number, itemIds?: number[]) =>
+  request<EmailLogEntry>(
+    `/clients/${clientId}/checklist-reminder`,
+    json("POST", itemIds && itemIds.length > 0 ? { item_ids: itemIds } : {})
+  );
 
 // ---------- Email log ----------
 

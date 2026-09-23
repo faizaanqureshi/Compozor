@@ -38,6 +38,7 @@ import {
   listInboxConnections,
   purgeClients,
   restoreClients,
+  sendChecklistReminder,
   unassignPackageFromClient,
   unassignWorkflowFromClient,
   watchInboxConnection,
@@ -175,6 +176,10 @@ export default function ClientsPage() {
   const [companyName, setCompanyName] = useState("");
   const [status, setStatus] = useState<ClientStatus>("active");
   const [submitting, setSubmitting] = useState(false);
+
+  const [reminderState, setReminderState] = useState<
+    Record<number, "sending">
+  >({});
 
   const [gmailBanner, setGmailBanner] = useState<
     { type: "success" | "error"; message: string } | null
@@ -410,6 +415,32 @@ export default function ClientsPage() {
     }
   };
 
+  // itemIds is whichever documents the urgency dashboard's checkboxes left
+  // selected for this client (all of them by default) - one email covering
+  // just that set. See lib/api.ts's sendChecklistReminder.
+  const sendReminder = async (e: React.MouseEvent, clientId: number, itemIds: number[]) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setReminderState((prev) => ({ ...prev, [clientId]: "sending" }));
+    try {
+      await sendChecklistReminder(clientId, itemIds);
+      // Wait for client.last_reminder_sent_at to actually refresh before
+      // clearing "sending" - that timestamp (not a persisted local flag) is
+      // what drives the cooldown countdown, since it's now short (15s, see
+      // the backend's MANUAL_REMINDER_COOLDOWN) rather than long enough that
+      // a "sent, locked for the rest of the session" flag made sense.
+      await mutateClients();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setReminderState((prev) => {
+        const next = { ...prev };
+        delete next[clientId];
+        return next;
+      });
+    }
+  };
+
   return (
     <div className="relative isolate flex min-h-full w-full flex-col gap-8">
       {gmailBanner && (
@@ -541,6 +572,8 @@ export default function ClientsPage() {
         <UrgencyDashboard
           clients={clients}
           loading={loading}
+          reminderState={reminderState}
+          onSendReminder={sendReminder}
         />
       </section>
 
@@ -605,7 +638,10 @@ export default function ClientsPage() {
             <div className="ml-auto flex items-center gap-1.5">
               <AssignPackageDialog
                 clientIds={Array.from(selectedIds)}
-                onAssigned={() => setSelectedIds(new Set())}
+                onAssigned={() => {
+                  setSelectedIds(new Set());
+                  mutateClients();
+                }}
                 trigger={
                   <Button variant="secondary" size="sm">
                     <PackageIcon />
@@ -615,7 +651,10 @@ export default function ClientsPage() {
               />
               <AssignWorkflowDialog
                 clientIds={Array.from(selectedIds)}
-                onAssigned={() => setSelectedIds(new Set())}
+                onAssigned={() => {
+                  setSelectedIds(new Set());
+                  mutateClients();
+                }}
                 trigger={
                   <Button variant="secondary" size="sm">
                     <WorkflowIcon />
