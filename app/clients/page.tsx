@@ -37,6 +37,7 @@ import {
   listClients,
   listEmailLog,
   listInboxConnections,
+  purgeClients,
   restoreClients,
   sendChecklistReminder,
   unassignPackageFromClient,
@@ -63,6 +64,7 @@ import { WorkflowFormDialog } from "@/components/workflow-form-dialog";
 import { PackageFormDialog } from "@/components/package-form-dialog";
 import { AssignWorkflowDialog } from "@/components/assign-workflow-dialog";
 import { AssignPackageDialog } from "@/components/assign-package-dialog";
+import { PurgeConfirmDialog } from "@/components/purge-confirm-dialog";
 
 type WorkflowTone = "success" | "warning" | "attention" | "neutral";
 type SortKey = "name" | "email" | "documents" | "activity" | "status";
@@ -1139,11 +1141,8 @@ function BulkDeleteClientsButton({
               Delete {clientIds.length} client{clientIds.length === 1 ? "" : "s"}?
             </DialogTitle>
             <DialogDescription>
-              {clientIds.length === 1 ? "This client moves" : "These clients move"} to the Archive
-              and disappear from this list. Restore{clientIds.length === 1 ? " it" : " them"} from
-              the Archive button above within 7 days, or {clientIds.length === 1 ? "it's" : "they're"}{" "}
-              permanently deleted along with all checklist items, uploaded documents, email logs,
-              memory notes, and workflow/package assignments.
+              {clientIds.length === 1 ? "This client" : "These clients"} will be archived for 7
+              days, then deleted permanently.
             </DialogDescription>
           </DialogHeader>
           {error && <p className="text-sm text-destructive">{error}</p>}
@@ -1165,6 +1164,10 @@ function ArchivedClientsDialog({ onRestored }: { onRestored: () => void }) {
   const [open, setOpen] = useState(false);
   const [archived, setArchived] = useState<Client[] | null>(null);
   const [restoringId, setRestoringId] = useState<number | null>(null);
+  const [restoringAll, setRestoringAll] = useState(false);
+  const [purging, setPurging] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+  const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = () => {
@@ -1194,6 +1197,36 @@ function ArchivedClientsDialog({ onRestored }: { onRestored: () => void }) {
     }
   };
 
+  const onRestoreAll = async () => {
+    if (!archived || archived.length === 0) return;
+    setRestoringAll(true);
+    setError(null);
+    try {
+      await restoreClients(archived.map((c) => c.id));
+      refresh();
+      onRestored();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setRestoringAll(false);
+    }
+  };
+
+  const onDeletePermanently = async (clientIds: number[]) => {
+    setPurging(true);
+    setError(null);
+    try {
+      await purgeClients(clientIds);
+      setConfirmDeleteId(null);
+      setConfirmDeleteAll(false);
+      refresh();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setPurging(false);
+    }
+  };
+
   return (
     <>
       <Button variant="outline" size="sm" onClick={openDialog}>
@@ -1207,7 +1240,7 @@ function ArchivedClientsDialog({ onRestored }: { onRestored: () => void }) {
             <DialogTitle>Archive</DialogTitle>
             <DialogDescription>
               Deleted clients stay here for 7 days before being permanently removed - restore one
-              to bring it back exactly as it was.
+              to bring it back exactly as it was, or delete it for good right away.
             </DialogDescription>
           </DialogHeader>
 
@@ -1219,35 +1252,77 @@ function ArchivedClientsDialog({ onRestored }: { onRestored: () => void }) {
           ) : archived.length === 0 ? (
             <p className="text-sm text-muted-foreground">Nothing archived.</p>
           ) : (
-            <div className="flex max-h-96 flex-col gap-1 overflow-y-auto">
-              {archived.map((client) => (
-                <div
-                  key={client.id}
-                  className="flex items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-sm hover:bg-muted"
+            <>
+              <div className="flex items-center justify-end gap-1.5">
+                <Button variant="ghost" size="sm" onClick={onRestoreAll} disabled={restoringAll}>
+                  {restoringAll ? "Restoring…" : "Restore all"}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-destructive hover:bg-destructive/10"
+                  onClick={() => setConfirmDeleteAll(true)}
                 >
-                  <span className="flex min-w-0 flex-col">
-                    <span className="truncate font-medium">{client.name}</span>
-                    <span className="truncate text-xs text-muted-foreground">
-                      {client.email} · Deleted{" "}
-                      {client.archived_at ? formatRelativeTime(client.archived_at) : ""}
-                    </span>
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="shrink-0"
-                    disabled={restoringId === client.id}
-                    onClick={() => onRestore(client.id)}
+                  Delete all
+                </Button>
+              </div>
+              <div className="flex max-h-96 flex-col gap-1 overflow-y-auto">
+                {archived.map((client) => (
+                  <div
+                    key={client.id}
+                    className="flex items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-sm hover:bg-muted"
                   >
-                    {restoringId === client.id ? "Restoring…" : "Restore"}
-                  </Button>
-                </div>
-              ))}
-            </div>
+                    <span className="flex min-w-0 flex-col">
+                      <span className="truncate font-medium">{client.name}</span>
+                      <span className="truncate text-xs text-muted-foreground">
+                        {client.email} · Deleted{" "}
+                        {client.archived_at ? formatRelativeTime(client.archived_at) : ""}
+                      </span>
+                    </span>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={restoringId === client.id}
+                        onClick={() => onRestore(client.id)}
+                      >
+                        {restoringId === client.id ? "Restoring…" : "Restore"}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="icon-sm"
+                        className="text-destructive hover:bg-destructive/10"
+                        title="Delete permanently"
+                        onClick={() => setConfirmDeleteId(client.id)}
+                      >
+                        <Trash2 />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
           )}
           {error && <p className="text-sm text-destructive">{error}</p>}
         </DialogContent>
       </Dialog>
+
+      <PurgeConfirmDialog
+        open={confirmDeleteId !== null}
+        onOpenChange={(next) => !next && setConfirmDeleteId(null)}
+        count={1}
+        itemLabel="client"
+        purging={purging}
+        onConfirm={() => confirmDeleteId !== null && onDeletePermanently([confirmDeleteId])}
+      />
+      <PurgeConfirmDialog
+        open={confirmDeleteAll}
+        onOpenChange={setConfirmDeleteAll}
+        count={archived?.length ?? 0}
+        itemLabel="client"
+        purging={purging}
+        onConfirm={() => archived && onDeletePermanently(archived.map((c) => c.id))}
+      />
     </>
   );
 }
