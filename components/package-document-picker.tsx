@@ -10,6 +10,8 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 // The "which of this package's documents do you actually want" step -
 // shared by AssignPackageDialog (bulk multi-client assign) and the client
@@ -40,6 +42,10 @@ export function PackageDocumentPicker({
   const [selectedDocIds, setSelectedDocIds] = useState<Set<number>>(
     () => new Set(currentDocumentIds ?? pkg.documents.filter((d) => d.is_required).map((d) => d.id))
   );
+  // Optional, applied to every document assigned in this action (as each
+  // new ChecklistItem's deadline) instead of setting it document-by-
+  // document afterward - one date for the whole batch.
+  const [deadline, setDeadline] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -59,9 +65,9 @@ export function PackageDocumentPicker({
     setError(null);
     try {
       if (isEditing) {
-        await updatePackageAssignmentDocuments(pkg.id, clientIds[0], Array.from(selectedDocIds));
+        await updatePackageAssignmentDocuments(pkg.id, clientIds[0], Array.from(selectedDocIds), deadline);
       } else {
-        await assignPackageToClients(pkg.id, clientIds, Array.from(selectedDocIds));
+        await assignPackageToClients(pkg.id, clientIds, Array.from(selectedDocIds), deadline);
       }
       onAssigned();
     } catch (e) {
@@ -135,6 +141,20 @@ export function PackageDocumentPicker({
             ))}
           </div>
         )}
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="package-assign-deadline">Add a deadline (optional)</Label>
+        <Input
+          id="package-assign-deadline"
+          type="date"
+          value={deadline}
+          onChange={(e) => setDeadline(e.target.value)}
+          className="w-full sm:w-48"
+        />
+        <p className="text-xs text-muted-foreground">
+          Applies to every document above, instead of setting one later per requirement.
+        </p>
       </div>
 
       {error && <p className="text-sm text-destructive">{error}</p>}

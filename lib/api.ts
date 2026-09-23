@@ -1216,11 +1216,12 @@ export const listPackageAssignments = (packageId: number) =>
 export const assignPackageToClients = (
   packageId: number,
   clientIds: number[],
-  documentIds: number[]
+  documentIds: number[],
+  deadline?: string
 ) =>
   request<PackageAssignmentWithClient[]>(
     `/packages/${packageId}/assignments`,
-    json("POST", { client_ids: clientIds, document_ids: documentIds })
+    json("POST", { client_ids: clientIds, document_ids: documentIds, deadline: deadline || undefined })
   );
 
 export const unassignPackageFromClient = (packageId: number, clientId: number) =>
@@ -1233,9 +1234,10 @@ export const unassignPackageFromClient = (packageId: number, clientId: number) =
 export const updatePackageAssignmentDocuments = (
   packageId: number,
   clientId: number,
-  documentIds: number[]
+  documentIds: number[],
+  deadline?: string
 ) =>
   request<PackageAssignmentWithClient>(
     `/packages/${packageId}/assignments/${clientId}`,
-    json("PATCH", { document_ids: documentIds })
+    json("PATCH", { document_ids: documentIds, deadline: deadline || undefined })
   );
