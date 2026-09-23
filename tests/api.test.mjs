@@ -206,3 +206,25 @@ test('a rejected mutation is never replayed under a newly selected account', () 
     assert.deepEqual(redirects, []);
   });
 });
+
+test("resend confirmation is structured and never enabled on a normal Send", async () => {
+  const api = await import("../lib/api.ts");
+  const originalFetch = globalThis.fetch;
+  const originalWindow = globalThis.window;
+  const requests = [];
+  globalThis.window = { Clerk: { loaded: true, session: { getToken: async () => "test-token" } } };
+  globalThis.fetch = async (url, init) => {
+    requests.push({ url, init });
+    if (requests.length === 1) return Response.json({ detail: { code: "confirm_resend", message: "Confirm sending again" } }, { status: 409 });
+    return Response.json({ id: 2, status: "sent" });
+  };
+  try {
+    await assert.rejects(api.sendEmailLogEntry(1, 2), error => error.status === 409 && error.code === "confirm_resend" && error.message === "Confirm sending again");
+    assert.ok(requests[0].url.endsWith("/clients/1/email-log/2/send"));
+    await api.sendEmailLogEntry(1, 2, true);
+    assert.ok(requests[1].url.endsWith("/send?confirm_resend=true"));
+  } finally {
+    globalThis.fetch = originalFetch;
+    globalThis.window = originalWindow;
+  }
+});

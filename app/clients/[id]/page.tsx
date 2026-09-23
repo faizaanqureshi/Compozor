@@ -1,5 +1,6 @@
 "use client";
 
+import { DocumentValidationResult } from "@/components/document-validation-result";
 import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { groupClientWorkflows, assignmentReadiness } from "@/lib/client-workflows";
 import { createSnapshotRefresh } from "@/lib/snapshot-refresh";
@@ -59,6 +60,7 @@ import {
   listPackages,
   regenerateClientUploadLink,
   renameDocument,
+  revalidateDocument,
   resolveClientCommitment,
   rerunWorkflowRun,
   runQueuedWorkflowRun,
@@ -938,10 +940,16 @@ function AssignPackagePopup({
   };
 
   useEffect(() => {
-    if (open) {
+    if (!open) return;
+    let active = true;
+    listPackages().then((loaded) => {
+      if (!active) return;
       setSelectedPackage(null);
-      refreshPackages();
-    }
+      setPackages(loaded);
+    }).catch((e) => {
+      if (active) setError(e instanceof ApiError ? e.message : String(e));
+    });
+    return () => { active = false; };
   }, [open]);
 
   // Which of this package's specific document lines are already checked
@@ -1670,18 +1678,6 @@ function DocumentVaultCard({
     return map;
   }, [checklist]);
 
-  const latestDocIdByItem = useMemo(() => {
-    const map: Record<number, { id: number; received_at: string }> = {};
-    for (const doc of documents ?? []) {
-      if (doc.checklist_item_id === null) continue;
-      const existing = map[doc.checklist_item_id];
-      if (!existing || doc.received_at > existing.received_at) {
-        map[doc.checklist_item_id] = { id: doc.id, received_at: doc.received_at };
-      }
-    }
-    return map;
-  }, [documents]);
-
   return (
     <SectionCard
       title="Document vault"
@@ -1755,10 +1751,7 @@ function DocumentVaultCard({
       {error && <p className="text-sm text-destructive">{error}</p>}
       {result && (
         <div className="flex flex-col gap-1 rounded-lg border border-border/60 bg-muted/30 p-3 text-sm">
-          <p>Classified as: {result.document.classified_type ?? "unknown"}</p>
-          <p>Year: {result.document.year ?? "unknown"}</p>
-          <p>Checklist status: {result.checklist_item_status ?? "unmatched"}</p>
-          <p>Draft email created: {result.draft_email_created ? "yes" : "no"}</p>
+          <DocumentValidationResult metadata={result.document.extracted_metadata} />
           {result.document.download_url && (
             <p>
               <a
@@ -1785,7 +1778,7 @@ function DocumentVaultCard({
       ) : (
       <div className="overflow-x-auto">
       <table
-        className="w-full min-w-[600px] border-collapse text-sm animate-blur-in-sm"
+        className="w-full md:min-w-[600px] border-collapse text-sm animate-blur-in-sm"
         style={{ animationDelay: "180ms" }}
       >
         <thead>
@@ -1793,16 +1786,16 @@ function DocumentVaultCard({
             <th className="py-1.5 pr-4 pb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
               Document
             </th>
-            <th className="py-1.5 pr-4 pb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+            <th className="hidden md:table-cell py-1.5 pr-4 pb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
               Source
             </th>
-            <th className="py-1.5 pr-4 pb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+            <th className="hidden md:table-cell py-1.5 pr-4 pb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
               Status
             </th>
-            <th className="py-1.5 pr-4 pb-2.5 text-right text-xs font-medium tracking-wide text-muted-foreground uppercase">
+            <th className="hidden md:table-cell py-1.5 pr-4 pb-2.5 text-right text-xs font-medium tracking-wide text-muted-foreground uppercase">
               Year
             </th>
-            <th className="py-1.5 pr-4 pb-2.5 text-right text-xs font-medium tracking-wide text-muted-foreground uppercase">
+            <th className="hidden md:table-cell py-1.5 pr-4 pb-2.5 text-right text-xs font-medium tracking-wide text-muted-foreground uppercase">
               Received
             </th>
             <th className="py-1.5 pr-0" />
@@ -1814,35 +1807,27 @@ function DocumentVaultCard({
               doc.checklist_item_id !== null
                 ? itemsById[doc.checklist_item_id]
                 : undefined;
-            const isLatestForItem =
-              doc.checklist_item_id !== null &&
-              latestDocIdByItem[doc.checklist_item_id]?.id === doc.id;
-            const rejected =
-              !!item && ((isLatestForItem && item.status === "wrong") || !isLatestForItem);
             return (
               <tr key={doc.id} className="border-b border-border/40">
-                <td className="py-2 pr-4 font-medium">
+                <td className="py-2 pr-4 font-medium [overflow-wrap:anywhere]">
                   {doc.resolved_display_name}
                   {doc.classified_type && doc.classified_type !== doc.resolved_display_name && (
                     <div className="text-xs font-normal text-muted-foreground">{doc.classified_type}</div>
                   )}
+                  <div className="mt-2 md:hidden">
+                    <DocumentValidationResult metadata={doc.extracted_metadata} />
+                  </div>
                 </td>
-                <td className="py-2 pr-4 text-muted-foreground">
+                <td className="hidden py-2 pr-4 text-muted-foreground md:table-cell">
                   {sourceChannelLabel(doc.source_channel)}
                 </td>
-                <td className="py-2 pr-4">
-                  {rejected ? (
-                    <span className="inline-flex items-center rounded-full bg-red-100 px-2.5 py-1 text-xs font-medium text-red-800 dark:bg-red-950/40 dark:text-red-400">
-                      Rejected
-                    </span>
-                  ) : (
-                    <span className="text-muted-foreground">—</span>
-                  )}
+                <td className="hidden py-2 pr-4 md:table-cell">
+                  <DocumentValidationResult metadata={doc.extracted_metadata} />
                 </td>
-                <td className="py-2 pr-4 text-right text-muted-foreground">
+                <td className="hidden py-2 pr-4 text-right text-muted-foreground md:table-cell">
                   {doc.year ?? "—"}
                 </td>
-                <td className="py-2 pr-4 text-right text-muted-foreground">
+                <td className="hidden py-2 pr-4 text-right text-muted-foreground md:table-cell">
                   {new Date(doc.received_at).toLocaleString()}
                 </td>
                 <td className="py-2 pr-0 text-right">
@@ -1933,6 +1918,19 @@ function DocumentActions({
     }
   };
 
+  const onValidate = async () => {
+    setPending(true);
+    setError(null);
+    try {
+      await revalidateDocument(clientId, doc.id);
+      onChange();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setPending(false);
+    }
+  };
+
   const onDelete = async () => {
     setPending(true);
     setError(null);
@@ -1956,6 +1954,9 @@ function DocumentActions({
           <span className="sr-only">Document actions</span>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
+          {validationStatus !== "accepted" && (
+            <DropdownMenuItem onClick={onValidate}>Retry validation</DropdownMenuItem>
+          )}
           <DropdownMenuItem onClick={onStartRename}>Rename document</DropdownMenuItem>
           <DropdownMenuItem
             disabled={!doc.download_url}

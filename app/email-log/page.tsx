@@ -329,6 +329,7 @@ function ArchivedEmailLogDialog({
 
 export default function EmailLogPage() {
   const [status, setStatus] = useState<EmailStatus | "all">("all");
+  const [resendEntry, setResendEntry] = useState<EmailLogEntry | null>(null);
   const [sendingId, setSendingId] = useState<number | null>(null);
   const [resolvingId, setResolvingId] = useState<number | null>(null);
   const [rowError, setRowError] = useState<Record<number, string>>({});
@@ -514,13 +515,16 @@ export default function EmailLogPage() {
   const selectedThread = threads.find((t) => t.key === selectedKey) ?? null;
   const loading = entriesLoading;
 
-  const onSend = async (entry: EmailLogEntry) => {
+  const onSend = async (entry: EmailLogEntry, confirmResend = false) => {
     setSendingId(entry.id);
     setRowError((prev) => ({ ...prev, [entry.id]: "" }));
     try {
-      await sendEmailLogEntry(entry.client_id, entry.id);
+      await sendEmailLogEntry(entry.client_id, entry.id, confirmResend);
+      setResendEntry(null);
       mutateEntries();
     } catch (e) {
+      if (e instanceof ApiError && e.code === "confirm_resend") setResendEntry(entry);
+      mutateEntries();
       setRowError((prev) => ({
         ...prev,
         [entry.id]: e instanceof ApiError ? e.message : String(e),
@@ -579,7 +583,14 @@ export default function EmailLogPage() {
 
   const onBulkSend = async () => {
     setBulkSending(true);
-    await Promise.allSettled(selectedDrafts.map((m) => sendEmailLogEntry(m.client_id, m.id)));
+    const outcomes = await Promise.allSettled(selectedDrafts.map((m) => sendEmailLogEntry(m.client_id, m.id)));
+    setRowError((prev) => {
+      const next = { ...prev };
+      outcomes.forEach((outcome, index) => {
+        if (outcome.status === "rejected") next[selectedDrafts[index].id] = String(outcome.reason.message ?? outcome.reason);
+      });
+      return next;
+    });
     setBulkSending(false);
     setSelectedKeys(new Set());
     mutateEntries();
@@ -610,6 +621,23 @@ export default function EmailLogPage() {
 
   return (
     <div className="flex h-[calc(100vh-6.5rem)] w-full flex-col gap-8 md:h-[calc(100vh-3rem)] xl:h-[calc(100vh-5rem)]">
+      <Dialog open={resendEntry !== null} onOpenChange={(open) => !open && sendingId === null && setResendEntry(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Send this email again?</DialogTitle>
+            <DialogDescription>
+              The mailbox did not confirm the earlier attempt. Sending again could create a duplicate if it was already delivered.
+            </DialogDescription>
+          </DialogHeader>
+          {resendEntry && rowError[resendEntry.id] && <p className="text-sm text-muted-foreground">{rowError[resendEntry.id]}</p>}
+          <DialogFooter>
+            <Button variant="outline" disabled={sendingId !== null} onClick={() => setResendEntry(null)}>Cancel</Button>
+            <Button disabled={sendingId !== null} onClick={() => resendEntry && onSend(resendEntry, true)}>
+              {sendingId !== null ? "Sending…" : "Send again"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <div className="flex flex-col gap-2">
         <h1 className="text-4xl font-thin tracking-tight [font-family:var(--font-denton)] sm:text-5xl md:text-6xl">
           Email log
@@ -819,6 +847,7 @@ export default function EmailLogPage() {
       </div>
 
       <DraftEditDialog
+        key={editingEntry?.id ?? "closed"}
         entry={editingEntry}
         onOpenChange={(open) => {
           if (!open) setEditingEntry(null);
@@ -980,7 +1009,7 @@ function MessageCard({
       {entry.status === "draft" && (
         <div className="flex items-center gap-2">
           <Button size="sm" disabled={sending} onClick={onSend}>
-            {sending ? "Checking…" : entry.delivery_state === "uncertain" || entry.delivery_state === "sending" ? "Check delivery" : "Send"}
+            {sending ? "Sending…" : "Send"}
           </Button>
           <Button size="sm" variant="outline" disabled={sending || entry.delivery_state === "uncertain" || entry.delivery_state === "sending"} onClick={onEdit}>
             <Pencil className="size-3.5" />
@@ -1163,16 +1192,9 @@ function DraftEditDialog({
   onOpenChange: (open: boolean) => void;
   onSave: (content: string) => Promise<void>;
 }) {
-  const [draft, setDraft] = useState("");
+  const [draft, setDraft] = useState(entry?.content ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (entry) {
-      setDraft(entry.content);
-      setError(null);
-    }
-  }, [entry]);
 
   const handleSave = async () => {
     setSaving(true);

@@ -5,9 +5,11 @@ const API_BASE_URL =
 
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  code?: string;
+  constructor(status: number, message: string, code?: string) {
     super(message);
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -15,6 +17,9 @@ async function responseError(res: Response): Promise<ApiError> {
   let message = `${res.status} ${res.statusText}`;
   try {
     const body = await res.json();
+    if (typeof body.detail?.message === "string") {
+      return new ApiError(res.status, body.detail.message, body.detail.code);
+    }
     message = typeof body.detail === "string"
       ? body.detail
       : JSON.stringify(body.detail ?? body);
@@ -705,6 +710,9 @@ export const listClientDocuments = (clientId: number) =>
 
 // Presentation only - never touches classified_type, checklist matching,
 // or the R2 object key.
+export const revalidateDocument = (clientId: number, documentId: number) =>
+  request<DocumentUploadResult>(`/clients/${clientId}/documents/${documentId}/validate`, { method: "POST" });
+
 export const renameDocument = (clientId: number, documentId: number, displayName: string) =>
   request<DocumentOut>(`/clients/${clientId}/documents/${documentId}`, json("PATCH", { display_name: displayName }));
 
@@ -808,9 +816,9 @@ export const restoreEmailLogEntries = (emailLogIds: number[]) =>
 export const purgeEmailLogEntries = (emailLogIds: number[]) =>
   request<void>("/email-log/purge", json("POST", { email_log_ids: emailLogIds }));
 
-export const sendEmailLogEntry = (clientId: number, emailLogId: number) =>
+export const sendEmailLogEntry = (clientId: number, emailLogId: number, confirmResend = false) =>
   request<EmailLogEntry>(
-    `/clients/${clientId}/email-log/${emailLogId}/send`,
+    `/clients/${clientId}/email-log/${emailLogId}/send${confirmResend ? "?confirm_resend=true" : ""}`,
     { method: "POST" }
   );
 
