@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useUser } from "@clerk/nextjs";
 import { Check, Loader2 } from "lucide-react";
 import { GmailIcon } from "@/components/icons/gmail";
 import { OutlookIcon } from "@/components/icons/outlook";
@@ -17,6 +18,7 @@ import {
   updateMyOrganization,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { extractPhoneDigits, formatPhoneDisplay, isValidPhoneDigits } from "@/lib/phone";
 import { PRACTICE_CATEGORIES } from "@/lib/practice-types";
 import { AuroraBackground } from "@/components/aurora-background";
 import { Button } from "@/components/ui/button";
@@ -95,6 +97,7 @@ function StepIndicator({ step }: { step: Step }) {
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const { user } = useUser();
   const [org, setOrg] = useState<Organization | null>(null);
   const [connections, setConnections] = useState<InboxConnection[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -103,6 +106,14 @@ export default function OnboardingPage() {
   const [customPracticeType, setCustomPracticeType] = useState("");
   const [name, setName] = useState("");
   const nameTouched = useRef(false);
+  // The person filling this out, not the firm - separate field so a firm
+  // with several employees (each their own Compozor account/instance, once
+  // that exists) can each carry their own name against the same org,
+  // rather than this doubling as the firm's own identity.
+  const [contactName, setContactName] = useState("");
+  const contactNameTouched = useRef(false);
+  const [phoneDigits, setPhoneDigits] = useState("");
+  const [phoneError, setPhoneError] = useState<string | null>(null);
   const [practiceDescription, setPracticeDescription] = useState("");
   const [jurisdiction, setJurisdiction] = useState("");
   const [savingPractice, setSavingPractice] = useState(false);
@@ -122,11 +133,24 @@ export default function OnboardingPage() {
         setOrg(nextOrg);
         setConnections(nextConnections);
         setName((prev) => (nameTouched.current || prev ? prev : nextOrg.name));
+        setContactName((prev) => (contactNameTouched.current || prev ? prev : nextOrg.contact_name ?? ""));
+        setPhoneDigits((prev) => (prev ? prev : nextOrg.phone ?? ""));
       })
       .catch((e) => setLoadError(e instanceof ApiError ? e.message : String(e)));
   };
 
   useEffect(load, []);
+
+  // Clerk's own name is a convenience starting point, same as Settings'
+  // "Your profile" edit does - never overwrites an already-persisted
+  // contact_name, and only applies once (contactNameTouched), so typing
+  // something different and it loading a beat later can't clobber it.
+  // Separate from `load` above since `user` can become available on its
+  // own schedule, after org data has already loaded.
+  useEffect(() => {
+    if (contactNameTouched.current || org?.contact_name) return;
+    if (user?.fullName) setContactName(user.fullName);
+  }, [user?.fullName, org?.contact_name]);
 
   const step: Step | null = !org
     ? null
@@ -142,6 +166,11 @@ export default function OnboardingPage() {
     setPracticeDescription(seed);
   };
 
+  const onPhoneChange = (raw: string) => {
+    setPhoneDigits(extractPhoneDigits(raw));
+    setPhoneError(null);
+  };
+
   const onSubmitPractice = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!category) {
@@ -154,11 +183,17 @@ export default function OnboardingPage() {
       setPracticeError("Enter your practice type.");
       return;
     }
+    if (phoneDigits && !isValidPhoneDigits(phoneDigits)) {
+      setPhoneError("Enter a valid 10-digit phone number.");
+      return;
+    }
     setSavingPractice(true);
     setPracticeError(null);
     try {
       const updated = await updateMyOrganization({
         name: name.trim(),
+        contact_name: contactName.trim(),
+        phone: phoneDigits,
         practice_type: practiceType,
         practice_description: practiceDescription.trim(),
         jurisdiction: jurisdiction.trim(),
@@ -229,6 +264,38 @@ export default function OnboardingPage() {
                 onSubmit={onSubmitPractice}
                 className="flex animate-blur-in-sm flex-col gap-6 rounded-2xl bg-card p-6 ring-1 ring-foreground/10"
               >
+                <div className="flex flex-col gap-4 border-b border-border/70 pb-6">
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="contact-name">Your name</Label>
+                    <Input
+                      id="contact-name"
+                      required
+                      placeholder="e.g. Jane Doe"
+                      value={contactName}
+                      onChange={(e) => {
+                        setContactName(e.target.value);
+                        contactNameTouched.current = true;
+                      }}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="contact-phone">Phone number</Label>
+                    <Input
+                      id="contact-phone"
+                      type="tel"
+                      placeholder="e.g. (416) 000-1234"
+                      value={phoneDigits.length > 10 ? phoneDigits : formatPhoneDisplay(phoneDigits)}
+                      onChange={(e) => onPhoneChange(e.target.value)}
+                      aria-invalid={Boolean(phoneError)}
+                    />
+                    {phoneError && <p className="text-sm text-destructive">{phoneError}</p>}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    You, not the firm - shows up wherever Compozor identifies who&apos;s using it.
+                    Phone is optional.
+                  </p>
+                </div>
+
                 <div className="flex flex-col gap-1.5 border-b border-border/70 pb-6">
                   <Label htmlFor="firm-name">Firm name</Label>
                   <Input
