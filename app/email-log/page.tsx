@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
-import { AlertTriangle, ArchiveRestore, ArrowDownLeft, ArrowLeft, ArrowUpRight, Check, Download, FileText, Info, Loader2, Mail, Paperclip, Search, Send, Sparkles, Trash2 } from "lucide-react";
+import { AlertTriangle, ArchiveRestore, ArrowLeft, ArrowUpRight, Check, Download, FileText, Info, Loader2, Mail, Paperclip, Search, Send, Trash2 } from "lucide-react";
 import { clientsKey, emailLogKey } from "@/lib/swr-keys";
 import {
   ApiError,
@@ -28,6 +28,8 @@ import { cn, formatRelativeTime } from "@/lib/utils";
 import { AgentActivityDisclosure, TraceStep } from "@/components/agent-activity-disclosure";
 import { EmailDraftEditor } from "@/components/email-draft-editor";
 import { EmailBody } from "@/components/email-body";
+import { snippet } from "@/lib/email-content";
+import { StateLabel, messageState, threadMessagesState } from "@/components/email-state-label";
 import { EmailHtmlFrame } from "@/components/email-html-frame";
 import { Linkify } from "@/components/linkify";
 import { PurgeConfirmDialog } from "@/components/purge-confirm-dialog";
@@ -77,23 +79,6 @@ const viewOptions: { value: View; label: string }[] = [
   { value: "sent", label: "Sent" },
 ];
 
-type MessageTone = "issue" | "warning" | "received" | "sent" | "muted";
-
-// The one label a staff member needs for a message: what happened to it.
-function messageState(entry: EmailLogEntry): { label: string; tone: MessageTone } {
-  if (entry.status === "needs_human_attention") {
-    return entry.resolved_at ? { label: "Resolved", tone: "muted" } : { label: "Needs review", tone: "issue" };
-  }
-  if (entry.status === "draft") {
-    if (entry.delivery_state === "sending") return { label: "Sending…", tone: "muted" };
-    if (entry.delivery_state === "uncertain") return { label: "Delivery unconfirmed", tone: "warning" };
-    if (entry.delivery_state === "failed") return { label: "Send failed", tone: "issue" };
-    return { label: "Draft", tone: "warning" };
-  }
-  if (entry.status === "sent") return { label: entry.autosent ? "Auto-sent" : "Sent", tone: "sent" };
-  return { label: "Received", tone: "received" };
-}
-
 function threadNeedsReview(thread: Thread) {
   return thread.messages.some((m) => m.status === "needs_human_attention" && !m.resolved_at);
 }
@@ -102,12 +87,8 @@ function threadHasDraft(thread: Thread) {
   return thread.messages.some((m) => m.status === "draft");
 }
 
-// Thread-level state: anything needing a human outranks what happened last.
-function threadState(thread: Thread): { label: string; tone: MessageTone } {
-  if (threadNeedsReview(thread)) return { label: "Needs review", tone: "issue" };
-  const draft = [...thread.messages].reverse().find((m) => m.status === "draft");
-  if (draft) return messageState(draft);
-  return messageState(thread.messages[thread.messages.length - 1]);
+function threadState(thread: Thread) {
+  return threadMessagesState(thread.messages);
 }
 
 function matchesView(thread: Thread, view: View) {
@@ -124,11 +105,6 @@ function matchesView(thread: Thread, view: View) {
     default:
       return true;
   }
-}
-
-function snippet(content: string | null, length = 140) {
-  const flat = (content ?? "").replace(/\[([^\]]+)\]\([^)]+\)/g, "$1").replace(/\s+/g, " ").trim();
-  return flat.length > length ? `${flat.slice(0, length).trimEnd()}…` : flat;
 }
 
 function normalizeSubject(subject: string | null) {
@@ -891,34 +867,6 @@ export default function EmailLogPage() {
         </div>
       </div>
     </div>
-  );
-}
-
-const toneText: Record<MessageTone, string> = {
-  issue: "text-destructive",
-  warning: "text-warning-foreground",
-  received: "text-foreground",
-  sent: "text-muted-foreground",
-  muted: "text-muted-foreground",
-};
-
-function StateLabel({ state, className }: { state: { label: string; tone: MessageTone }; className?: string }) {
-  const Icon =
-    state.tone === "received" ? ArrowDownLeft : state.tone === "sent" ? (state.label === "Auto-sent" ? Sparkles : ArrowUpRight) : null;
-  return (
-    <span className={cn("inline-flex shrink-0 items-center gap-1.5 text-xs font-medium", toneText[state.tone], className)}>
-      {Icon ? (
-        <Icon className="size-3" />
-      ) : (
-        <span
-          className={cn(
-            "size-1.5 rounded-full",
-            state.tone === "issue" ? "bg-destructive" : state.tone === "warning" ? "bg-warning" : "bg-muted-foreground/50"
-          )}
-        />
-      )}
-      {state.label}
-    </span>
   );
 }
 

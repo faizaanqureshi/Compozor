@@ -18,6 +18,7 @@ import {
 } from "@/lib/swr-keys";
 import { useRouter } from "next/navigation";
 import {
+  AlertTriangle,
   ArrowLeft,
   CheckCircle2,
   ChevronDown,
@@ -26,6 +27,7 @@ import {
   Loader2,
   Mail,
   MoreHorizontal,
+  Paperclip,
   Pencil,
   Play,
   Plus,
@@ -47,6 +49,7 @@ import {
   CommitmentStatus,
   DocumentOut,
   DocumentUploadResult,
+  EmailLogEntry,
   EmailThread,
   MeetingRequest,
   MeetingRequestStatus,
@@ -62,6 +65,7 @@ import {
   downloadClientDocumentsZip,
   getClient,
   getClientUploadLink,
+  getEmailLogHtml,
   listChecklistItems,
   listClientCommitments,
   listClientDocuments,
@@ -87,8 +91,8 @@ import {
   uploadDocument,
   waiveChecklistItem,
 } from "@/lib/api";
-import { cn, formatPhoneNumber } from "@/lib/utils";
-import { computeTier, startOfDay, TIER_META } from "@/lib/checklist-urgency";
+import { cn, formatPhoneNumber, formatShortDate } from "@/lib/utils";
+import { computeTier, relativeDays, startOfDay, TIER_META } from "@/lib/checklist-urgency";
 import { ResumeWorkflowDialog } from "@/components/resume-workflow-dialog";
 import { AgentActivityDisclosure } from "@/components/agent-activity-disclosure";
 import { ClientWorkflowActivity } from "@/components/client-workflow-activity";
@@ -96,7 +100,6 @@ import { AssignWorkflowDialog } from "@/components/assign-workflow-dialog";
 import { PackageDocumentPicker } from "@/components/package-document-picker";
 import { PackageFormDialog } from "@/components/package-form-dialog";
 import { ChecklistItemFormDialog } from "@/components/checklist-item-form-dialog";
-import { Linkify } from "@/components/linkify";
 import {
   Accordion,
 } from "@/components/ui/accordion";
@@ -105,6 +108,11 @@ import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Panel } from "@/components/panel";
+import { EmailBody } from "@/components/email-body";
+import { EmailHtmlFrame } from "@/components/email-html-frame";
+import { StateLabel, messageState, threadMessagesState } from "@/components/email-state-label";
+import { ProgressRule, StatStrip, type StatStripItem } from "@/components/stat-strip";
 import {
   Dialog,
   DialogContent,
@@ -121,64 +129,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-function SectionCard({
-  title,
-  meta,
-  action,
-  loadError,
-  className,
-  children,
-}: {
-  title: string;
-  meta?: React.ReactNode;
-  action?: React.ReactNode;
-  // One failed request shows a quiet note in its own section instead of
-  // breaking the whole page.
-  loadError?: string | null;
-  className?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className={cn("flex min-w-0 flex-col gap-4 rounded-xl bg-card p-5 ring-1 ring-foreground/10", className)}>
-      <div className="flex min-h-8 flex-wrap items-center justify-between gap-x-4 gap-y-2">
-        <div className="flex min-w-0 flex-wrap items-baseline gap-x-2.5 gap-y-1">
-          <h2 className="text-[0.9375rem] font-medium tracking-tight">{title}</h2>
-          {meta && <div className="text-sm text-muted-foreground">{meta}</div>}
-        </div>
-        {action && <div className="flex shrink-0 items-center gap-1.5">{action}</div>}
-      </div>
-      {loadError ? (
-        <p className="text-sm text-muted-foreground" title={loadError}>
-          Couldn&apos;t load this section right now.
-        </p>
-      ) : (
-        children
-      )}
-    </section>
-  );
-}
-
 // Shared quiet table header cell.
 const th = "py-1.5 pr-4 pb-2.5 text-[0.6875rem] font-normal tracking-wider text-muted-foreground uppercase";
 
 function errorMessage(e: unknown): string {
   return e instanceof ApiError ? e.message : String(e);
-}
-
-function formatShortDate(iso: string, withYear = false): string {
-  return new Date(iso.length === 10 ? `${iso}T00:00:00` : iso).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    ...(withYear ? { year: "numeric" } : {}),
-  });
-}
-
-function relativeDays(iso: string, today: Date): string {
-  const days = Math.round((startOfDay(new Date(iso)).getTime() - today.getTime()) / 86_400_000);
-  if (days === 0) return "today";
-  if (days === 1) return "tomorrow";
-  if (days === -1) return "yesterday";
-  return days > 0 ? `in ${days} days` : `${-days} days ago`;
 }
 
 const statusPillClasses: Record<ChecklistItemStatus, string> = {
@@ -382,7 +337,7 @@ export default function ClientDetailPage({
             onChange={refresh}
           />
 
-          <CommunicationCard threads={threads} loadError={loadErrors.threads} />
+          <CommunicationCard threads={threads} clientName={client?.name} loadError={loadErrors.threads} />
         </div>
 
         {/* Grid on tablets (cards top-aligned), a full-width column beside the main content on xl. */}
@@ -550,7 +505,7 @@ function ClientSummary({
   const completed = latestRuns.filter((r) => r.status === "completed").length;
 
   const outstanding = checklist ? checklist.missing + checklist.wrong : 0;
-  const tiles: { label: string; value: React.ReactNode; detail: React.ReactNode; tone?: string }[] = checklist && client
+  const tiles: StatStripItem[] = checklist && client
     ? [
         {
           label: "Documents",
@@ -562,12 +517,7 @@ function ClientSummary({
           ),
           detail: (
             <span className="flex items-center gap-2">
-              <span className="h-1 w-16 overflow-hidden rounded-full bg-muted">
-                <span
-                  className="block h-full rounded-full bg-success"
-                  style={{ width: `${checklist.total ? (checklist.received / checklist.total) * 100 : 0}%` }}
-                />
-              </span>
+              <ProgressRule value={checklist.received} total={checklist.total} />
               received
             </span>
           ),
@@ -620,38 +570,7 @@ function ClientSummary({
       ]
     : [];
 
-  return (
-    <section
-      aria-label="Client summary"
-      className="grid grid-cols-2 overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10 md:grid-cols-3 xl:grid-cols-5"
-    >
-      {loading
-        ? Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="flex flex-col gap-3 border-border p-5 [&:not(:first-child)]:border-l">
-              <Skeleton className="h-3 w-20" />
-              <Skeleton className="h-7 w-12" />
-              <Skeleton className="h-3 w-28" />
-            </div>
-          ))
-        : tiles.map((tile, i) => (
-            <div
-              key={tile.label}
-              className={cn(
-                "flex min-w-0 flex-col gap-1.5 border-border p-5",
-                i > 0 && "border-l",
-                i === 2 && "max-md:border-l-0 max-md:border-t",
-                i >= 2 && "max-md:border-t",
-                i === 3 && "md:max-xl:border-l-0 md:max-xl:border-t",
-                i === 4 && "max-md:border-l-0 md:max-xl:border-t"
-              )}
-            >
-              <span className="text-[0.6875rem] tracking-wider text-muted-foreground uppercase">{tile.label}</span>
-              <span className={cn("text-2xl font-light tracking-tight tabular-nums", tile.tone)}>{tile.value}</span>
-              <span className="truncate text-xs text-muted-foreground">{tile.detail}</span>
-            </div>
-          ))}
-    </section>
-  );
+  return <StatStrip label="Client summary" items={tiles} loading={loading} />;
 }
 
 function ClientDetailsCard({
@@ -702,7 +621,7 @@ function ClientDetailsCard({
     : [];
 
   return (
-    <SectionCard
+    <Panel
       title="Details"
       action={
         <Button variant="ghost" size="sm" onClick={onManagePackages}>
@@ -726,7 +645,7 @@ function ClientDetailsCard({
           ))}
         </dl>
       )}
-    </SectionCard>
+    </Panel>
   );
 }
 
@@ -995,7 +914,7 @@ function ChecklistCard({
   };
 
   return (
-    <SectionCard
+    <Panel
       title="Documents requested"
       loadError={loadError}
       meta={
@@ -1177,7 +1096,7 @@ function ChecklistCard({
           {error && <p className="text-sm text-destructive">{error}</p>}
         </DialogContent>
       </Dialog>
-    </SectionCard>
+    </Panel>
   );
 }
 
@@ -1288,7 +1207,7 @@ function AssignPackagePopup({
               </div>
             ) : packages.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                No packages yet - use &quot;Create New Package&quot; above to create one.
+                No packages yet - use &quot;New package&quot; above to create one.
               </p>
             ) : (
               <div className="grid max-h-[65vh] grid-cols-1 gap-3 overflow-y-auto sm:grid-cols-2">
@@ -1525,7 +1444,7 @@ function MeetingCard({
   loadError?: string | null;
 }) {
   return (
-    <SectionCard title="Meetings" loadError={loadError}>
+    <Panel title="Meetings" loadError={loadError}>
       {meetings === null ? (
         <div className="flex flex-col gap-2">
           <Skeleton className="h-9 w-full" />
@@ -1551,7 +1470,7 @@ function MeetingCard({
           ))}
         </ul>
       )}
-    </SectionCard>
+    </Panel>
   );
 }
 
@@ -1570,7 +1489,7 @@ function WaitingOnCard({
   const open = commitments?.filter((c) => c.status === "pending" || c.status === "escalated") ?? [];
   const closed = commitments?.filter((c) => c.status !== "pending" && c.status !== "escalated") ?? [];
   return (
-    <SectionCard
+    <Panel
       title="Waiting on"
       meta={open.length > 0 ? `${open.length} open` : undefined}
       loadError={loadError}
@@ -1607,7 +1526,7 @@ function WaitingOnCard({
           })}
         </ul>
       )}
-    </SectionCard>
+    </Panel>
   );
 }
 
@@ -1691,13 +1610,15 @@ function CommitmentResolveActions({
 
 function CommunicationCard({
   threads,
+  clientName,
   loadError,
 }: {
   threads: EmailThread[] | null;
+  clientName?: string;
   loadError?: string | null;
 }) {
   return (
-    <SectionCard
+    <Panel
       title="Conversation"
       meta={threads && threads.length > 0 ? `${threads.length} thread${threads.length === 1 ? "" : "s"}` : undefined}
       loadError={loadError}
@@ -1707,12 +1628,12 @@ function CommunicationCard({
         </Button>
       }
     >
-      <ThreadsList threads={threads} />
-    </SectionCard>
+      <ThreadsList threads={threads} clientName={clientName} />
+    </Panel>
   );
 }
 
-function ThreadsList({ threads }: { threads: EmailThread[] | null }) {
+function ThreadsList({ threads, clientName }: { threads: EmailThread[] | null; clientName?: string }) {
   const [expandedThread, setExpandedThread] = useState<string | null>(null);
 
   if (threads === null) {
@@ -1729,74 +1650,42 @@ function ThreadsList({ threads }: { threads: EmailThread[] | null }) {
   }
 
   return (
-    <div
-      className="flex flex-col divide-y divide-border/50 rounded-lg border border-border/60 animate-fade-in"
-    >
-      {threads?.map((thread) => {
+    <div className="flex flex-col divide-y divide-border/60 rounded-lg border border-border/60 animate-fade-in">
+      {threads.map((thread) => {
         const latest = thread.messages[thread.messages.length - 1];
         const isOpen = expandedThread === thread.thread_key;
         return (
           <div key={thread.thread_key}>
             <button
               type="button"
-              onClick={() =>
-                setExpandedThread(isOpen ? null : thread.thread_key)
-              }
-              className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50"
+              aria-expanded={isOpen}
+              onClick={() => setExpandedThread(isOpen ? null : thread.thread_key)}
+              className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/40"
             >
-              <span className="flex min-w-0 flex-col gap-0.5">
-                <span className="truncate text-sm font-medium">
-                  {latest?.subject || "(no subject)"}
-                </span>
+              <span className="flex min-w-0 flex-col gap-1">
+                <span className="truncate text-sm font-medium">{latest?.subject || "(no subject)"}</span>
                 {latest && (
-                  <span className="truncate text-xs text-muted-foreground">
-                    {latest.direction === "inbound" ? "Client replied" : latest.status === "draft" ? "Draft awaiting send" : "Sent"}
-                    {" · "}
+                  <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+                    <StateLabel state={threadMessagesState(thread.messages)} />
+                    <span aria-hidden className="text-muted-foreground/50">·</span>
                     {formatShortDate(latest.created_at)}
+                    {thread.messages.length > 1 && (
+                      <>
+                        <span aria-hidden className="text-muted-foreground/50">·</span>
+                        {thread.messages.length} messages
+                      </>
+                    )}
                   </span>
                 )}
               </span>
-              <span className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
-                {thread.messages.length} message
-                {thread.messages.length === 1 ? "" : "s"}
-                <ChevronDown
-                  className={cn(
-                    "size-3.5 transition-transform",
-                    isOpen && "rotate-180"
-                  )}
-                />
-              </span>
+              <ChevronDown
+                className={cn("size-3.5 shrink-0 text-muted-foreground transition-transform", isOpen && "rotate-180")}
+              />
             </button>
             {isOpen && (
-              <div className="flex flex-col divide-y divide-border/40 border-t border-border/60 bg-muted/30">
+              <div className="flex flex-col divide-y divide-border/50 border-t border-border/60 bg-muted/20">
                 {thread.messages.map((m) => (
-                  <div key={m.id} className="px-3.5 py-2.5 text-sm">
-                    <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1.5">
-                        {m.direction} · {m.status}
-                        {m.is_clarifying_question && (
-                          <span
-                            title="Clarifying question — awaiting a resolving reply"
-                            className="inline-flex size-4 items-center justify-center rounded-full bg-accent/15 text-[10px] font-semibold text-accent"
-                          >
-                            ?
-                          </span>
-                        )}
-                      </span>
-                      <span>{new Date(m.created_at).toLocaleString()}</span>
-                    </div>
-                    <p className="whitespace-pre-wrap text-foreground/80">
-                      <Linkify text={m.content} />
-                    </p>
-                    {m.escalation_reason && (
-                      <p className="mt-1 text-xs text-warning-foreground">
-                        {m.escalation_reason}
-                      </p>
-                    )}
-                    {m.tool_trajectory && m.tool_trajectory.length > 0 && (
-                      <AgentActivityDisclosure trajectory={m.tool_trajectory} />
-                    )}
-                  </div>
+                  <ConversationMessage key={m.id} entry={m} clientName={clientName} />
                 ))}
               </div>
             )}
@@ -1804,6 +1693,73 @@ function ThreadsList({ threads }: { threads: EmailThread[] | null }) {
         );
       })}
     </div>
+  );
+}
+
+// One message in the client's conversation, read-only: the same sender line,
+// status, original formatting, and review note as the email log.
+function ConversationMessage({ entry, clientName }: { entry: EmailLogEntry; clientName?: string }) {
+  const inbound = entry.direction === "inbound";
+  const unresolved = entry.status === "needs_human_attention" && !entry.resolved_at;
+  return (
+    <article className="flex min-w-0 flex-col gap-3 px-4 py-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <span className="text-sm font-medium">{inbound ? clientName ?? entry.from_email ?? "Client" : "Your firm"}</span>
+        <span className="flex items-center gap-3">
+          <StateLabel state={messageState(entry)} />
+          <time
+            dateTime={entry.created_at}
+            title={new Date(entry.created_at).toLocaleString()}
+            className="text-xs text-muted-foreground tabular-nums"
+          >
+            {new Date(entry.created_at).toLocaleString(undefined, {
+              month: "short",
+              day: "numeric",
+              hour: "numeric",
+              minute: "2-digit",
+            })}
+          </time>
+        </span>
+      </div>
+
+      {entry.status === "needs_human_attention" && entry.escalation_reason && (
+        <div
+          className={cn(
+            "flex items-start gap-2.5 rounded-lg px-3 py-2.5 text-sm",
+            unresolved ? "bg-destructive/[0.06]" : "bg-muted/60 text-muted-foreground"
+          )}
+        >
+          <AlertTriangle className={cn("mt-0.5 size-3.5 shrink-0", unresolved && "text-destructive")} />
+          <span className="text-pretty whitespace-pre-wrap">{entry.escalation_reason}</span>
+        </div>
+      )}
+
+      {inbound && entry.has_html ? (
+        <EmailHtmlFrame
+          cacheKey={["email-html", entry.id]}
+          load={() => getEmailLogHtml(entry.id)}
+          fallback={<EmailBody content={entry.content} className="max-w-prose" />}
+        />
+      ) : (
+        <EmailBody content={entry.content} className="max-w-prose" />
+      )}
+
+      {(entry.documents.length > 0 || entry.is_clarifying_question) && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+          {entry.documents.length > 0 && (
+            <span className="inline-flex items-center gap-1.5">
+              <Paperclip className="size-3" />
+              {entry.documents.length} attachment{entry.documents.length === 1 ? "" : "s"}
+            </span>
+          )}
+          {entry.is_clarifying_question && <span>Clarifying question, awaiting the client&apos;s answer</span>}
+        </div>
+      )}
+
+      {entry.tool_trajectory && entry.tool_trajectory.length > 0 && (
+        <AgentActivityDisclosure trajectory={entry.tool_trajectory} />
+      )}
+    </article>
   );
 }
 
@@ -1883,7 +1839,7 @@ function DocumentVaultCard({
         Drop to upload
       </div>
     )}
-    <SectionCard
+    <Panel
       title="Files"
       meta={documents && documents.length > 0 ? `${documents.length} received` : undefined}
       loadError={loadError}
@@ -2004,7 +1960,7 @@ function DocumentVaultCard({
       </table>
       </div>
       )}
-    </SectionCard>
+    </Panel>
     </div>
   );
 }
@@ -2252,7 +2208,7 @@ function UploadLinkCard({ clientId }: { clientId: number }) {
   };
 
   return (
-    <SectionCard
+    <Panel
       title="Upload link"
       action={
         <Button variant="ghost" size="sm" disabled={busy} onClick={onRegenerate}>
@@ -2311,7 +2267,7 @@ function UploadLinkCard({ clientId }: { clientId: number }) {
           )}
         </div>
       )}
-    </SectionCard>
+    </Panel>
   );
 }
 
@@ -2420,7 +2376,7 @@ function WorkflowRunsCard({
   const displayGroups = groups;
 
   return (
-    <SectionCard
+    <Panel
       title="Workflows"
       action={
         <AssignWorkflowDialog
@@ -2520,7 +2476,7 @@ function WorkflowRunsCard({
         </Accordion>
       )}
       {error && <p className="text-sm text-destructive">{error}</p>}
-    </SectionCard>
+    </Panel>
   );
 }
 
@@ -2601,7 +2557,7 @@ function MemoryNotesCard({
   onChange: () => void;
 }) {
   return (
-    <SectionCard title="What we know" loadError={loadError}>
+    <Panel title="What we know" loadError={loadError}>
       {notes === null ? (
         <div className="flex flex-col gap-2">
           <Skeleton className="h-4 w-2/3" />
@@ -2646,7 +2602,7 @@ function MemoryNotesCard({
         )}
       </div>
       )}
-    </SectionCard>
+    </Panel>
   );
 }
 

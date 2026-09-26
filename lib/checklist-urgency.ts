@@ -6,7 +6,7 @@ import type { ChecklistItem } from "@/lib/api";
 // same as "deadline >3 days out" (both = on_track) is deliberate, not a
 // missing-data workaround - see the design discussion on COM-8.
 //
-// Shared between components/urgency-dashboard.tsx and the client detail
+// Shared between components/outstanding-documents.tsx and the client detail
 // page's checklist table so "red/yellow/neutral" means the exact same thing
 // everywhere it's shown, not two independently-drifting copies of this logic.
 export type Tier = "overdue" | "due_soon" | "on_track";
@@ -15,6 +15,16 @@ export const MS_PER_DAY = 86_400_000;
 
 export function startOfDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+// Whole calendar days, in words: "today", "in 3 days", "2 days ago".
+export function relativeDays(iso: string, today: Date): string {
+  const date = iso.length === 10 ? new Date(`${iso}T00:00:00`) : new Date(iso);
+  const days = Math.round((startOfDay(date).getTime() - today.getTime()) / MS_PER_DAY);
+  if (days === 0) return "today";
+  if (days === 1) return "tomorrow";
+  if (days === -1) return "yesterday";
+  return days > 0 ? `in ${days} days` : `${-days} days ago`;
 }
 
 export function computeTier(item: ChecklistItem, today: Date): { tier: Tier; daysUntil: number | null } {

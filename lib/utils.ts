@@ -31,6 +31,16 @@ export function formatRelativeTime(iso: string): string {
   return relativeTimeFormatter.format(diffSeconds, "second")
 }
 
+// "Sep 26" (or "Sep 26, 2026"). Date-only strings (YYYY-MM-DD) are read as
+// local midnight so they don't shift a day in negative UTC offsets.
+export function formatShortDate(iso: string, withYear = false): string {
+  return new Date(iso.length === 10 ? `${iso}T00:00:00` : iso).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    ...(withYear ? { year: "numeric" } : {}),
+  })
+}
+
 // Costs are computed server-side from fractions of a cent per call (see
 // openai_pricing.py), so a $0.01-precision formatter would round small
 // per-org totals to "$0.00" - four decimal places keeps them legible.
