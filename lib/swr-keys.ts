@@ -42,6 +42,8 @@ export const unmatchedEmailsKey = (filters?: {
     filters?.category ?? "all",
   ] as const;
 
+export const adminSummaryKey = (range: RangePreset) => ["admin-summary", range] as const;
+
 export const adminOrganizationsKey = (range: RangePreset) => ["admin-organizations", range] as const;
 
 export const adminUsageOverviewKey = (bucket: UsageBucket, range: RangePreset) =>
@@ -49,3 +51,6 @@ export const adminUsageOverviewKey = (bucket: UsageBucket, range: RangePreset) =
 
 export const adminOrganizationUsageKey = (organizationId: number, bucket: UsageBucket, range: RangePreset) =>
   ["admin-organization-usage", organizationId, bucket, range] as const;
+
+export const adminClientUsageKey = (organizationId: number, clientId: number, bucket: UsageBucket, range: RangePreset) =>
+  ["admin-client-usage", organizationId, clientId, bucket, range] as const;

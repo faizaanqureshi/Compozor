@@ -406,69 +406,107 @@ export interface MeetingRequest {
 // doesn't know yet - see openai_pricing.py). Nonzero means cost_usd
 // understates real spend for that row.
 
-export interface OrganizationUsageOut {
+// Every usage aggregate from /admin. cost_usd is the full cost: model
+// tokens (token_cost_usd) plus hosted tools (tool_cost_usd: web search calls
+// and code interpreter sessions, which OpenAI bills separately).
+// category_costs splits cost_usd by product area - see UsageCategory.
+// unpriced_call_count > 0 means a model had no price, so cost understates.
+export type UsageCategory = "email" | "documents" | "workflows" | "client_import" | "other";
+
+export interface UsageAggregate {
+  call_count: number;
+  unpriced_call_count: number;
+  input_tokens: number;
+  cached_input_tokens: number;
+  output_tokens: number;
+  web_search_calls: number;
+  container_sessions: number;
+  token_cost_usd: number;
+  tool_cost_usd: number;
+  cost_usd: number;
+  category_costs: Partial<Record<UsageCategory, number>>;
+}
+
+export interface OrganizationUsageOut extends UsageAggregate {
   id: number;
   name: string;
   created_at: string;
   client_count: number;
-  call_count: number;
-  unpriced_call_count: number;
-  input_tokens: number;
-  cached_input_tokens: number;
-  output_tokens: number;
-  cost_usd: number;
+  active_client_count: number;
 }
 
-export interface FeatureUsageOut {
+export interface FeatureUsageOut extends UsageAggregate {
   feature: string;
-  call_count: number;
-  unpriced_call_count: number;
-  input_tokens: number;
-  cached_input_tokens: number;
-  output_tokens: number;
-  cost_usd: number;
+  category: UsageCategory;
 }
 
-export interface ModelUsageOut {
+export interface CategoryUsageOut extends UsageAggregate {
+  category: UsageCategory;
+  label: string;
+}
+
+export interface ModelUsageOut extends UsageAggregate {
   model: string;
-  call_count: number;
-  unpriced_call_count: number;
-  input_tokens: number;
-  cached_input_tokens: number;
-  output_tokens: number;
-  cost_usd: number;
 }
 
 export type UsageBucket = "day" | "week" | "month" | "year";
 
-export interface PeriodUsageOut {
+export interface PeriodUsageOut extends UsageAggregate {
   period: string;
-  call_count: number;
-  unpriced_call_count: number;
-  input_tokens: number;
-  cached_input_tokens: number;
-  output_tokens: number;
-  cost_usd: number;
 }
 
-export interface ClientUsageOut {
+export interface ClientUsageOut extends UsageAggregate {
   client_id: number | null;
   client_name: string | null;
-  call_count: number;
-  unpriced_call_count: number;
-  input_tokens: number;
-  cached_input_tokens: number;
-  output_tokens: number;
+  organization_id: number | null;
+  organization_name: string | null;
+}
+
+// Fixed trailing windows (24 hours, 7 and 30 days, this month, all time),
+// independent of the page's selected range.
+export interface UsageWindowOut {
+  key: "last_24h" | "last_7d" | "last_30d" | "month_to_date" | "all_time";
+  label: string;
   cost_usd: number;
+  call_count: number;
+}
+
+export interface UsageSummaryOut {
+  totals: UsageAggregate;
+  windows: UsageWindowOut[];
+  by_category: CategoryUsageOut[];
+  by_feature: FeatureUsageOut[];
+  by_model: ModelUsageOut[];
+  organization_count: number;
+  client_count: number;
+  active_client_count: number;
+  top_clients: ClientUsageOut[];
 }
 
 export interface OrganizationUsageBreakdownOut {
   organization_id: number;
   organization_name: string;
+  client_count: number;
+  totals: UsageAggregate;
+  windows: UsageWindowOut[];
+  by_category: CategoryUsageOut[];
   by_feature: FeatureUsageOut[];
   by_model: ModelUsageOut[];
   by_period: PeriodUsageOut[];
   by_client: ClientUsageOut[];
+}
+
+export interface ClientUsageBreakdownOut {
+  client_id: number;
+  client_name: string;
+  organization_id: number;
+  organization_name: string;
+  totals: UsageAggregate;
+  windows: UsageWindowOut[];
+  by_category: CategoryUsageOut[];
+  by_feature: FeatureUsageOut[];
+  by_model: ModelUsageOut[];
+  by_period: PeriodUsageOut[];
 }
 
 // ---------- Organizations ----------
@@ -993,36 +1031,33 @@ export const deleteCalendarConnection = (connectionId: number) =>
 // (see accounting-saas/app/auth.py's get_internal_admin) - a non-admin
 // caller gets a 403 from these, regardless of what the sidebar shows.
 
-export const listOrganizationsUsage = (filters?: { start?: string; end?: string }) => {
-  const params = new URLSearchParams();
-  if (filters?.start) params.set("start", filters.start);
-  if (filters?.end) params.set("end", filters.end);
-  const qs = params.toString();
-  return request<OrganizationUsageOut[]>(`/admin/organizations${qs ? `?${qs}` : ""}`);
-};
+type UsageFilters = { start?: string; end?: string; bucket?: UsageBucket };
 
-export const getUsageOverview = (filters?: { start?: string; end?: string; bucket?: UsageBucket }) => {
+function usageQuery(filters?: UsageFilters) {
   const params = new URLSearchParams();
   if (filters?.start) params.set("start", filters.start);
   if (filters?.end) params.set("end", filters.end);
   if (filters?.bucket) params.set("bucket", filters.bucket);
   const qs = params.toString();
-  return request<PeriodUsageOut[]>(`/admin/usage${qs ? `?${qs}` : ""}`);
-};
+  return qs ? `?${qs}` : "";
+}
 
-export const getOrganizationUsageBreakdown = (
-  organizationId: number,
-  filters?: { start?: string; end?: string; bucket?: UsageBucket }
-) => {
-  const params = new URLSearchParams();
-  if (filters?.start) params.set("start", filters.start);
-  if (filters?.end) params.set("end", filters.end);
-  if (filters?.bucket) params.set("bucket", filters.bucket);
-  const qs = params.toString();
-  return request<OrganizationUsageBreakdownOut>(
-    `/admin/organizations/${organizationId}/usage${qs ? `?${qs}` : ""}`
+export const getUsageSummary = (filters?: UsageFilters) =>
+  request<UsageSummaryOut>(`/admin/summary${usageQuery(filters)}`);
+
+export const listOrganizationsUsage = (filters?: UsageFilters) =>
+  request<OrganizationUsageOut[]>(`/admin/organizations${usageQuery(filters)}`);
+
+export const getUsageOverview = (filters?: UsageFilters) =>
+  request<PeriodUsageOut[]>(`/admin/usage${usageQuery(filters)}`);
+
+export const getOrganizationUsageBreakdown = (organizationId: number, filters?: UsageFilters) =>
+  request<OrganizationUsageBreakdownOut>(`/admin/organizations/${organizationId}/usage${usageQuery(filters)}`);
+
+export const getClientUsageBreakdown = (organizationId: number, clientId: number, filters?: UsageFilters) =>
+  request<ClientUsageBreakdownOut>(
+    `/admin/organizations/${organizationId}/clients/${clientId}/usage${usageQuery(filters)}`
   );
-};
 
 // ---------- Workflows ----------
 //
