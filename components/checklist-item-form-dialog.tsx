@@ -162,7 +162,7 @@ export function ChecklistItemFormDialog({
               </DialogDescription>
             </DialogHeader>
 
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-5">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="checklist-item-doc-type">Requirement / document type</Label>
                 <Input
@@ -185,7 +185,7 @@ export function ChecklistItemFormDialog({
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="checklist-item-deadline">Deadline (optional)</Label>
+                <Label htmlFor="checklist-item-deadline">Deadline <span className="font-normal text-muted-foreground">Optional</span></Label>
                 <Input
                   id="checklist-item-deadline"
                   type="date"

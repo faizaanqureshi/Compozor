@@ -46,6 +46,7 @@ import {
 import { cn, formatRelativeTime } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -495,7 +496,7 @@ export default function ClientsPage() {
                   Add a new client to your organization.
                 </DialogDescription>
               </DialogHeader>
-              <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-5">
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor="client-name">Name</Label>
                   <Input
@@ -538,15 +539,14 @@ export default function ClientsPage() {
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor="client-status">Status</Label>
-                  <select
+                  <NativeSelect
                     id="client-status"
                     value={status}
                     onChange={(e) => setStatus(e.target.value as ClientStatus)}
-                    className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                   >
                     <option value="active">Active</option>
                     <option value="inactive">Inactive</option>
-                  </select>
+                  </NativeSelect>
                 </div>
               </div>
               {error && <p className="text-sm text-destructive">{error}</p>}

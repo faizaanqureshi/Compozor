@@ -134,7 +134,7 @@ export function PackageFormDialog({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-5">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="package-name">Name</Label>
               <Input

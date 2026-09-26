@@ -144,7 +144,7 @@ export function PackageDocumentPicker({
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor="package-assign-deadline">Add a deadline (optional)</Label>
+        <Label htmlFor="package-assign-deadline">Add a deadline <span className="font-normal text-muted-foreground">Optional</span></Label>
         <Input
           id="package-assign-deadline"
           type="date"

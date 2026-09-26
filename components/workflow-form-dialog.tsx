@@ -15,6 +15,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import type { VariantProps } from "class-variance-authority";
 import { WorkflowWorkSamples } from "@/components/workflow-work-samples";
 import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -125,7 +126,7 @@ export function WorkflowFormDialog({
       <DialogContent className="flex w-[calc(100vw_-_2rem)] max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 sm:w-full sm:max-w-2xl [&>[data-slot=dialog-close]]:right-4 [&>[data-slot=dialog-close]]:top-4">
         <form onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col">
           <DialogHeader className="shrink-0 gap-2 px-5 pt-6 pb-5 pr-14 sm:px-7 sm:pr-14">
-            <DialogTitle className="text-lg font-medium leading-snug">{isEdit ? "Edit workflow" : "New workflow"}</DialogTitle>
+            <DialogTitle>{isEdit ? "Edit workflow" : "New workflow"}</DialogTitle>
             <DialogDescription className="text-pretty text-[0.8125rem] leading-relaxed">
               {isEdit ? "Refine the instructions and choose when this workflow runs." : "Set the instructions for work your firm can repeat across clients."}
             </DialogDescription>
@@ -199,17 +200,17 @@ export function WorkflowFormDialog({
                   {executionMode === "auto" ? "Starts when the client’s checklist is complete." : "Your team chooses when to start the run."}
                 </p>
               </div>
-              <select
+              <NativeSelect
                 id={`${fieldId}-mode`}
                 aria-describedby={`${fieldId}-mode-hint`}
                 value={executionMode}
                 onChange={(e) => setExecutionMode(e.target.value as WorkflowExecutionMode)}
                 disabled={building || submitting || uploading}
-                className="h-10 w-full shrink-0 rounded-lg border border-input bg-transparent px-3 text-base outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50 sm:w-40 md:text-[0.8125rem]"
+                className="shrink-0 sm:w-40"
               >
                 <option value="manual">Manual</option>
                 <option value="auto">Automatic</option>
-              </select>
+              </NativeSelect>
             </div>
             {draftWarnings.length > 0 && <div role="status" className="space-y-2 text-xs leading-relaxed text-muted-foreground">
               {draftWarnings.map((warning, index) => <p key={index}>{warning}</p>)}

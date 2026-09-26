@@ -265,6 +265,27 @@ Before writing new UI:
    component with many conditional branches for unrelated states — this
    keeps reuse possible and keeps diffs small when one part changes.
 
+## 8a. Dialogs and forms
+
+Modals and forms get their look from the primitives; don't restyle them per
+screen.
+
+- `DialogContent`: white panel, `rounded-2xl`, generous padding, a
+  #122023-tinted blurred backdrop (the `Sheet` uses the same backdrop). Width
+  defaults to `sm:max-w-md`; widen with a `sm:max-w-*` class only when the
+  content needs it.
+- `DialogTitle` is light and large (`text-xl font-light`), echoing the
+  homepage's section headings; don't override it. `DialogDescription` is one
+  short, muted sentence.
+- `DialogFooter` is right-aligned actions on white (no grey bar): a secondary
+  (`outline`) action, then the primary action.
+- Fields: `Label` above `Input` / `Textarea` / `NativeSelect` (40px tall,
+  white fill, soft #122023 focus ring). Stack fields with `gap-5`, label to
+  field `gap-1.5`. Mark optional fields with a muted "Optional" span inside
+  the label, not "(optional)".
+- Use `NativeSelect` for dropdown fields instead of a hand-styled `<select>`.
+- Menu items highlight with `muted`, never `accent`; accent is for signals.
+
 ## 9. Before you touch frontend code — checklist
 
 - [ ] Have I looked at `docs/design-reference/` (§0) if I'm unsure whether

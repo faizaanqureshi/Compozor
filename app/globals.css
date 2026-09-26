@@ -150,6 +150,13 @@
   html {
     @apply font-sans;
     }
+  /* Tailwind v4 gives buttons the default arrow. Compozor is a web product,
+     so every clickable control shows the pointer, the same as links. */
+  :is(button, [role="button"], [role="tab"], [role="switch"], [role="menuitem"],
+    [role="menuitemcheckbox"], [role="menuitemradio"], [role="option"], summary, select,
+    input:is([type="checkbox"], [type="radio"], [type="file"], [type="submit"], [type="button"])):not(:disabled, [aria-disabled="true"], [data-disabled]) {
+    cursor: pointer;
+  }
 }
 
 @keyframes aurora-drift-a {

@@ -29,6 +29,7 @@ import { extractPhoneDigits, formatPhoneDisplay, isValidPhoneDigits } from "@/li
 import { PRACTICE_CATEGORIES, practiceCategoryForLabel } from "@/lib/practice-types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -687,9 +688,9 @@ function ConnectionsSection({
 
       <div className="flex flex-col gap-2">
         <Label htmlFor="org-timezone">Timezone</Label>
-        <select
+        <NativeSelect
           id="org-timezone"
-          className="h-9 w-full max-w-sm rounded-md border border-input bg-transparent px-3 text-sm disabled:opacity-50"
+          className="max-w-sm"
           value={organization?.timezone ?? ""}
           disabled={savingTimezone || !organization}
           onChange={(e) => onSaveTimezone(e.target.value)}
@@ -702,7 +703,7 @@ function ConnectionsSection({
               {tz}
             </option>
           ))}
-        </select>
+        </NativeSelect>
         <p className="text-xs text-muted-foreground">
           Required before meeting times can be proposed to clients.
         </p>
