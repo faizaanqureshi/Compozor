@@ -4,16 +4,16 @@ import { useCallback, useEffect, useState } from "react";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Link from "@tiptap/extension-link";
-import { List, Link2, Redo2, Undo2 } from "lucide-react";
+import { Bold, Italic, List, ListOrdered, Link2, Redo2, Undo2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { docToPlainText, plainTextToDoc } from "@/lib/email-content";
 
-// Deliberately restrained: only structure the backend's plain-text send
-// pipeline actually preserves (paragraphs, line breaks, bullet lists,
-// links) is offered here - see lib/email-content.ts. No bold/italic/
-// headings, which would silently vanish on send.
+// Deliberately restrained: only formatting the backend's send pipeline
+// preserves (paragraphs, line breaks, bold, italic, bullet and numbered
+// lists, links) is offered here - see lib/email-content.ts. No headings or
+// colours, which would silently vanish on send.
 function ToolbarButton({
   active,
   onClick,
@@ -107,15 +107,14 @@ export function EmailDraftEditor({
     immediatelyRender: false,
     extensions: [
       StarterKit.configure({
-        bold: false,
-        italic: false,
         strike: false,
+        underline: false,
         code: false,
         codeBlock: false,
         blockquote: false,
         heading: false,
         horizontalRule: false,
-        orderedList: false,
+        link: false,
       }),
       Link.configure({
         openOnClick: false,
@@ -128,7 +127,7 @@ export function EmailDraftEditor({
     editorProps: {
       attributes: {
         class:
-          "prose-sm max-w-none focus:outline-none min-h-40 text-sm leading-relaxed text-foreground/90 [&_p]:my-2.5 [&_ul]:my-2.5 [&_ul]:list-disc [&_ul]:pl-5 [&_li]:my-0.5 [&_a]:text-accent [&_a]:underline [&_a]:underline-offset-2",
+          "prose-sm max-w-none focus:outline-none min-h-40 text-sm leading-relaxed text-foreground/90 [&_p]:my-2.5 [&_ul]:my-2.5 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-2.5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-0.5 [&_strong]:font-semibold [&_a]:text-foreground [&_a]:underline [&_a]:decoration-foreground/30 [&_a]:underline-offset-2",
       },
     },
     onUpdate: ({ editor }) => {
@@ -153,11 +152,33 @@ export function EmailDraftEditor({
     <div className={cn("flex flex-col gap-2 rounded-lg border border-input bg-transparent", className)}>
       <div className="flex items-center gap-0.5 border-b border-border/70 px-2 py-1.5">
         <ToolbarButton
+          active={editor.isActive("bold")}
+          onClick={() => editor.chain().focus().toggleBold().run()}
+          label="Bold"
+        >
+          <Bold className="size-3.5" />
+        </ToolbarButton>
+        <ToolbarButton
+          active={editor.isActive("italic")}
+          onClick={() => editor.chain().focus().toggleItalic().run()}
+          label="Italic"
+        >
+          <Italic className="size-3.5" />
+        </ToolbarButton>
+        <div className="mx-1 h-4 w-px bg-border" />
+        <ToolbarButton
           active={editor.isActive("bulletList")}
           onClick={() => editor.chain().focus().toggleBulletList().run()}
           label="Bulleted list"
         >
           <List className="size-3.5" />
+        </ToolbarButton>
+        <ToolbarButton
+          active={editor.isActive("orderedList")}
+          onClick={() => editor.chain().focus().toggleOrderedList().run()}
+          label="Numbered list"
+        >
+          <ListOrdered className="size-3.5" />
         </ToolbarButton>
         <LinkControl editor={editor} />
         <div className="mx-1 h-4 w-px bg-border" />

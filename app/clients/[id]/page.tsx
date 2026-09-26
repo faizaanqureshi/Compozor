@@ -460,7 +460,7 @@ function ClientHeader({
       {client === null ? (
         <div className="flex flex-col gap-3">
           <Skeleton className="h-11 w-72" />
-          <Skeleton className="h-4 w-96" />
+          <Skeleton className="h-4 w-20" />
         </div>
       ) : (
         <div className="flex flex-col gap-4 animate-fade-in lg:flex-row lg:items-end lg:justify-between">
@@ -478,18 +478,6 @@ function ClientHeader({
                 />
                 {client.status.charAt(0).toUpperCase() + client.status.slice(1)}
               </span>
-              {[
-                client.email,
-                client.phone ? formatPhoneNumber(client.phone) : null,
-                client.company_name,
-              ]
-                .filter((part): part is string => Boolean(part))
-                .map((part) => (
-                  <span key={part} className="inline-flex items-center gap-2">
-                    <span aria-hidden className="text-muted-foreground/50">·</span>
-                    {part}
-                  </span>
-                ))}
             </p>
           </div>
           <div className="flex flex-col items-start gap-2 lg:items-end">

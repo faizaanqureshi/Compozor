@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
-import { AlertTriangle, ArchiveRestore, ArrowDownLeft, ArrowLeft, ArrowUpRight, Check, ChevronDown, Info, Loader2, Paperclip, Pencil, Sparkles, Trash2 } from "lucide-react";
+import { AlertTriangle, ArchiveRestore, ArrowDownLeft, ArrowLeft, ArrowUpRight, Check, Download, FileText, Info, Loader2, Mail, Paperclip, Search, Send, Sparkles, Trash2 } from "lucide-react";
 import { clientsKey, emailLogKey } from "@/lib/swr-keys";
 import {
   ApiError,
@@ -11,8 +11,8 @@ import {
   DocumentOut,
   EmailLogEntry,
   EmailLogStreamEvent,
-  EmailStatus,
   bulkDeleteEmailLogEntries,
+  getEmailLogHtml,
   listActiveRuns,
   listArchivedEmailLog,
   listClients,
@@ -27,9 +27,12 @@ import {
 import { cn, formatRelativeTime } from "@/lib/utils";
 import { AgentActivityDisclosure, TraceStep } from "@/components/agent-activity-disclosure";
 import { EmailDraftEditor } from "@/components/email-draft-editor";
+import { EmailBody } from "@/components/email-body";
+import { EmailHtmlFrame } from "@/components/email-html-frame";
 import { Linkify } from "@/components/linkify";
 import { PurgeConfirmDialog } from "@/components/purge-confirm-dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -62,48 +65,70 @@ type LiveRun = {
   draftText: string;
 };
 
-const statusOptions: { value: EmailStatus | "all"; label: string }[] = [
+// Tabs filter whole threads, client-side, from one cached list - switching is
+// instant and every tab can show its count.
+type View = "all" | "review" | "drafts" | "received" | "sent";
+
+const viewOptions: { value: View; label: string }[] = [
   { value: "all", label: "All" },
+  { value: "review", label: "Needs review" },
+  { value: "drafts", label: "Drafts" },
   { value: "received", label: "Received" },
-  { value: "draft", label: "Draft" },
-  { value: "needs_human_attention", label: "Needs attention" },
   { value: "sent", label: "Sent" },
 ];
 
-type StatusTone = "positive" | "neutral" | "attention";
+type MessageTone = "issue" | "warning" | "received" | "sent" | "muted";
 
-const statusTone: Record<EmailStatus, StatusTone> = {
-  received: "positive",
-  sent: "positive",
-  draft: "neutral",
-  needs_human_attention: "attention",
-};
-
-const statusToneClasses: Record<StatusTone, string> = {
-  positive: "bg-accent",
-  neutral: "bg-muted-foreground/40",
-  attention: "bg-destructive",
-};
-
-const statusLabels: Record<EmailStatus, string> = {
-  received: "Received",
-  sent: "Sent",
-  draft: "Draft",
-  needs_human_attention: "Needs attention",
-};
-
-// A resolved escalation is still, historically, status="needs_human_attention"
-// (see backend EmailLog.resolved_at) - these two read that pair together so
-// nothing in the UI ever shows "Needs attention" for a thread/message a
-// human already resolved.
-function effectiveTone(entry: EmailLogEntry): StatusTone {
-  if (entry.status === "needs_human_attention" && entry.resolved_at) return "positive";
-  return statusTone[entry.status];
+// The one label a staff member needs for a message: what happened to it.
+function messageState(entry: EmailLogEntry): { label: string; tone: MessageTone } {
+  if (entry.status === "needs_human_attention") {
+    return entry.resolved_at ? { label: "Resolved", tone: "muted" } : { label: "Needs review", tone: "issue" };
+  }
+  if (entry.status === "draft") {
+    if (entry.delivery_state === "sending") return { label: "Sending…", tone: "muted" };
+    if (entry.delivery_state === "uncertain") return { label: "Delivery unconfirmed", tone: "warning" };
+    if (entry.delivery_state === "failed") return { label: "Send failed", tone: "issue" };
+    return { label: "Draft", tone: "warning" };
+  }
+  if (entry.status === "sent") return { label: entry.autosent ? "Auto-sent" : "Sent", tone: "sent" };
+  return { label: "Received", tone: "received" };
 }
 
-function effectiveStatusLabel(entry: EmailLogEntry): string {
-  if (entry.status === "needs_human_attention" && entry.resolved_at) return "Resolved";
-  return statusLabels[entry.status];
+function threadNeedsReview(thread: Thread) {
+  return thread.messages.some((m) => m.status === "needs_human_attention" && !m.resolved_at);
+}
+
+function threadHasDraft(thread: Thread) {
+  return thread.messages.some((m) => m.status === "draft");
+}
+
+// Thread-level state: anything needing a human outranks what happened last.
+function threadState(thread: Thread): { label: string; tone: MessageTone } {
+  if (threadNeedsReview(thread)) return { label: "Needs review", tone: "issue" };
+  const draft = [...thread.messages].reverse().find((m) => m.status === "draft");
+  if (draft) return messageState(draft);
+  return messageState(thread.messages[thread.messages.length - 1]);
+}
+
+function matchesView(thread: Thread, view: View) {
+  const latest = thread.messages[thread.messages.length - 1];
+  switch (view) {
+    case "review":
+      return threadNeedsReview(thread);
+    case "drafts":
+      return threadHasDraft(thread);
+    case "received":
+      return latest.direction === "inbound";
+    case "sent":
+      return latest.direction === "outbound" && latest.status === "sent";
+    default:
+      return true;
+  }
+}
+
+function snippet(content: string | null, length = 140) {
+  const flat = (content ?? "").replace(/\[([^\]]+)\]\([^)]+\)/g, "$1").replace(/\s+/g, " ").trim();
+  return flat.length > length ? `${flat.slice(0, length).trimEnd()}…` : flat;
 }
 
 function normalizeSubject(subject: string | null) {
@@ -328,7 +353,8 @@ function ArchivedEmailLogDialog({
 }
 
 export default function EmailLogPage() {
-  const [status, setStatus] = useState<EmailStatus | "all">("all");
+  const [view, setView] = useState<View>("all");
+  const [query, setQuery] = useState("");
   const [resendEntry, setResendEntry] = useState<EmailLogEntry | null>(null);
   const [sendingId, setSendingId] = useState<number | null>(null);
   const [resolvingId, setResolvingId] = useState<number | null>(null);
@@ -340,19 +366,13 @@ export default function EmailLogPage() {
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [bulkDeleteError, setBulkDeleteError] = useState<string | null>(null);
-  const [editingEntry, setEditingEntry] = useState<EmailLogEntry | null>(null);
 
-  const filterStatus = status === "all" ? undefined : status;
-  // The "Needs attention" tab is a queue of what still needs a human, so
-  // resolved escalations drop out of it by default - "All" still shows
-  // them, since resolved rows are history there, not noise to hide.
-  const filterResolved = filterStatus === "needs_human_attention" ? false : undefined;
   const {
     data: entries,
     error: entriesError,
     isLoading: entriesLoading,
     mutate: mutateEntries,
-  } = useSWR(emailLogKey(filterStatus, filterResolved), () => listEmailLog(filterStatus, filterResolved));
+  } = useSWR(emailLogKey(), () => listEmailLog());
   const { data: clientsData } = useSWR(clientsKey(), listClients);
   const error = entriesError
     ? entriesError instanceof ApiError
@@ -496,7 +516,25 @@ export default function EmailLogPage() {
     return map;
   }, [clientsData]);
 
-  const threads = useMemo<Thread[]>(() => (entries ? groupIntoThreads(entries) : []), [entries]);
+  const allThreads = useMemo<Thread[]>(() => (entries ? groupIntoThreads(entries) : []), [entries]);
+  const viewCounts = useMemo(() => {
+    const counts = {} as Record<View, number>;
+    for (const option of viewOptions) counts[option.value] = allThreads.filter((t) => matchesView(t, option.value)).length;
+    return counts;
+  }, [allThreads]);
+  const threads = useMemo<Thread[]>(() => {
+    const q = query.trim().toLowerCase();
+    return allThreads.filter((t) => {
+      if (!matchesView(t, view)) return false;
+      if (!q) return true;
+      const name = clientsById[t.clientId]?.name ?? "";
+      return (
+        name.toLowerCase().includes(q) ||
+        (t.subject ?? "").toLowerCase().includes(q) ||
+        t.messages.some((m) => (m.content ?? "").toLowerCase().includes(q))
+      );
+    });
+  }, [allThreads, view, query, clientsById]);
 
   useEffect(() => {
     if (threads.length === 0) {
@@ -510,7 +548,7 @@ export default function EmailLogPage() {
 
   useEffect(() => {
     setSelectedKeys(new Set());
-  }, [status]);
+  }, [view]);
 
   const selectedThread = threads.find((t) => t.key === selectedKey) ?? null;
   const loading = entriesLoading;
@@ -550,11 +588,23 @@ export default function EmailLogPage() {
     }
   };
 
-  const onSaveDraft = async (content: string) => {
-    if (!editingEntry) return;
-    await updateEmailLogEntry(editingEntry.client_id, editingEntry.id, { content });
-    setEditingEntry(null);
-    mutateEntries();
+  // Inline composer: saves edits, and Send saves first when there are any.
+  const onSaveDraft = async (entry: EmailLogEntry, update: { subject: string; content: string }) => {
+    await updateEmailLogEntry(entry.client_id, entry.id, update);
+    await mutateEntries();
+  };
+
+  const onSaveAndSend = async (entry: EmailLogEntry, update: { subject: string; content: string } | null) => {
+    if (update) {
+      setRowError((prev) => ({ ...prev, [entry.id]: "" }));
+      try {
+        await updateEmailLogEntry(entry.client_id, entry.id, update);
+      } catch (e) {
+        setRowError((prev) => ({ ...prev, [entry.id]: e instanceof ApiError ? e.message : String(e) }));
+        return;
+      }
+    }
+    await onSend(entry);
   };
 
   const toggleThreadSelection = (key: string) => {
@@ -620,7 +670,7 @@ export default function EmailLogPage() {
   };
 
   return (
-    <div className="flex h-[calc(100vh-6.5rem)] w-full flex-col gap-8 md:h-[calc(100vh-3rem)] xl:h-[calc(100vh-5rem)]">
+    <div className="flex h-[calc(100vh-6.5rem)] w-full flex-col gap-6 md:h-[calc(100vh-3rem)] xl:h-[calc(100vh-5rem)]">
       <Dialog open={resendEntry !== null} onOpenChange={(open) => !open && sendingId === null && setResendEntry(null)}>
         <DialogContent>
           <DialogHeader>
@@ -638,57 +688,55 @@ export default function EmailLogPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <div className="flex flex-col gap-2">
-        <h1 className="text-4xl font-thin tracking-tight [font-family:var(--font-denton)] sm:text-5xl md:text-6xl">
-          Email log
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Every message sent or received across all clients.
-        </p>
+
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="flex flex-col gap-1.5">
+          <h1 className="text-4xl leading-tight font-thin tracking-tight [font-family:var(--font-denton)] md:text-5xl">
+            Email log
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Every conversation with your clients, what Compozor sent, and what&apos;s waiting on you.
+          </p>
+        </div>
+        <ArchivedEmailLogDialog clientsById={clientsById} onRestored={() => mutateEntries()} />
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex flex-wrap items-center gap-1.5">
-          {statusOptions.map((opt) => (
-            <Button
-              key={opt.value}
-              size="sm"
-              variant={status === opt.value ? "default" : "ghost"}
-              onClick={() => setStatus(opt.value)}
-              className="rounded-lg"
-            >
-              {opt.label}
-            </Button>
-          ))}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div role="tablist" aria-label="Filter threads" className="flex flex-wrap items-center gap-1">
+          {viewOptions.map((opt) => {
+            const count = viewCounts[opt.value] ?? 0;
+            const active = view === opt.value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => setView(opt.value)}
+                className={cn(
+                  "inline-flex h-8 items-center gap-2 rounded-lg px-3 text-[0.8125rem] transition-colors",
+                  active ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                )}
+              >
+                {opt.value === "review" && count > 0 && !active && <span className="size-1.5 rounded-full bg-destructive" />}
+                {opt.value === "drafts" && count > 0 && !active && <span className="size-1.5 rounded-full bg-warning" />}
+                {opt.label}
+                {!loading && (
+                  <span className={cn("tabular-nums", active ? "text-background/70" : "text-muted-foreground/70")}>{count}</span>
+                )}
+              </button>
+            );
+          })}
         </div>
-        <div className="flex items-center gap-3 text-sm">
-          {selectedKeys.size > 0 && (
-            <>
-              <span className="text-muted-foreground">
-                {selectedKeys.size} selected
-              </span>
-              <Button
-                size="sm"
-                variant="secondary"
-                disabled={selectedDrafts.length === 0 || bulkSending}
-                onClick={onBulkSend}
-              >
-                {bulkSending
-                  ? "Sending…"
-                  : `Send ${selectedDrafts.length} draft${selectedDrafts.length === 1 ? "" : "s"}`}
-              </Button>
-              <Button
-                size="sm"
-                variant="secondary"
-                className="text-destructive hover:bg-destructive/10"
-                onClick={() => setConfirmingDelete(true)}
-              >
-                <Trash2 />
-                Delete
-              </Button>
-            </>
-          )}
-          <ArchivedEmailLogDialog clientsById={clientsById} onRestored={() => mutateEntries()} />
+        <div className="relative w-full sm:w-72">
+          <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search clients, subjects, messages"
+            aria-label="Search email"
+            className="h-9 pl-9"
+          />
         </div>
       </div>
 
@@ -727,11 +775,11 @@ export default function EmailLogPage() {
       <div className="flex min-h-0 flex-1 flex-col gap-6 xl:flex-row">
         <div
           className={cn(
-            "w-full flex-col rounded-2xl bg-card ring-1 ring-foreground/10 md:flex md:max-h-72 md:shrink-0 xl:max-h-none xl:w-[22rem]",
+            "w-full flex-col overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10 md:flex md:max-h-80 md:shrink-0 xl:max-h-none xl:w-[24rem]",
             mobileDetailOpen ? "hidden md:flex" : "flex"
           )}
         >
-          <div className="flex items-center gap-2.5 border-b border-border/70 px-3 py-2">
+          <div className="flex min-h-12 items-center gap-3 border-b border-border px-4">
             <input
               type="checkbox"
               checked={allVisibleSelected}
@@ -739,16 +787,45 @@ export default function EmailLogPage() {
               className="size-3.5 shrink-0 accent-foreground"
               aria-label="Select all"
             />
-            <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-              {loading ? "…" : `${threads.length} thread${threads.length === 1 ? "" : "s"}`}
-            </span>
+            {selectedKeys.size > 0 ? (
+              <div className="flex flex-1 items-center justify-between gap-2">
+                <span className="text-[0.8125rem] text-foreground">{selectedKeys.size} selected</span>
+                <div className="flex items-center gap-1">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={selectedDrafts.length === 0 || bulkSending}
+                    onClick={onBulkSend}
+                  >
+                    <Send />
+                    {bulkSending
+                      ? "Sending…"
+                      : `Send ${selectedDrafts.length} draft${selectedDrafts.length === 1 ? "" : "s"}`}
+                  </Button>
+                  <Button
+                    size="icon-sm"
+                    variant="ghost"
+                    aria-label="Delete selected threads"
+                    className="text-muted-foreground hover:text-destructive"
+                    onClick={() => setConfirmingDelete(true)}
+                  >
+                    <Trash2 />
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <span className="text-[0.8125rem] text-muted-foreground">
+                {loading ? "Loading…" : `${threads.length} thread${threads.length === 1 ? "" : "s"}`}
+              </span>
+            )}
           </div>
           <div className="flex-1 overflow-y-auto">
             {loading &&
               Array.from({ length: 7 }).map((_, i) => (
-                <div key={i} className="flex flex-col gap-1.5 border-b border-border/40 px-3 py-2.5">
+                <div key={i} className="flex flex-col gap-2 border-b border-border/60 px-4 py-3.5">
                   <Skeleton className="h-3.5 w-2/3" />
-                  <Skeleton className="h-3 w-1/3" />
+                  <Skeleton className="h-3 w-5/6" />
+                  <Skeleton className="h-3 w-1/2" />
                 </div>
               ))}
             {!loading &&
@@ -759,6 +836,7 @@ export default function EmailLogPage() {
                   client={clientsById[thread.clientId]}
                   selected={thread.key === selectedKey}
                   checked={selectedKeys.has(thread.key)}
+                  selecting={selectedKeys.size > 0}
                   onSelect={() => {
                     setSelectedKey(thread.key);
                     setMobileDetailOpen(true);
@@ -768,8 +846,8 @@ export default function EmailLogPage() {
                 />
               ))}
             {!loading && threads.length === 0 && (
-              <p className="animate-fade-in px-3 py-8 text-center text-sm text-muted-foreground">
-                No entries.
+              <p className="animate-fade-in px-4 py-10 text-center text-sm text-muted-foreground">
+                {query ? "No threads match your search." : view === "all" ? "No emails yet." : "Nothing here right now."}
               </p>
             )}
           </div>
@@ -777,82 +855,70 @@ export default function EmailLogPage() {
 
         <div
           className={cn(
-            "min-h-0 flex-1 overflow-y-auto rounded-2xl bg-card ring-1 ring-foreground/10 md:block",
+            "min-h-0 flex-1 overflow-y-auto rounded-xl bg-card ring-1 ring-foreground/10 md:block",
             mobileDetailOpen ? "block" : "hidden"
           )}
         >
           {loading ? (
-            <div className="flex flex-col gap-4 p-6">
+            <div className="flex flex-col gap-5 p-6 sm:p-8">
               <div className="flex flex-col gap-2">
-                <Skeleton className="h-5 w-64" />
-                <Skeleton className="h-4 w-40" />
+                <Skeleton className="h-6 w-72" />
+                <Skeleton className="h-4 w-48" />
               </div>
-              <div className="flex flex-col gap-3">
-                <Skeleton className="h-24 w-full" />
-                <Skeleton className="h-24 w-full" />
-              </div>
+              <Skeleton className="h-40 w-full rounded-xl" />
+              <Skeleton className="h-40 w-full rounded-xl" />
             </div>
           ) : selectedThread ? (
-            <div
-              className="flex flex-col gap-4 p-6 animate-fade-in"
-            >
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex flex-col gap-1">
-                  <button
-                    type="button"
-                    onClick={() => setMobileDetailOpen(false)}
-                    className="mb-1 flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground md:hidden"
-                  >
-                    <ArrowLeft className="size-3.5" />
-                    All threads
-                  </button>
-                  <h2 className="text-lg font-medium">
-                    {selectedThread.subject || "(no subject)"}
-                  </h2>
-                  <Link
-                    href={`/clients/${selectedThread.clientId}`}
-                    className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-                  >
-                    {clientsById[selectedThread.clientId]?.name ??
-                      `#${selectedThread.clientId}`}
-                  </Link>
-                </div>
-              </div>
-              <div className="flex flex-col gap-3">
-                {selectedThread.messages.map((entry) => (
-                  <MessageCard
-                    key={entry.id}
-                    entry={entry}
-                    sending={sendingId === entry.id}
-                    resolving={resolvingId === entry.id}
-                    error={rowError[entry.id]}
-                    onSend={() => onSend(entry)}
-                    onEdit={() => setEditingEntry(entry)}
-                    onResolve={() => onResolve(entry)}
-                  />
-                ))}
-                {liveRuns[selectedThread.key] && (
-                  <LiveRunCard run={liveRuns[selectedThread.key]} />
-                )}
-              </div>
-            </div>
+            <ThreadView
+              key={selectedThread.key}
+              thread={selectedThread}
+              client={clientsById[selectedThread.clientId]}
+              live={liveRuns[selectedThread.key]}
+              sendingId={sendingId}
+              resolvingId={resolvingId}
+              rowError={rowError}
+              onBack={() => setMobileDetailOpen(false)}
+              onSaveDraft={onSaveDraft}
+              onSaveAndSend={onSaveAndSend}
+              onResolve={onResolve}
+            />
           ) : (
-            <p className="animate-fade-in flex h-full items-center justify-center text-sm text-muted-foreground">
-              Select a thread to read it.
-            </p>
+            <div className="flex h-full flex-col items-center justify-center gap-2 p-10 text-center animate-fade-in">
+              <Mail className="size-5 text-muted-foreground/60" />
+              <p className="text-sm text-muted-foreground">Select a thread to read it.</p>
+            </div>
           )}
         </div>
       </div>
-
-      <DraftEditDialog
-        key={editingEntry?.id ?? "closed"}
-        entry={editingEntry}
-        onOpenChange={(open) => {
-          if (!open) setEditingEntry(null);
-        }}
-        onSave={onSaveDraft}
-      />
     </div>
+  );
+}
+
+const toneText: Record<MessageTone, string> = {
+  issue: "text-destructive",
+  warning: "text-warning-foreground",
+  received: "text-foreground",
+  sent: "text-muted-foreground",
+  muted: "text-muted-foreground",
+};
+
+function StateLabel({ state, className }: { state: { label: string; tone: MessageTone }; className?: string }) {
+  const Icon =
+    state.tone === "received" ? ArrowDownLeft : state.tone === "sent" ? (state.label === "Auto-sent" ? Sparkles : ArrowUpRight) : null;
+  return (
+    <span className={cn("inline-flex shrink-0 items-center gap-1.5 text-xs font-medium", toneText[state.tone], className)}>
+      {Icon ? (
+        <Icon className="size-3" />
+      ) : (
+        <span
+          className={cn(
+            "size-1.5 rounded-full",
+            state.tone === "issue" ? "bg-destructive" : state.tone === "warning" ? "bg-warning" : "bg-muted-foreground/50"
+          )}
+        />
+      )}
+      {state.label}
+    </span>
   );
 }
 
@@ -861,6 +927,7 @@ function ThreadRow({
   client,
   selected,
   checked,
+  selecting,
   onSelect,
   onCheck,
   live,
@@ -869,27 +936,28 @@ function ThreadRow({
   client?: Client;
   selected: boolean;
   checked: boolean;
+  selecting: boolean;
   onSelect: () => void;
   onCheck: () => void;
   live?: LiveRun;
 }) {
   const latest = thread.messages[thread.messages.length - 1];
-  const hasAttention = thread.messages.some(
-    (m) => m.status === "needs_human_attention" && !m.resolved_at
-  );
-  const tone = hasAttention ? "attention" : effectiveTone(latest);
+  const state = threadState(thread);
+  const attachments = thread.messages.reduce((n, m) => n + m.documents.length, 0);
+  const author = latest.direction === "inbound" ? (client?.name?.split(" ")[0] ?? "Client") : "You";
 
   return (
     <div
       role="button"
       tabIndex={0}
+      aria-current={selected || undefined}
       onClick={onSelect}
       onKeyDown={(e) => {
         if (e.key === "Enter") onSelect();
       }}
       className={cn(
-        "flex w-full cursor-pointer animate-fade-in items-start gap-2.5 border-b border-border/40 px-3 py-2.5 text-left transition-colors hover:bg-muted/40",
-        selected && "bg-muted/60"
+        "group/row relative flex w-full cursor-pointer items-start gap-3 border-b border-border/60 px-4 py-4 text-left transition-colors hover:bg-muted/40 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring",
+        selected && "bg-muted/50 hover:bg-muted/50 before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-foreground"
       )}
     >
       <input
@@ -898,40 +966,37 @@ function ThreadRow({
         onClick={(e) => e.stopPropagation()}
         onChange={onCheck}
         aria-label={`Select conversation with ${client?.name ?? `#${thread.clientId}`}`}
-        className="mt-1 size-3.5 shrink-0 accent-foreground"
+        className={cn(
+          "mt-0.5 size-3.5 shrink-0 accent-foreground transition-opacity",
+          checked || selecting ? "opacity-100" : "opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100"
+        )}
       />
-      <span className={cn("mt-1.5 size-1.5 shrink-0 rounded-full", statusToneClasses[tone])} />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center justify-between gap-2">
-          <span className="truncate text-sm font-medium">
-            {client?.name ?? `#${thread.clientId}`}
-          </span>
-          <span className="shrink-0 text-[11px] text-muted-foreground">
-            {formatRelativeTime(latest.created_at)}
-          </span>
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="truncate text-sm font-medium">{client?.name ?? `Client #${thread.clientId}`}</span>
+          <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{formatRelativeTime(latest.created_at)}</span>
         </div>
-        <div className="mt-0.5 flex items-center gap-1.5">
-          {latest.direction === "outbound" ? (
-            <ArrowUpRight className="size-3 shrink-0 text-muted-foreground/70" />
-          ) : (
-            <ArrowDownLeft className="size-3 shrink-0 text-muted-foreground/70" />
-          )}
-          <span className="truncate text-xs text-muted-foreground">
-            {thread.subject || "(no subject)"}
-          </span>
-          {thread.messages.length > 1 && (
-            <span className="shrink-0 rounded-full bg-muted px-1.5 py-px text-[10px] font-medium text-muted-foreground">
-              {thread.messages.length}
-            </span>
-          )}
-          {thread.messages.some((m) => m.autosent) && (
-            <Sparkles className="size-3 shrink-0 text-accent" />
-          )}
-          {live && (
-            <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-accent/15 px-1.5 py-px text-[10px] font-medium text-accent">
-              <Loader2 className="size-2.5 animate-spin" />
+        <span className="truncate text-[0.8125rem] text-foreground/85">{thread.subject || "(no subject)"}</span>
+        <span className="line-clamp-1 text-xs text-muted-foreground">
+          <span className="text-foreground/60">{author}:</span> {snippet(latest.content) || "No message body."}
+        </span>
+        <div className="mt-1 flex items-center gap-3">
+          {live ? (
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-accent">
+              <Loader2 className="size-3 animate-spin" />
               {STAGE_LABELS[live.stage ?? ""] ?? "Processing…"}
             </span>
+          ) : (
+            <StateLabel state={state} />
+          )}
+          {attachments > 0 && (
+            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+              <Paperclip className="size-3" />
+              {attachments}
+            </span>
+          )}
+          {thread.messages.length > 1 && (
+            <span className="text-xs text-muted-foreground">{thread.messages.length} messages</span>
           )}
         </div>
       </div>
@@ -939,102 +1004,393 @@ function ThreadRow({
   );
 }
 
-function MessageCard({
+function ThreadView({
+  thread,
+  client,
+  live,
+  sendingId,
+  resolvingId,
+  rowError,
+  onBack,
+  onSaveDraft,
+  onSaveAndSend,
+  onResolve,
+}: {
+  thread: Thread;
+  client?: Client;
+  live?: LiveRun;
+  sendingId: number | null;
+  resolvingId: number | null;
+  rowError: Record<number, string>;
+  onBack: () => void;
+  onSaveDraft: (entry: EmailLogEntry, update: { subject: string; content: string }) => Promise<void>;
+  onSaveAndSend: (entry: EmailLogEntry, update: { subject: string; content: string } | null) => Promise<void>;
+  onResolve: (entry: EmailLogEntry) => void;
+}) {
+  // Older messages collapse to one line; the latest two, and anything that
+  // needs a human (drafts, unresolved reviews), stay open.
+  const alwaysOpen = (m: EmailLogEntry, i: number) =>
+    i >= thread.messages.length - 2 || m.status === "draft" || (m.status === "needs_human_attention" && !m.resolved_at);
+  const [expanded, setExpanded] = useState<Set<number>>(() => new Set());
+  const started = thread.messages[0].created_at;
+
+  return (
+    <div className="flex flex-col animate-fade-in">
+      <header className="z-10 flex flex-col gap-3 border-b border-border/70 bg-card px-4 py-4 sm:sticky sm:top-0 sm:px-6 sm:py-5 lg:px-8">
+        <button
+          type="button"
+          onClick={onBack}
+          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground md:hidden"
+        >
+          <ArrowLeft className="size-3.5" />
+          All threads
+        </button>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex min-w-0 flex-col gap-1.5">
+            <h2 className="text-xl leading-snug font-light tracking-tight text-balance">{thread.subject || "(no subject)"}</h2>
+            <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+              <Link href={`/clients/${thread.clientId}`} className="text-foreground hover:underline">
+                {client?.name ?? `Client #${thread.clientId}`}
+              </Link>
+              {client?.email && (
+                <>
+                  <span aria-hidden className="text-muted-foreground/50">·</span>
+                  {client.email}
+                </>
+              )}
+              <span aria-hidden className="text-muted-foreground/50">·</span>
+              {thread.messages.length} message{thread.messages.length === 1 ? "" : "s"} since {formatDate(started)}
+            </p>
+          </div>
+          <Button variant="ghost" size="sm" nativeButton={false} render={<Link href={`/clients/${thread.clientId}`} />}>
+            Open client
+            <ArrowUpRight />
+          </Button>
+        </div>
+      </header>
+
+      <div className="flex flex-col gap-5 px-4 py-5 sm:px-6 sm:py-6 lg:px-8">
+        {thread.messages.map((entry, i) =>
+          alwaysOpen(entry, i) || expanded.has(entry.id) ? (
+            <MessageItem
+              key={entry.id}
+              entry={entry}
+              client={client}
+              sending={sendingId === entry.id}
+              resolving={resolvingId === entry.id}
+              error={rowError[entry.id]}
+              onSaveDraft={(update) => onSaveDraft(entry, update)}
+              onSaveAndSend={(update) => onSaveAndSend(entry, update)}
+              onResolve={() => onResolve(entry)}
+            />
+          ) : (
+            <button
+              key={entry.id}
+              type="button"
+              onClick={() => setExpanded((prev) => new Set(prev).add(entry.id))}
+              className="flex w-full items-center gap-3 rounded-xl bg-card px-4 py-3 text-left ring-1 ring-foreground/10 transition-colors hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            >
+              <span className="shrink-0 text-[0.8125rem] font-medium">
+                {entry.direction === "inbound" ? client?.name ?? "Client" : "Your firm"}
+              </span>
+              <span className="min-w-0 flex-1 truncate text-[0.8125rem] text-muted-foreground">{snippet(entry.content, 200)}</span>
+              {entry.documents.length > 0 && <Paperclip className="size-3.5 shrink-0 text-muted-foreground" />}
+              <span className="shrink-0 text-xs text-muted-foreground">{formatDate(entry.created_at)}</span>
+            </button>
+          )
+        )}
+        {live && <LiveRunCard run={live} />}
+      </div>
+    </div>
+  );
+}
+
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function formatDateTime(iso: string) {
+  return new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
+function initials(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
+}
+
+function MessageItem({
   entry,
+  client,
   sending,
   resolving,
   error,
-  onSend,
-  onEdit,
+  onSaveDraft,
+  onSaveAndSend,
   onResolve,
 }: {
   entry: EmailLogEntry;
+  client?: Client;
   sending: boolean;
   resolving: boolean;
   error?: string;
-  onSend: () => void;
-  onEdit: () => void;
+  onSaveDraft: (update: { subject: string; content: string }) => Promise<void>;
+  onSaveAndSend: (update: { subject: string; content: string } | null) => Promise<void>;
   onResolve: () => void;
 }) {
+  const inbound = entry.direction === "inbound";
+  const state = messageState(entry);
+  const senderName = inbound ? client?.name ?? entry.from_email ?? "Client" : "Your firm";
+  const address = inbound ? entry.from_email : entry.to_email;
+  const unresolved = entry.status === "needs_human_attention" && !entry.resolved_at;
+  const isDraft = entry.status === "draft";
+
   return (
-    <div className="flex flex-col gap-2.5 rounded-lg border border-border/50 p-4">
-      <div className="flex items-center justify-between gap-3">
-        <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-          {entry.direction === "outbound" ? (
-            <ArrowUpRight className="size-3.5 text-muted-foreground/70" />
-          ) : (
-            <ArrowDownLeft className="size-3.5 text-muted-foreground/70" />
-          )}
-          {entry.direction === "outbound"
-            ? entry.to_email ?? "Outbound"
-            : entry.from_email ?? "Inbound"}
+    <article
+      className={cn(
+        "flex min-w-0 flex-col gap-5 rounded-xl bg-card p-4 ring-1 ring-foreground/15 sm:p-5",
+        isDraft && "ring-warning/60"
+      )}
+    >
+      <div className="grid grid-cols-[2rem_minmax(0,1fr)] items-start gap-x-3 gap-y-2 border-b border-border/60 pb-4 sm:grid-cols-[2rem_minmax(0,1fr)_auto]">
+        <span
+          aria-hidden
+          className="flex size-8 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-medium text-foreground"
+        >
+          {inbound ? initials(senderName) || "C" : <ArrowUpRight className="size-3.5" />}
         </span>
-        <span className="shrink-0 text-xs text-muted-foreground">
-          {formatRelativeTime(entry.created_at)}
-        </span>
-      </div>
-      <div className="flex items-center gap-3">
-        <span className="inline-flex items-center gap-2">
-          <span
-            className={cn(
-              "size-1.5 rounded-full",
-              statusToneClasses[effectiveTone(entry)]
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+            <span className="text-sm font-medium">{senderName}</span>
+            {(inbound || entry.automation_level_at_decision) && (
+              <span className="text-xs text-muted-foreground">
+                {inbound ? "Client" : entry.autosent ? "Sent automatically by Compozor" : "Prepared by Compozor"}
+              </span>
             )}
-          />
-          <span className="text-sm text-foreground/80">{effectiveStatusLabel(entry)}</span>
-        </span>
-        <AutosendCell entry={entry} />
+          </div>
+          {address && (
+            <span className="break-all text-xs text-muted-foreground">
+              {inbound ? "From" : "To"} {address}
+            </span>
+          )}
+        </div>
+        <div className="col-start-2 flex flex-wrap items-center gap-x-3 gap-y-1 sm:col-start-auto sm:flex-col sm:items-end">
+          <AutomationDetail entry={entry}>
+            <StateLabel state={state} />
+          </AutomationDetail>
+          <time dateTime={entry.created_at} title={new Date(entry.created_at).toLocaleString()} className="text-xs text-muted-foreground tabular-nums">
+            {formatDateTime(entry.created_at)}
+          </time>
+        </div>
       </div>
+
       {entry.status === "needs_human_attention" && entry.escalation_reason && (
-        <EscalationReasonDisclosure reason={entry.escalation_reason} resolved={!!entry.resolved_at} />
+        <div
+          className={cn(
+            "flex flex-col gap-3 rounded-lg px-4 py-3 text-sm sm:flex-row sm:items-start sm:justify-between",
+            unresolved ? "bg-destructive/[0.06] text-foreground" : "bg-muted/60 text-muted-foreground"
+          )}
+        >
+          <div className="flex items-start gap-2.5">
+            {unresolved ? (
+              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" />
+            ) : (
+              <Info className="mt-0.5 size-4 shrink-0" />
+            )}
+            <div className="flex flex-col gap-0.5">
+              <span className="font-medium">{unresolved ? "Needs your review" : "Reviewed"}</span>
+              <span className="text-pretty whitespace-pre-wrap text-muted-foreground">{entry.escalation_reason}</span>
+            </div>
+          </div>
+          {unresolved && (
+            <Button size="sm" variant="outline" className="shrink-0 bg-card" disabled={resolving} onClick={onResolve}>
+              <Check />
+              {resolving ? "Resolving…" : "Mark resolved"}
+            </Button>
+          )}
+        </div>
       )}
-      <p className="whitespace-pre-wrap text-sm text-foreground/80">
-        {entry.content ? <Linkify text={entry.content} /> : "(no body)"}
-      </p>
+
+      {isDraft ? (
+        <DraftComposer entry={entry} sending={sending} onSave={onSaveDraft} onSend={onSaveAndSend} />
+      ) : inbound && entry.has_html ? (
+        <div className="min-w-0 sm:pl-11">
+          <EmailHtmlFrame
+            cacheKey={["email-html", entry.id]}
+            load={() => getEmailLogHtml(entry.id)}
+            fallback={<EmailBody content={entry.content} />}
+          />
+        </div>
+      ) : (
+        <EmailBody content={entry.content} className="max-w-prose sm:pl-11" />
+      )}
+
       {entry.documents.length > 0 && (
-        <div className="flex flex-col gap-1.5">
-          {entry.documents.map((doc) => (
-            <AttachmentRow key={doc.id} doc={doc} />
-          ))}
+        <div className={cn("flex flex-col gap-2", !isDraft && "sm:pl-11")}>
+          <span className="text-xs text-muted-foreground">
+            {entry.documents.length} attachment{entry.documents.length === 1 ? "" : "s"}
+          </span>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {entry.documents.map((doc) => (
+              <AttachmentTile key={doc.id} doc={doc} />
+            ))}
+          </div>
         </div>
       )}
-      {entry.status === "draft" && entry.autosend_error && (
-        <p className="text-xs text-muted-foreground">{entry.autosend_error}</p>
+
+      {error && <p className={cn("text-xs text-destructive", !isDraft && "sm:pl-11")}>{error}</p>}
+    </article>
+  );
+}
+
+function DraftComposer({
+  entry,
+  sending,
+  onSave,
+  onSend,
+}: {
+  entry: EmailLogEntry;
+  sending: boolean;
+  onSave: (update: { subject: string; content: string }) => Promise<void>;
+  onSend: (update: { subject: string; content: string } | null) => Promise<void>;
+}) {
+  const [subject, setSubject] = useState(entry.subject ?? "");
+  const [content, setContent] = useState(entry.content ?? "");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+  const dirty = subject !== (entry.subject ?? "") || content.trim() !== (entry.content ?? "").trim();
+  const locked = entry.delivery_state === "sending" || entry.delivery_state === "uncertain";
+  const busy = saving || sending;
+
+  const save = async () => {
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await onSave({ subject, content });
+      setSavedAt(Date.now());
+    } catch (e) {
+      setSaveError(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-3 rounded-lg border border-input bg-card px-3">
+        <label htmlFor={`draft-subject-${entry.id}`} className="shrink-0 text-xs text-muted-foreground">
+          Subject
+        </label>
+        <input
+          id={`draft-subject-${entry.id}`}
+          value={subject}
+          disabled={locked || busy}
+          onChange={(e) => setSubject(e.target.value)}
+          className="h-10 min-w-0 flex-1 bg-transparent text-sm outline-none disabled:opacity-60"
+        />
+      </div>
+      <EmailDraftEditor content={content} onChange={setContent} className="bg-card" />
+      {entry.autosend_error && (
+        <p className="flex items-start gap-2 text-xs text-muted-foreground">
+          <Info className="mt-0.5 size-3.5 shrink-0" />
+          Held for review: {entry.autosend_error}
+        </p>
       )}
-      {entry.status === "draft" && (
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <span className="text-xs text-muted-foreground">
+          {locked
+            ? "Delivery in progress. Editing is paused."
+            : dirty
+              ? "Unsaved changes"
+              : savedAt
+                ? "Draft saved"
+                : "Not sent yet. Edit, then send when ready."}
+        </span>
         <div className="flex items-center gap-2">
-          <Button size="sm" disabled={sending} onClick={onSend}>
-            {sending ? "Sending…" : "Send"}
+          {dirty && !locked && (
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={busy}
+              onClick={() => {
+                setSubject(entry.subject ?? "");
+                setContent(entry.content ?? "");
+              }}
+            >
+              Discard changes
+            </Button>
+          )}
+          <Button variant="outline" size="sm" className="bg-card" disabled={!dirty || busy || locked || !content.trim()} onClick={save}>
+            {saving ? "Saving…" : "Save draft"}
           </Button>
-          <Button size="sm" variant="outline" disabled={sending || entry.delivery_state === "uncertain" || entry.delivery_state === "sending"} onClick={onEdit}>
-            <Pencil className="size-3.5" />
-            Edit
+          <Button size="sm" disabled={busy || !content.trim() || entry.delivery_state === "sending"} onClick={() => onSend(dirty ? { subject, content } : null)}>
+            {sending ? <Loader2 className="animate-spin" /> : <Send />}
+            {sending ? "Sending…" : dirty ? "Save & send" : "Send"}
           </Button>
         </div>
-      )}
-      {entry.status === "needs_human_attention" && !entry.resolved_at && (
-        <div className="flex items-center gap-2">
-          <Button size="sm" variant="outline" disabled={resolving} onClick={onResolve}>
-            <Check className="size-3.5" />
-            {resolving ? "Resolving…" : "Mark resolved"}
-          </Button>
-        </div>
-      )}
-      {error && <p className="text-xs text-destructive">{error}</p>}
+      </div>
+      {saveError && <p className="text-xs text-destructive">{saveError}</p>}
     </div>
   );
 }
 
-// A pseudo-message-card for a thread currently mid-pipeline - there's no
-// persisted EmailLog row for this yet (the eventual draft/autosend only
-// gets created once the pipeline finishes), so this renders straight from
-// live SSE state instead of an EmailLogEntry. Replaced by the real
-// MessageCard once pipeline_finished fires and the entries list refetches.
+function AttachmentTile({ doc }: { doc: DocumentOut }) {
+  const name = doc.resolved_display_name || doc.original_filename || "Attachment";
+  const detail = [doc.classified_type !== name ? doc.classified_type : null, doc.year].filter(Boolean).join(" · ");
+  const body = (
+    <>
+      <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+        <FileText className="size-4" />
+      </span>
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="truncate text-[0.8125rem] font-medium">{name}</span>
+        <span className="truncate text-xs text-muted-foreground">{doc.download_url ? detail || "Open file" : "File unavailable"}</span>
+      </span>
+      {doc.download_url && <Download className="size-4 shrink-0 text-muted-foreground transition-colors group-hover/file:text-foreground" />}
+    </>
+  );
+  const className = "group/file flex min-w-0 items-center gap-3 rounded-lg border border-border bg-card px-3 py-2.5";
+  if (!doc.download_url) return <div className={cn(className, "opacity-70")}>{body}</div>;
+  return (
+    <a href={doc.download_url} target="_blank" rel="noopener noreferrer" title={name} className={cn(className, "transition-colors hover:bg-muted/40")}>
+      {body}
+    </a>
+  );
+}
+
+// Why an automated decision went the way it did, on hover of the state label.
+function AutomationDetail({ entry, children }: { entry: EmailLogEntry; children: React.ReactNode }) {
+  const lines = [
+    entry.automation_level_at_decision && (entry.autosent ? "Sent automatically" : "Held for staff review"),
+    entry.autosend_confidence !== null && `Confidence ${entry.autosend_confidence.toFixed(2)}${entry.autosend_threshold !== null ? ` (threshold ${entry.autosend_threshold.toFixed(2)})` : ""}`,
+    entry.safety_checks && (entry.safety_checks.passed ? "Safety review passed" : "Safety review: staff review required"),
+    entry.safety_checks?.reason,
+  ].filter(Boolean) as string[];
+  if (lines.length === 0) return <>{children}</>;
+  return (
+    <Tooltip>
+      <TooltipTrigger render={<span className="cursor-default" />}>{children}</TooltipTrigger>
+      <TooltipContent className="flex-col items-start gap-0.5">
+        {lines.map((line) => (
+          <span key={line}>{line}</span>
+        ))}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+// A pseudo-message for a thread currently mid-pipeline - there's no persisted
+// EmailLog row yet (the draft/autosend is created when the pipeline
+// finishes), so this renders from live SSE state until the list refetches.
 function LiveRunCard({ run }: { run: LiveRun }) {
   return (
-    <div className="flex flex-col gap-2.5 rounded-lg border border-accent/40 bg-accent/5 p-4">
-      <div className="flex items-center gap-1.5 text-xs font-medium text-accent">
-        <Loader2 className="size-3 animate-spin" />
+    <div className="flex flex-col gap-3 rounded-xl bg-accent/[0.06] p-5">
+      <div className="flex items-center gap-2 text-xs font-medium text-accent">
+        <Loader2 className="size-3.5 animate-spin" />
         {STAGE_LABELS[run.stage ?? ""] ?? "Processing…"}
       </div>
       {run.draftText && (
@@ -1042,189 +1398,7 @@ function LiveRunCard({ run }: { run: LiveRun }) {
           <Linkify text={run.draftText} />
         </p>
       )}
-      {run.trace.length > 0 && (
-        <AgentActivityDisclosure trajectory={run.trace} defaultOpen />
-      )}
+      {run.trace.length > 0 && <AgentActivityDisclosure trajectory={run.trace} defaultOpen />}
     </div>
-  );
-}
-
-function attachmentFilename(doc: DocumentOut) {
-  const path = doc.s3_path.split("/").pop() ?? doc.s3_path;
-  return path.replace(/^[a-f0-9-]{20,}[-_]/i, "");
-}
-
-function AttachmentRow({ doc }: { doc: DocumentOut }) {
-  const filename = attachmentFilename(doc);
-  const content = (
-    <span className="inline-flex w-fit max-w-full items-center gap-1.5 rounded-md border border-border/50 bg-muted/30 px-2 py-1 text-xs">
-      <Paperclip className="size-3 shrink-0 text-muted-foreground/70" />
-      <span className="min-w-0 shrink truncate">{filename}</span>
-      {doc.classified_type && (
-        <span className="min-w-0 shrink truncate text-muted-foreground">
-          · {doc.classified_type}
-        </span>
-      )}
-    </span>
-  );
-
-  if (!doc.download_url) return content;
-
-  return (
-    <a
-      href={doc.download_url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="inline-block w-fit max-w-full transition-opacity hover:opacity-70"
-    >
-      {content}
-    </a>
-  );
-}
-
-// Same visual language as AgentActivityDisclosure (collapsed by default,
-// chevron toggle, neutral bordered panel) rather than a wall of colored
-// text. Still amber + a warning icon while unresolved, since that's a live
-// signal someone hasn't dealt with yet - once resolved, it's just history,
-// so it downgrades to quiet muted text with an info icon and past tense
-// ("needed" not "needs") rather than continuing to shout for attention.
-function EscalationReasonDisclosure({ reason, resolved }: { reason: string; resolved: boolean }) {
-  const [open, setOpen] = useState(false);
-  const label = resolved ? "Why this needed review" : "Why this needs review";
-
-  return (
-    <div>
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className={cn(
-          "flex items-center gap-1.5 text-xs font-medium transition-colors",
-          resolved
-            ? "text-muted-foreground hover:text-foreground"
-            : "text-warning-foreground hover:text-warning-foreground/80"
-        )}
-      >
-        <ChevronDown className={cn("size-3 transition-transform", open && "rotate-180")} />
-        {resolved ? <Info className="size-3" /> : <AlertTriangle className="size-3" />}
-        {open ? `Hide ${label.charAt(0).toLowerCase()}${label.slice(1)}` : label}
-      </button>
-      {open && (
-        <p className="mt-1.5 whitespace-pre-wrap rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-xs text-foreground/80">
-          {reason}
-        </p>
-      )}
-    </div>
-  );
-}
-
-function AutosendCell({ entry }: { entry: EmailLogEntry }) {
-  if (entry.automation_level_at_decision === null) {
-    return <span className="text-xs text-muted-foreground">—</span>;
-  }
-
-  const detail = (
-    <>
-      {entry.autosend_confidence !== null && (
-        <p>Confidence: {entry.autosend_confidence.toFixed(2)}</p>
-      )}
-      {entry.autosend_threshold !== null && (
-        <p>Threshold: {entry.autosend_threshold.toFixed(2)}</p>
-      )}
-      {entry.safety_checks && <p>Review: {entry.safety_checks.passed ? "Passed" : "Staff review required"}</p>}
-      {entry.safety_checks?.reason && <p>{entry.safety_checks.reason}</p>}
-      {entry.autosend_error && <p>Note: {entry.autosend_error}</p>}
-    </>
-  );
-
-  return (
-    <div className="flex items-center gap-1.5">
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <span
-              className={cn(
-                "inline-flex cursor-default items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium",
-                entry.autosent
-                  ? "bg-accent/15 text-accent"
-                  : "bg-muted text-muted-foreground"
-              )}
-            />
-          }
-        >
-          {entry.autosent ? (
-            <>
-              <Sparkles className="size-3" />
-              Auto
-            </>
-          ) : (
-            "Manual"
-          )}
-        </TooltipTrigger>
-        <TooltipContent>{detail}</TooltipContent>
-      </Tooltip>
-      {entry.autosend_error && (
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <span className="inline-flex items-center text-accent" />
-            }
-          >
-            <AlertTriangle className="size-3.5" />
-          </TooltipTrigger>
-          <TooltipContent>{entry.autosend_error}</TooltipContent>
-        </Tooltip>
-      )}
-    </div>
-  );
-}
-
-function DraftEditDialog({
-  entry,
-  onOpenChange,
-  onSave,
-}: {
-  entry: EmailLogEntry | null;
-  onOpenChange: (open: boolean) => void;
-  onSave: (content: string) => Promise<void>;
-}) {
-  const [draft, setDraft] = useState(entry?.content ?? "");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const handleSave = async () => {
-    setSaving(true);
-    setError(null);
-    try {
-      await onSave(draft);
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : String(e));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <Dialog open={entry !== null} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl">
-        <DialogHeader>
-          <DialogTitle>Edit draft</DialogTitle>
-          {entry?.to_email && (
-            <p className="text-sm text-muted-foreground">To {entry.to_email}</p>
-          )}
-        </DialogHeader>
-        {entry && (
-          <EmailDraftEditor content={draft} onChange={setDraft} autoFocus />
-        )}
-        {error && <p className="text-sm text-destructive">{error}</p>}
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
-            Cancel
-          </Button>
-          <Button onClick={handleSave} disabled={saving || !draft.trim()}>
-            {saving ? "Saving…" : "Save draft"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }

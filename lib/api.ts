@@ -295,6 +295,9 @@ export interface EmailLogEntry {
   status: EmailStatus;
   subject: string | null;
   content: string;
+  // True when original formatting can be fetched from the source mailbox; use
+  // getEmailLogHtml when the message is opened.
+  has_html?: boolean;
   from_email: string | null;
   to_email: string | null;
   escalation_reason: string | null;
@@ -348,6 +351,7 @@ export interface UnmatchedInboundEmail {
   from_email: string;
   subject: string | null;
   body_text: string;
+  has_html?: boolean;
   category: InboundEmailCategory;
   ai_reason: string;
   ai_confidence: number;
@@ -913,6 +917,13 @@ export const listClientMeetings = (clientId: number) =>
   request<MeetingRequest[]>(`/clients/${clientId}/meetings`);
 
 // ---------- Unmatched inbound emails ----------
+
+// Rich HTML versions of inbound email, fetched only when a message is opened.
+export const getEmailLogHtml = (emailLogId: number) =>
+  request<{ html: string | null }>(`/email-log/${emailLogId}/html`);
+
+export const getUnmatchedEmailHtml = (unmatchedEmailId: number) =>
+  request<{ html: string }>(`/unmatched-inbound-emails/${unmatchedEmailId}/html`);
 
 export const listUnmatchedInboundEmails = (filters?: {
   review_status?: InboundEmailReviewStatus;

@@ -22,12 +22,14 @@ import {
   UnmatchedInboundEmail,
   createClientFromUnmatchedInboundEmail,
   dismissUnmatchedInboundEmail,
+  getUnmatchedEmailHtml,
   linkUnmatchedInboundEmail,
   listClients,
   listUnmatchedInboundEmails,
 } from "@/lib/api";
 import { cn, formatRelativeTime } from "@/lib/utils";
 import { Linkify } from "@/components/linkify";
+import { EmailHtmlFrame } from "@/components/email-html-frame";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -509,9 +511,23 @@ export default function UnmatchedEmailsPage() {
                       <tr className="border-b border-border/40">
                         <td colSpan={4} className="bg-muted/30 py-4 pr-4 pl-4">
                           <div className="flex flex-col items-start gap-4 xl:flex-row">
-                            <p className="flex-1 whitespace-pre-wrap text-foreground/80">
-                              <Linkify text={email.body_text} />
-                            </p>
+                            <div className="min-w-0 flex-1">
+                              {email.has_html ? (
+                                <div className="rounded-lg bg-card p-4 ring-1 ring-foreground/10">
+                                  <EmailHtmlFrame
+                                    cacheKey={["unmatched-email-html", email.id]}
+                                    load={() => getUnmatchedEmailHtml(email.id)}
+                                    fallback={<p className="whitespace-pre-wrap text-foreground/80">
+                                  <Linkify text={email.body_text} />
+                                </p>}
+                                  />
+                                </div>
+                              ) : (
+                              <p className="whitespace-pre-wrap text-foreground/80">
+                                <Linkify text={email.body_text} />
+                              </p>
+                              )}
+                            </div>
                             <TriageActions
                               email={email}
                               clients={clients}
