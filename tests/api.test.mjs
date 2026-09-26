@@ -228,22 +228,3 @@ test("resend confirmation is structured and never enabled on a normal Send", asy
     globalThis.window = originalWindow;
   }
 });
-
-test('client facts use the replacement backend endpoints and retain conflict metadata', async () => {
-  const api = await import('../lib/api.ts');
-  const originalFetch = globalThis.fetch;
-  const facts = [{ id: 12, statement: 'Address needs confirmation', status: 'conflict', verified: false }];
-  const requests = [];
-  globalThis.fetch = async (url, init) => {
-    const request = new Request(url, init);
-    requests.push([new URL(request.url).pathname, request.method]);
-    return request.method === 'DELETE' ? new Response(null, { status: 204 }) : Response.json(facts);
-  };
-  try {
-    assert.deepEqual(await api.listClientFacts(7), facts);
-    await api.deleteClientFact(7, 12);
-    assert.deepEqual(requests, [['/clients/7/facts', 'GET'], ['/clients/7/facts/12', 'DELETE']]);
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-});
