@@ -119,7 +119,7 @@ export function PackageFormDialog({
         ) : (
           <>
             <Plus />
-            Create New Package
+            New package
           </>
         )}
       </DialogTrigger>

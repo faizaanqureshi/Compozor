@@ -5,14 +5,10 @@ import Link from "next/link";
 import useSWR from "swr";
 import { clientsKey, emailLogKey } from "@/lib/swr-keys";
 import {
-  AlertTriangle,
   ArchiveRestore,
   ArrowUp,
-  Check,
-  ChevronRight,
   Download,
   Loader2,
-  Mail,
   Package as PackageIcon,
   Plus,
   Search,
@@ -26,8 +22,8 @@ import {
   Client,
   ClientPackage,
   ClientStatus,
+  ClientWithChecklistSummary,
   ClientWorkflowStatus,
-  EmailLogEntry,
   WorkflowRunStatus,
   bulkDeleteClients,
   createClient,
@@ -43,7 +39,8 @@ import {
   unassignWorkflowFromClient,
   watchInboxConnection,
 } from "@/lib/api";
-import { cn, formatRelativeTime } from "@/lib/utils";
+import { cn, formatRelativeTime, formatShortDate } from "@/lib/utils";
+import { relativeDays, startOfDay, TIER_META } from "@/lib/checklist-urgency";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
@@ -65,10 +62,15 @@ import { PackageFormDialog } from "@/components/package-form-dialog";
 import { AssignWorkflowDialog } from "@/components/assign-workflow-dialog";
 import { AssignPackageDialog } from "@/components/assign-package-dialog";
 import { PurgeConfirmDialog } from "@/components/purge-confirm-dialog";
-import { UrgencyDashboard } from "@/components/urgency-dashboard";
+import { Panel, panelTableHead } from "@/components/panel";
+import { ProgressRule, StatStrip, type StatStripItem } from "@/components/stat-strip";
+import { OutstandingDocuments, outstandingRows } from "@/components/outstanding-documents";
+import { BacklogBreakdown } from "@/components/backlog-breakdown";
+import { CorrespondenceChart } from "@/components/correspondence-chart";
+import { RecentActivity } from "@/components/recent-activity";
 
 type WorkflowTone = "success" | "warning" | "attention" | "neutral";
-type SortKey = "name" | "email" | "documents" | "activity" | "status";
+type SortKey = "name" | "documents" | "activity" | "status";
 type Sort = { key: SortKey; direction: "asc" | "desc" };
 
 const toneClasses: Record<WorkflowTone, string> = {
@@ -79,9 +81,6 @@ const toneClasses: Record<WorkflowTone, string> = {
 };
 
 // null status = assigned but never run yet (checklist not complete).
-// Reuses the same tone-dot idiom as the Status column above rather than
-// introducing a second visual language for what's conceptually the same
-// "status" concept - see toneClasses.
 function workflowStatusTone(status: WorkflowRunStatus | null): WorkflowTone {
   switch (status) {
     case "completed":
@@ -114,33 +113,11 @@ function workflowStatusLabel(status: WorkflowRunStatus | null): string {
   }
 }
 
-function describeActivity(entry: EmailLogEntry) {
-  const needsAttention = entry.status === "needs_human_attention";
-  const isOutbound = entry.direction === "outbound";
-
-  const label = needsAttention
-    ? "Needs your review"
-    : isOutbound
-      ? entry.status === "sent"
-        ? "Reminder sent"
-        : "Reply drafted"
-      : "Email received";
-
-  const Icon = needsAttention ? AlertTriangle : isOutbound ? Check : Mail;
-  const iconTone = needsAttention
-    ? "bg-warning/20 text-warning-foreground"
-    : isOutbound
-      ? "bg-accent/15 text-accent"
-      : "bg-muted text-muted-foreground";
-
-  return { label, Icon, iconTone };
-}
-
 function outstandingCount(summary?: ChecklistSummary) {
   return summary ? summary.total - summary.received : 0;
 }
 
-function deriveWorkflowStatus(
+function deriveClientStatus(
   client: Client,
   summary?: ChecklistSummary
 ): { label: string; tone: WorkflowTone } {
@@ -151,6 +128,10 @@ function deriveWorkflowStatus(
     return { label: "Complete", tone: "success" };
   }
   return { label: "Active", tone: "success" };
+}
+
+function plural(n: number, word: string) {
+  return `${n} ${word}${n === 1 ? "" : "s"}`;
 }
 
 export default function ClientsPage() {
@@ -178,9 +159,7 @@ export default function ClientsPage() {
   const [status, setStatus] = useState<ClientStatus>("active");
   const [submitting, setSubmitting] = useState(false);
 
-  const [reminderState, setReminderState] = useState<
-    Record<number, "sending">
-  >({});
+  const [reminderState, setReminderState] = useState<Record<number, "sending">>({});
 
   const [gmailBanner, setGmailBanner] = useState<
     { type: "success" | "error"; message: string } | null
@@ -257,55 +236,121 @@ export default function ClientsPage() {
     return next;
   }, [emailLog]);
 
-  const waiting = useMemo(() => {
-    return (clients ?? [])
-      .map((c) => {
-        const items = c.checklist_summary.items.filter(
-          (i) => i.status === "missing" || i.status === "wrong"
-        );
-        return { client: c, items };
-      })
-      .filter((w) => w.items.length > 0);
-  }, [clients]);
+  const outstanding = useMemo(() => outstandingRows(clients), [clients]);
 
-  const recentActivity = useMemo(() => {
-    const sorted = [...(emailLog ?? [])].sort((a, b) =>
-      b.created_at.localeCompare(a.created_at)
-    );
-    const byClient = new Map<number, EmailLogEntry[]>();
-    for (const entry of sorted) {
-      const list = byClient.get(entry.client_id);
-      if (list) list.push(entry);
-      else byClient.set(entry.client_id, [entry]);
+  // Headline figures for the summary strip.
+  const overview = useMemo(() => {
+    const now = new Date();
+    let active = 0;
+    let inactive = 0;
+    let addedThisMonth = 0;
+    let received = 0;
+    let requested = 0;
+    let workflowReviews = 0;
+    for (const c of clients ?? []) {
+      if (c.status === "active") active++;
+      else inactive++;
+      const created = new Date(c.created_at);
+      if (created.getFullYear() === now.getFullYear() && created.getMonth() === now.getMonth()) addedThisMonth++;
+      received += c.checklist_summary.received;
+      requested += c.checklist_summary.total;
+      workflowReviews += c.workflow_statuses.filter(
+        (w) => w.status === "needs_review" || w.status === "failed"
+      ).length;
     }
-    const groups = Array.from(byClient.entries()).map(([clientId, entries]) => {
-      const counts: { label: string; count: number }[] = [];
-      for (const entry of entries) {
-        const { label } = describeActivity(entry);
-        const existing = counts.find((c) => c.label === label);
-        if (existing) existing.count += 1;
-        else counts.push({ label, count: 1 });
-      }
-      return { clientId, entries, counts, latest: entries[0].created_at };
-    });
-    groups.sort((a, b) => b.latest.localeCompare(a.latest));
-    return groups.slice(0, 6);
-  }, [emailLog]);
+    const overdue = outstanding.filter((r) => r.tier === "overdue").length;
+    const dueSoon = outstanding.filter((r) => r.tier === "due_soon").length;
+    const nextDeadline = outstanding
+      .filter((r) => r.daysUntil !== null && r.daysUntil >= 0)
+      .sort((a, b) => a.daysUntil! - b.daysUntil!)[0];
+    const openEmails = (emailLog ?? []).filter((e) => !e.archived_at);
+    const escalations = openEmails.filter((e) => e.status === "needs_human_attention" && !e.resolved_at).length;
+    const drafts = openEmails.filter((e) => e.direction === "outbound" && e.status === "draft").length;
+    return {
+      active,
+      inactive,
+      addedThisMonth,
+      received,
+      requested,
+      overdue,
+      dueSoon,
+      nextDeadline,
+      escalations,
+      drafts,
+      workflowReviews,
+    };
+  }, [clients, emailLog, outstanding]);
 
-  const [expandedClients, setExpandedClients] = useState<Set<number>>(new Set());
-  const toggleExpanded = (clientId: number) => {
-    setExpandedClients((prev) => {
-      const next = new Set(prev);
-      if (next.has(clientId)) next.delete(clientId);
-      else next.add(clientId);
-      return next;
-    });
-  };
+  const summaryItems: StatStripItem[] = useMemo(() => {
+    const o = overview;
+    const today = startOfDay(new Date());
+    const needsYou = o.escalations + o.drafts + o.workflowReviews;
+    const collected = o.requested ? Math.round((o.received / o.requested) * 100) : 0;
+    return [
+      {
+        label: "Active clients",
+        value: o.active,
+        detail:
+          [o.inactive > 0 && `${o.inactive} inactive`, o.addedThisMonth > 0 && `${o.addedThisMonth} added this month`]
+            .filter(Boolean)
+            .join(" · ") || "All active",
+      },
+      {
+        label: "Documents",
+        value: (
+          <>
+            {o.received}
+            <span className="text-muted-foreground/70">/{o.requested}</span>
+          </>
+        ),
+        detail:
+          o.requested === 0 ? (
+            "Nothing requested yet"
+          ) : (
+            <span className="flex items-center gap-2">
+              <ProgressRule value={o.received} total={o.requested} />
+              {collected}% collected
+            </span>
+          ),
+      },
+      {
+        label: "Outstanding",
+        value: outstanding.length,
+        tone: o.overdue > 0 ? "text-destructive" : undefined,
+        detail:
+          outstanding.length === 0
+            ? "Nothing outstanding"
+            : [o.overdue > 0 && `${o.overdue} overdue`, o.dueSoon > 0 && `${o.dueSoon} due soon`]
+                .filter(Boolean)
+                .join(" · ") || "Nothing overdue",
+      },
+      {
+        label: "Next deadline",
+        value: o.nextDeadline ? formatShortDate(o.nextDeadline.item.expected_date_range_end!) : "—",
+        tone: o.nextDeadline?.tier === "due_soon" ? TIER_META.due_soon.text : undefined,
+        detail: o.nextDeadline
+          ? `${o.nextDeadline.client.name} · ${relativeDays(o.nextDeadline.item.expected_date_range_end!, today)}`
+          : "No upcoming deadlines",
+      },
+      {
+        label: "Needs you",
+        value: needsYou,
+        tone: o.escalations > 0 ? "text-destructive" : needsYou > 0 ? "text-warning-foreground" : undefined,
+        detail:
+          [
+            o.escalations > 0 && `${o.escalations} escalated`,
+            o.drafts > 0 && `${plural(o.drafts, "draft")}`,
+            o.workflowReviews > 0 && `${o.workflowReviews} to review`,
+          ]
+            .filter(Boolean)
+            .join(" · ") || "Nothing waiting on you",
+      },
+    ];
+  }, [overview, outstanding.length]);
 
-  // Batch client selection, for bulk actions (currently just "assign
-  // workflow") - lives on this table rather than on the Workflows page, so
-  // picking who a workflow runs for happens in the same place you're
-  // already looking at/sorting/searching clients.
+  // Batch client selection, for bulk actions - lives on this table rather
+  // than on the Workflows page, so picking who a workflow runs for happens in
+  // the same place you're already looking at/sorting/searching clients.
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const toggleSelected = (clientId: number) => {
     setSelectedIds((prev) => {
@@ -315,16 +360,6 @@ export default function ClientsPage() {
       return next;
     });
   };
-
-  const stats = useMemo(() => {
-    const counts = { active: 0, inactive: 0 };
-    for (const c of clients ?? []) counts[c.status]++;
-    return {
-      total: clients?.length ?? 0,
-      active: counts.active,
-      inactive: counts.inactive,
-    };
-  }, [clients]);
 
   const toggleSort = (key: SortKey) => {
     setSort((prev) =>
@@ -338,15 +373,16 @@ export default function ClientsPage() {
     const q = search.trim().toLowerCase();
     const filtered = (clients ?? []).filter(
       (c) =>
-        !q || c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q)
+        !q ||
+        c.name.toLowerCase().includes(q) ||
+        c.email.toLowerCase().includes(q) ||
+        !!c.company_name?.toLowerCase().includes(q)
     );
     const dir = sort.direction === "asc" ? 1 : -1;
     return filtered.sort((a, b) => {
       switch (sort.key) {
         case "name":
           return a.name.localeCompare(b.name) * dir;
-        case "email":
-          return a.email.localeCompare(b.email) * dir;
         case "documents":
           return (
             (outstandingCount(a.checklist_summary) - outstandingCount(b.checklist_summary)) *
@@ -358,8 +394,8 @@ export default function ClientsPage() {
           );
         case "status":
           return (
-            deriveWorkflowStatus(a, a.checklist_summary).label.localeCompare(
-              deriveWorkflowStatus(b, b.checklist_summary).label
+            deriveClientStatus(a, a.checklist_summary).label.localeCompare(
+              deriveClientStatus(b, b.checklist_summary).label
             ) * dir
           );
       }
@@ -416,7 +452,7 @@ export default function ClientsPage() {
     }
   };
 
-  // itemIds is whichever documents the urgency dashboard's checkboxes left
+  // itemIds is whichever documents the outstanding panel's checkboxes left
   // selected for this client (all of them by default) - one email covering
   // just that set. See lib/api.ts's sendChecklistReminder.
   const sendReminder = async (e: React.MouseEvent, clientId: number, itemIds: number[]) => {
@@ -425,11 +461,8 @@ export default function ClientsPage() {
     setReminderState((prev) => ({ ...prev, [clientId]: "sending" }));
     try {
       await sendChecklistReminder(clientId, itemIds);
-      // Wait for client.last_reminder_sent_at to actually refresh before
-      // clearing "sending" - that timestamp (not a persisted local flag) is
-      // what drives the cooldown countdown, since it's now short (15s, see
-      // the backend's MANUAL_REMINDER_COOLDOWN) rather than long enough that
-      // a "sent, locked for the rest of the session" flag made sense.
+      // Wait for client.last_reminder_sent_at to refresh before clearing
+      // "sending" - that timestamp drives the cooldown countdown.
       await mutateClients();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : String(e));
@@ -442,8 +475,10 @@ export default function ClientsPage() {
     }
   };
 
+  const clientsWaiting = new Set(outstanding.map((r) => r.client.id)).size;
+
   return (
-    <div className="relative isolate flex min-h-full w-full flex-col gap-8">
+    <div className="relative isolate mx-auto flex min-h-full w-full max-w-[96rem] flex-col gap-6">
       {gmailBanner && (
         <div
           className={cn(
@@ -462,160 +497,138 @@ export default function ClientsPage() {
           </button>
         </div>
       )}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+
+      <header className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
         <div className="flex flex-col gap-2">
-          <h1 className="text-4xl font-thin tracking-tight [font-family:var(--font-denton)] sm:text-5xl md:text-6xl">
+          <h1 className="text-4xl leading-tight font-thin tracking-tight [font-family:var(--font-denton)] md:text-5xl">
             Clients
           </h1>
           {loading ? (
             <Skeleton className="h-4 w-56" />
           ) : (
-            <p className="text-sm text-muted-foreground">
-              {waiting.length > 0
-                ? `Waiting on ${waiting.reduce((n, w) => n + w.items.length, 0)} document${
-                    waiting.reduce((n, w) => n + w.items.length, 0) === 1 ? "" : "s"
-                  } from ${waiting.length} client${waiting.length === 1 ? "" : "s"}.`
-                : `${stats.active} active client${stats.active === 1 ? "" : "s"} · all caught up.`}
+            <p className="text-sm text-pretty text-muted-foreground">
+              {outstanding.length > 0
+                ? `Waiting on ${plural(outstanding.length, "document")} from ${plural(clientsWaiting, "client")}.`
+                : `${plural(overview.active, "active client")} · all caught up.`}
             </p>
           )}
         </div>
-        <div className="flex items-center gap-2">
-        <WorkflowFormDialog onSaved={() => {}} variant="outline" />
-        <PackageFormDialog onSaved={() => {}} variant="outline" />
-        <ClientImportModal onImported={() => mutateClients()} />
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger render={<Button />}>
-            <Plus />
-            Add client
-          </DialogTrigger>
-          <DialogContent>
-            <form onSubmit={onSubmit} className="flex flex-col gap-4">
-              <DialogHeader>
-                <DialogTitle>Add client</DialogTitle>
-                <DialogDescription>
-                  Add a new client to your organization.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="flex flex-col gap-5">
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="client-name">Name</Label>
-                  <Input
-                    id="client-name"
-                    required
-                    placeholder="Jane Doe"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                  />
+        <div className="flex flex-wrap items-center gap-1.5">
+          <WorkflowFormDialog onSaved={() => {}} variant="ghost" />
+          <PackageFormDialog onSaved={() => {}} variant="ghost" />
+          <span aria-hidden className="mx-1 hidden h-5 w-px bg-border sm:block" />
+          <ClientImportModal onImported={() => mutateClients()} />
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger render={<Button />}>
+              <Plus />
+              Add client
+            </DialogTrigger>
+            <DialogContent>
+              <form onSubmit={onSubmit} className="flex flex-col gap-4">
+                <DialogHeader>
+                  <DialogTitle>Add client</DialogTitle>
+                  <DialogDescription>
+                    Add a new client to your organization.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="flex flex-col gap-5">
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="client-name">Name</Label>
+                    <Input
+                      id="client-name"
+                      required
+                      placeholder="Jane Doe"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="client-email">Email</Label>
+                    <Input
+                      id="client-email"
+                      required
+                      type="email"
+                      placeholder="jane@example.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="client-phone">Phone number</Label>
+                    <Input
+                      id="client-phone"
+                      type="tel"
+                      placeholder="Optional..."
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="client-company">Company name</Label>
+                    <Input
+                      id="client-company"
+                      placeholder="Optional..."
+                      value={companyName}
+                      onChange={(e) => setCompanyName(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="client-status">Status</Label>
+                    <NativeSelect
+                      id="client-status"
+                      value={status}
+                      onChange={(e) => setStatus(e.target.value as ClientStatus)}
+                    >
+                      <option value="active">Active</option>
+                      <option value="inactive">Inactive</option>
+                    </NativeSelect>
+                  </div>
                 </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="client-email">Email</Label>
-                  <Input
-                    id="client-email"
-                    required
-                    type="email"
-                    placeholder="jane@example.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="client-phone">Phone number</Label>
-                  <Input
-                    id="client-phone"
-                    type="tel"
-                    placeholder="Optional..."
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="client-company">Company name</Label>
-                  <Input
-                    id="client-company"
-                    placeholder="Optional..."
-                    value={companyName}
-                    onChange={(e) => setCompanyName(e.target.value)}
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="client-status">Status</Label>
-                  <NativeSelect
-                    id="client-status"
-                    value={status}
-                    onChange={(e) => setStatus(e.target.value as ClientStatus)}
-                  >
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
-                  </NativeSelect>
-                </div>
-              </div>
-              {error && <p className="text-sm text-destructive">{error}</p>}
-              <DialogFooter>
-                <Button type="submit" disabled={submitting}>
-                  {submitting ? "Adding…" : "Add client"}
-                </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
+                {error && <p className="text-sm text-destructive">{error}</p>}
+                <DialogFooter>
+                  <Button type="submit" disabled={submitting}>
+                    {submitting ? "Adding…" : "Add client"}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
         </div>
-      </div>
+      </header>
 
       {(error || fetchError) && !open && (
         <p className="text-sm text-destructive">{error || fetchError}</p>
       )}
 
-      <section className="flex flex-col gap-4">
-        <div className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-          Overview
-        </div>
-        <UrgencyDashboard
-          clients={clients}
-          loading={loading}
-          reminderState={reminderState}
-          onSendReminder={sendReminder}
-        />
-      </section>
+      <StatStrip
+        label="Practice summary"
+        items={summaryItems}
+        loading={loading}
+        columns="grid-cols-2 lg:grid-cols-5 [&>*:last-child]:max-lg:col-span-2"
+      />
 
-      <section className="flex flex-col gap-4">
-        <div className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-          Recent activity
+      <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-6 xl:grid-cols-[minmax(0,1fr)_22rem] 2xl:grid-cols-[minmax(0,1fr)_24rem]">
+        <div className="flex min-w-0 flex-col gap-6">
+          <OutstandingDocuments
+            clients={clients}
+            loading={loading}
+            reminderState={reminderState}
+            onSendReminder={sendReminder}
+          />
+          <CorrespondenceChart entries={emailLog} loading={loading} />
         </div>
-        <div className="rounded-2xl bg-card p-4 ring-1 ring-foreground/10">
-          <div className="relative flex flex-col">
-            {loading && (
-              <div className="flex flex-col gap-3 py-1">
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <Skeleton key={i} className="h-8 w-full" />
-                ))}
-              </div>
-            )}
-            {!loading && recentActivity.length > 1 && (
-              <div className="absolute top-2 bottom-2 left-3.5 w-px bg-border/70" />
-            )}
-            {!loading &&
-              recentActivity.map((group) => (
-                <ActivityGroupRow
-                  key={group.clientId}
-                  group={group}
-                  expanded={expandedClients.has(group.clientId)}
-                  onToggle={() => toggleExpanded(group.clientId)}
-                  clientName={clientsById[group.clientId]?.name ?? "Unknown client"}
-                />
-              ))}
-            {!loading && recentActivity.length === 0 && (
-              <p className="animate-fade-in py-3 text-sm text-muted-foreground">No activity yet.</p>
-            )}
-          </div>
-        </div>
-      </section>
+        {/* Two columns on tablets, a rail beside the main column on xl. */}
+        <aside className="grid min-w-0 grid-cols-[minmax(0,1fr)] items-start gap-6 md:grid-cols-2 xl:flex xl:flex-col xl:items-stretch">
+          <BacklogBreakdown rows={outstanding} loading={loading} />
+          <RecentActivity entries={emailLog} clientsById={clientsById} loading={loading} />
+        </aside>
+      </div>
 
-      <section className="flex flex-col gap-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-            All clients
-          </div>
-          <div className="flex items-center gap-2">
+      <Panel
+        title="All clients"
+        meta={loading ? undefined : `${clients?.length ?? 0}`}
+        action={
+          <>
             <div className="relative flex items-center">
               <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-foreground/50" />
               <Input
@@ -623,18 +636,19 @@ export default function ClientsPage() {
                 aria-label="Search clients"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full border-none bg-muted/60 pl-8 shadow-none focus-visible:ring-1 focus-visible:ring-ring/30 sm:w-56"
+                className="h-8 w-44 border-none bg-muted/60 pl-8 shadow-none focus-visible:ring-1 focus-visible:ring-ring/30 sm:w-56"
               />
             </div>
             <ArchivedClientsDialog onRestored={() => mutateClients()} />
-          </div>
-        </div>
+          </>
+        }
+      >
         {selectedIds.size > 0 && (
-          <div className="flex items-center gap-3 rounded-lg bg-accent/[0.08] px-4 py-2.5 text-sm animate-fade-in">
+          <div className="flex flex-wrap items-center gap-3 rounded-lg bg-accent/[0.08] px-4 py-2.5 text-sm animate-fade-in">
             <span className="font-medium text-accent">
-              {selectedIds.size} client{selectedIds.size === 1 ? "" : "s"} selected
+              {plural(selectedIds.size, "client")} selected
             </span>
-            <div className="ml-auto flex items-center gap-1.5">
+            <div className="ml-auto flex flex-wrap items-center gap-1.5">
               <AssignPackageDialog
                 clientIds={Array.from(selectedIds)}
                 onAssigned={() => {
@@ -675,169 +689,247 @@ export default function ClientsPage() {
             </div>
           </div>
         )}
-        <div className="rounded-2xl bg-card p-6 ring-1 ring-foreground/10">
-          <div className="overflow-x-auto">
-          <table className="w-full min-w-[800px] border-collapse text-sm">
-            <thead>
-              <tr className="text-left">
-                <th className="w-8 border-b border-border/50 py-2 pr-2">
-                  <input
-                    type="checkbox"
-                    aria-label="Select all clients"
-                    className="size-4 rounded border-input accent-primary"
-                    checked={allVisibleSelected}
-                    onChange={toggleSelectAll}
-                  />
-                </th>
-                <SortableTh label="Name" sortKey="name" sort={sort} onSort={toggleSort} />
-                <SortableTh label="Email" sortKey="email" sort={sort} onSort={toggleSort} />
-                <SortableTh
-                  label="Documents"
-                  sortKey="documents"
-                  sort={sort}
-                  onSort={toggleSort}
+
+        {loading ? (
+          <div className="flex flex-col gap-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Skeleton key={i} className="h-9 w-full" />
+            ))}
+          </div>
+        ) : rows.length === 0 ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">
+            {clients?.length === 0 ? "No clients yet." : "No clients match your search."}
+          </p>
+        ) : (
+          <>
+            {/* Phones: one compact entry per client. */}
+            <ul className="-my-1 flex flex-col divide-y divide-border/60 md:hidden">
+              {rows.map((c) => (
+                <ClientListItem
+                  key={c.id}
+                  client={c}
+                  activity={lastActivity[c.id]}
+                  selected={selectedIds.has(c.id)}
+                  onToggleSelected={() => toggleSelected(c.id)}
                 />
-                <SortableTh
-                  label="Last activity"
-                  sortKey="activity"
-                  sort={sort}
-                  onSort={toggleSort}
-                />
-                <SortableTh
-                  label="Status"
-                  sortKey="status"
-                  sort={sort}
-                  onSort={toggleSort}
-                />
-                <th className="border-b border-border/70 py-2 pr-4 text-[11px] font-medium tracking-wide text-muted-foreground/70">
-                  Workflow
-                </th>
-                <th className="border-b border-border/70 py-2 pr-4 text-[11px] font-medium tracking-wide text-muted-foreground/70">
-                  Package(s)
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading &&
-                Array.from({ length: 6 }).map((_, i) => (
-                  <tr key={i}>
-                    <td colSpan={8} className="border-b border-border/50 py-3 pr-4">
-                      <Skeleton className="h-4 w-full" />
-                    </td>
+              ))}
+            </ul>
+
+            {/* Tablet and up: the full table. */}
+            <div className="-mx-5 hidden overflow-x-auto px-5 md:block">
+              <table className="w-full border-collapse text-sm">
+                <thead>
+                  <tr className="border-b border-border/70">
+                    <th className="w-8 py-1.5 pr-2 pb-2.5 text-left">
+                      <input
+                        type="checkbox"
+                        aria-label="Select all clients"
+                        className="size-4 rounded border-input accent-primary"
+                        checked={allVisibleSelected}
+                        onChange={toggleSelectAll}
+                      />
+                    </th>
+                    <SortableTh label="Client" sortKey="name" sort={sort} onSort={toggleSort} />
+                    <SortableTh label="Documents" sortKey="documents" sort={sort} onSort={toggleSort} />
+                    <SortableTh label="Status" sortKey="status" sort={sort} onSort={toggleSort} />
+                    <th className={cn(panelTableHead, "hidden lg:table-cell")}>Workflows</th>
+                    <th className={cn(panelTableHead, "hidden lg:table-cell")}>Packages</th>
+                    <SortableTh
+                      label="Last activity"
+                      sortKey="activity"
+                      sort={sort}
+                      onSort={toggleSort}
+                      className="pr-0 text-right"
+                    />
                   </tr>
-                ))}
-              {!loading &&
-                rows.map((c) => {
-                  const summary = c.checklist_summary;
-                  const activity = lastActivity[c.id];
-                  const workflow = deriveWorkflowStatus(c, summary);
-                  return (
-                    <tr
-                      key={c.id}
-                      className={cn(
-                        "group/row",
-                        selectedIds.has(c.id) && "bg-accent/[0.05]"
-                      )}
-                    >
-                      <td className="border-b border-border/50 py-3 pr-2">
-                        <div className="animate-fade-in">
+                </thead>
+                <tbody>
+                  {rows.map((c) => {
+                    const summary = c.checklist_summary;
+                    const activity = lastActivity[c.id];
+                    const clientStatus = deriveClientStatus(c, summary);
+                    return (
+                      <tr
+                        key={c.id}
+                        className={cn(
+                          "group/row border-b border-border/50 align-top transition-colors last:border-0 hover:bg-muted/30",
+                          selectedIds.has(c.id) && "bg-accent/[0.05]"
+                        )}
+                      >
+                        <td className="py-3 pr-2">
                           <input
                             type="checkbox"
                             aria-label={`Select ${c.name}`}
-                            className="size-4 rounded border-input accent-primary"
+                            className="mt-0.5 size-4 rounded border-input accent-primary"
                             checked={selectedIds.has(c.id)}
                             onChange={() => toggleSelected(c.id)}
                           />
-                        </div>
-                      </td>
-                      <td className="border-b border-border/50 py-3 pr-4">
-                        <div className="animate-fade-in">
-                          <Link
-                            href={`/clients/${c.id}`}
-                            className="font-thin underline-offset-4 [font-family:var(--font-denton)] group-hover/row:underline"
-                          >
-                            {c.name}
-                          </Link>
-                        </div>
-                      </td>
-                      <td className="border-b border-border/50 py-3 pr-4 text-foreground/70">
-                        <div className="animate-fade-in">
-                          {c.email}
-                        </div>
-                      </td>
-                      <td className="border-b border-border/50 py-3 pr-4 text-foreground/70">
-                        <div className="animate-fade-in">
-                          <span className="inline-flex items-center gap-1.5">
-                            {summary
-                              ? summary.total > 0
-                                ? `${summary.received} of ${summary.total} received`
-                                : "No checklist"
-                              : "—"}
-                            {summary && summary.received > 0 && (
-                              <button
-                                type="button"
-                                title="Download documents (.zip)"
-                                disabled={downloadingId === c.id}
-                                onClick={(e) => onDownloadZip(e, c.id)}
-                                className="text-muted-foreground/50 transition-colors hover:text-foreground disabled:opacity-50"
-                              >
-                                {downloadingId === c.id ? (
-                                  <Loader2 className="size-3.5 animate-spin" />
-                                ) : (
-                                  <Download className="size-3.5" />
+                        </td>
+                        <td className="max-w-72 py-3 pr-4">
+                          <div className="flex min-w-0 flex-col">
+                            <Link
+                              href={`/clients/${c.id}`}
+                              className="truncate font-medium underline-offset-4 group-hover/row:underline"
+                            >
+                              {c.name}
+                            </Link>
+                            <span className="truncate text-xs text-muted-foreground">
+                              {c.company_name ? `${c.company_name} · ${c.email}` : c.email}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="py-3 pr-4 whitespace-nowrap">
+                          {summary.total > 0 ? (
+                            <div className="flex flex-col gap-1.5">
+                              <span className="inline-flex items-center gap-1.5 text-foreground/80 tabular-nums">
+                                {summary.received}
+                                <span className="text-muted-foreground">of {summary.total}</span>
+                                {summary.received > 0 && (
+                                  <button
+                                    type="button"
+                                    title="Download documents (.zip)"
+                                    aria-label={`Download ${c.name}'s documents`}
+                                    disabled={downloadingId === c.id}
+                                    onClick={(e) => onDownloadZip(e, c.id)}
+                                    className="text-muted-foreground/50 transition-colors hover:text-foreground disabled:opacity-50"
+                                  >
+                                    {downloadingId === c.id ? (
+                                      <Loader2 className="size-3.5 animate-spin" />
+                                    ) : (
+                                      <Download className="size-3.5" />
+                                    )}
+                                  </button>
                                 )}
-                              </button>
-                            )}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="border-b border-border/50 py-3 pr-4 text-foreground/70">
-                        <div className="animate-fade-in">
-                          {activity ? formatRelativeTime(activity) : "No activity yet"}
-                        </div>
-                      </td>
-                      <td className="border-b border-border/50 py-3 pr-4">
-                        <div className="animate-fade-in">
+                              </span>
+                              <ProgressRule value={summary.received} total={summary.total} />
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground">No requests</span>
+                          )}
+                        </td>
+                        <td className="py-3 pr-4 whitespace-nowrap">
                           <span className="inline-flex items-center gap-2">
-                            <span className={cn("size-1.5 rounded-full", toneClasses[workflow.tone])} />
-                            <span className="text-foreground/80">{workflow.label}</span>
+                            <span className={cn("size-1.5 rounded-full", toneClasses[clientStatus.tone])} />
+                            <span className="text-foreground/80">{clientStatus.label}</span>
                           </span>
-                        </div>
-                      </td>
-                      <td className="border-b border-border/50 py-3 pr-4">
-                        <div className="animate-fade-in">
+                        </td>
+                        <td className="hidden py-3 pr-4 lg:table-cell">
                           <WorkflowStatusCell
                             clientId={c.id}
                             workflowStatuses={c.workflow_statuses}
                             onRemoved={() => mutateClients()}
                           />
-                        </div>
-                      </td>
-                      <td className="border-b border-border/50 py-3 pr-4">
-                        <div className="animate-fade-in">
+                        </td>
+                        <td className="hidden py-3 pr-4 lg:table-cell">
                           <PackageStatusCell
                             clientId={c.id}
                             assignedPackages={c.assigned_packages}
                             onRemoved={() => mutateClients()}
                           />
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              {!loading && rows.length === 0 && (
-                <tr>
-                  <td colSpan={8} className="animate-fade-in py-8 text-center text-muted-foreground">
-                    {clients?.length === 0 ? "No clients yet." : "No clients match your search."}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-          </div>
-        </div>
-      </section>
+                        </td>
+                        <td className="py-3 text-right whitespace-nowrap text-muted-foreground">
+                          {activity ? formatRelativeTime(activity) : "No activity"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </Panel>
     </div>
+  );
+}
+
+function ClientListItem({
+  client,
+  activity,
+  selected,
+  onToggleSelected,
+}: {
+  client: ClientWithChecklistSummary;
+  activity: string | undefined;
+  selected: boolean;
+  onToggleSelected: () => void;
+}) {
+  const summary = client.checklist_summary;
+  const clientStatus = deriveClientStatus(client, summary);
+  return (
+    <li className={cn("flex items-start gap-3 py-3", selected && "bg-accent/[0.05]")}>
+      <input
+        type="checkbox"
+        aria-label={`Select ${client.name}`}
+        className="mt-1 size-4 shrink-0 rounded border-input accent-primary"
+        checked={selected}
+        onChange={onToggleSelected}
+      />
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <div className="flex items-baseline justify-between gap-3">
+          <Link href={`/clients/${client.id}`} className="truncate font-medium underline-offset-4 hover:underline">
+            {client.name}
+          </Link>
+          <span className="inline-flex shrink-0 items-center gap-1.5 text-xs text-foreground/80">
+            <span className={cn("size-1.5 rounded-full", toneClasses[clientStatus.tone])} />
+            {clientStatus.label}
+          </span>
+        </div>
+        <span className="truncate text-xs text-muted-foreground">{client.email}</span>
+        <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+          {summary.total > 0 && (
+            <>
+              <ProgressRule value={summary.received} total={summary.total} className="w-10" />
+              <span className="tabular-nums">
+                {summary.received} of {summary.total}
+              </span>
+              <span aria-hidden>·</span>
+            </>
+          )}
+          <span className="truncate">{activity ? formatRelativeTime(activity) : "No activity"}</span>
+        </div>
+      </div>
+    </li>
+  );
+}
+
+function SortableTh({
+  label,
+  sortKey,
+  sort,
+  onSort,
+  className,
+}: {
+  label: string;
+  sortKey: SortKey;
+  sort: Sort;
+  onSort: (key: SortKey) => void;
+  className?: string;
+}) {
+  const active = sort.key === sortKey;
+  return (
+    <th
+      className={cn(panelTableHead, className)}
+      aria-sort={active ? (sort.direction === "asc" ? "ascending" : "descending") : undefined}
+    >
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className={cn(
+          "inline-flex items-center gap-1 uppercase transition-colors",
+          active ? "text-foreground" : "hover:text-foreground"
+        )}
+      >
+        {label}
+        <ArrowUp
+          className={cn(
+            "size-3 transition-transform",
+            active ? "opacity-100" : "opacity-0",
+            active && sort.direction === "desc" && "rotate-180"
+          )}
+        />
+      </button>
+    </th>
   );
 }
 
@@ -1272,128 +1364,3 @@ function ArchivedClientsDialog({ onRestored }: { onRestored: () => void }) {
   );
 }
 
-function ActivityGroupRow({
-  group,
-  expanded,
-  onToggle,
-  clientName,
-}: {
-  group: {
-    clientId: number;
-    entries: EmailLogEntry[];
-    counts: { label: string; count: number }[];
-    latest: string;
-  };
-  expanded: boolean;
-  onToggle: () => void;
-  clientName: string;
-}) {
-  const latestEntry = group.entries[0];
-  const { Icon, iconTone } = describeActivity(latestEntry);
-  const hasMultiple = group.entries.length > 1;
-  const summary = group.counts
-    .map(({ label, count }) => (count > 1 ? `${count}× ${label}` : label))
-    .join(" · ");
-
-  return (
-    <div
-      className="relative flex flex-col animate-fade-in"
-    >
-      <div
-        role={hasMultiple ? "button" : undefined}
-        tabIndex={hasMultiple ? 0 : undefined}
-        onClick={hasMultiple ? onToggle : undefined}
-        onKeyDown={
-          hasMultiple
-            ? (e) => {
-                if (e.key === "Enter") onToggle();
-              }
-            : undefined
-        }
-        className={cn(
-          "relative flex items-center gap-3 py-2",
-          hasMultiple && "cursor-pointer"
-        )}
-      >
-        <span className="relative z-10 flex size-7 shrink-0 items-center justify-center rounded-full bg-background">
-          <span
-            className={cn(
-              "flex size-7 items-center justify-center rounded-full",
-              iconTone
-            )}
-          >
-            <Icon className="size-3.5" />
-          </span>
-        </span>
-        <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
-          <span className="truncate text-sm">
-            <span className="font-medium">{clientName}</span>
-            <span className="text-foreground/60"> — {summary}</span>
-          </span>
-          <span className="flex shrink-0 items-center gap-1.5 text-xs text-foreground/55">
-            {formatRelativeTime(group.latest)}
-            {hasMultiple && (
-              <ChevronRight
-                className={cn(
-                  "size-3.5 text-foreground/40 transition-transform",
-                  expanded && "rotate-90"
-                )}
-              />
-            )}
-          </span>
-        </div>
-      </div>
-      {hasMultiple && expanded && (
-        <div className="mb-1 ml-10 flex flex-col gap-1 border-l border-border/60 pl-4">
-          {group.entries.map((entry) => {
-            const { label } = describeActivity(entry);
-            return (
-              <div
-                key={entry.id}
-                className="flex items-center justify-between gap-3 py-1 text-xs text-foreground/60"
-              >
-                <span>{label}</span>
-                <span>{formatRelativeTime(entry.created_at)}</span>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function SortableTh({
-  label,
-  sortKey,
-  sort,
-  onSort,
-}: {
-  label: string;
-  sortKey: SortKey;
-  sort: Sort;
-  onSort: (key: SortKey) => void;
-}) {
-  const active = sort.key === sortKey;
-  return (
-    <th className="border-b border-border/70 py-2 pr-4 text-[11px] font-medium tracking-wide text-muted-foreground/70 uppercase">
-      <button
-        type="button"
-        onClick={() => onSort(sortKey)}
-        className={cn(
-          "flex items-center gap-1 transition-colors",
-          active ? "text-foreground" : "hover:text-foreground/70"
-        )}
-      >
-        {label}
-        <ArrowUp
-          className={cn(
-            "size-3 transition-transform",
-            active ? "opacity-100" : "opacity-0",
-            active && sort.direction === "desc" && "rotate-180"
-          )}
-        />
-      </button>
-    </th>
-  );
-}
