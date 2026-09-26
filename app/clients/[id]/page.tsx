@@ -13,12 +13,14 @@ import {
   Copy,
   Download,
   Loader2,
+  Mail,
   MoreHorizontal,
   Pencil,
   Play,
   Plus,
   RotateCcw,
   Trash2,
+  FileText,
   UploadCloud,
 } from "lucide-react";
 import {
@@ -90,7 +92,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
@@ -100,6 +101,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -109,29 +111,58 @@ import {
 
 function SectionCard({
   title,
-  subtitle,
+  meta,
   action,
+  loadError,
+  className,
   children,
 }: {
   title: string;
-  subtitle?: React.ReactNode;
+  meta?: React.ReactNode;
   action?: React.ReactNode;
+  // One failed request shows a quiet note in its own section instead of
+  // breaking the whole page.
+  loadError?: string | null;
+  className?: string;
   children: React.ReactNode;
 }) {
   return (
-    <section className="flex flex-col gap-5 rounded-2xl bg-card p-6 ring-1 ring-foreground/10">
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex min-w-0 flex-1 flex-col gap-2">
-          <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-            {title}
-          </h2>
-          {subtitle && <div className="text-sm text-muted-foreground">{subtitle}</div>}
+    <section className={cn("flex min-w-0 flex-col gap-4 rounded-xl bg-card p-5 ring-1 ring-foreground/10", className)}>
+      <div className="flex min-h-8 flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <div className="flex min-w-0 flex-wrap items-baseline gap-x-2.5 gap-y-1">
+          <h2 className="text-[0.9375rem] font-medium tracking-tight">{title}</h2>
+          {meta && <div className="text-sm text-muted-foreground">{meta}</div>}
         </div>
-        {action && <div className="shrink-0">{action}</div>}
+        {action && <div className="flex shrink-0 items-center gap-1.5">{action}</div>}
       </div>
-      {children}
+      {loadError ? (
+        <p className="text-sm text-muted-foreground" title={loadError}>
+          Couldn&apos;t load this section right now.
+        </p>
+      ) : (
+        children
+      )}
     </section>
   );
+}
+
+// Shared quiet table header cell.
+const th = "py-1.5 pr-4 pb-2.5 text-[0.6875rem] font-normal tracking-wider text-muted-foreground uppercase";
+
+function formatShortDate(iso: string, withYear = false): string {
+  return new Date(iso.length === 10 ? `${iso}T00:00:00` : iso).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    ...(withYear ? { year: "numeric" } : {}),
+  });
+}
+
+function relativeDays(iso: string, today: Date): string {
+  const days = Math.round((startOfDay(new Date(iso)).getTime() - today.getTime()) / 86_400_000);
+  if (days === 0) return "today";
+  if (days === 1) return "tomorrow";
+  if (days === -1) return "yesterday";
+  return days > 0 ? `in ${days} days` : `${-days} days ago`;
 }
 
 const statusPillClasses: Record<ChecklistItemStatus, string> = {
@@ -185,6 +216,8 @@ function DeadlineCell({ item, today }: { item: ChecklistItem; today: Date }) {
   );
 }
 
+type LoadKey = "checklist" | "threads" | "documents" | "memoryNotes" | "commitments" | "meetings";
+
 export default function ClientDetailPage({
   params,
 }: {
@@ -208,6 +241,7 @@ export default function ClientDetailPage({
   const [workflowError, setWorkflowError] = useState<string | null>(null);
   const [workflowRuns, setWorkflowRuns] = useState<WorkflowRun[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loadErrors, setLoadErrors] = useState<Partial<Record<LoadKey, string>>>({});
   const [assignPackageOpen, setAssignPackageOpen] = useState(false);
   const router = useRouter();
   const workflowRefreshRef = useRef<ReturnType<typeof createSnapshotRefresh<[WorkflowRun[], ClientWorkflowAssignment[]]>> | null>(null);
@@ -241,27 +275,33 @@ export default function ClientDetailPage({
   }, []);
 
   const refreshClient = useCallback(() => {
+    // Each section loads (and fails) on its own.
+    const load = <T,>(key: LoadKey, request: Promise<T>, set: (value: T) => void) =>
+      request
+        .then((value) => {
+          set(value);
+          setLoadErrors((prev) => {
+            if (!(key in prev)) return prev;
+            const next = { ...prev };
+            delete next[key];
+            return next;
+          });
+        })
+        .catch((e) =>
+          setLoadErrors((prev) => ({ ...prev, [key]: e instanceof ApiError ? e.message : String(e) }))
+        );
     getClient(clientId)
-      .then(setClient)
+      .then((value) => {
+        setClient(value);
+        setError(null);
+      })
       .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
-    listChecklistItems(clientId)
-      .then(setChecklist)
-      .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
-    listEmailThreads(clientId)
-      .then(setThreads)
-      .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
-    listClientDocuments(clientId)
-      .then(setDocuments)
-      .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
-    listClientMemoryNotes(clientId)
-      .then(setMemoryNotes)
-      .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
-    listClientCommitments(clientId)
-      .then(setCommitments)
-      .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
-    listClientMeetings(clientId)
-      .then(setMeetings)
-      .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
+    load("checklist", listChecklistItems(clientId), setChecklist);
+    load("threads", listEmailThreads(clientId), setThreads);
+    load("documents", listClientDocuments(clientId), setDocuments);
+    load("memoryNotes", listClientMemoryNotes(clientId), setMemoryNotes);
+    load("commitments", listClientCommitments(clientId), setCommitments);
+    load("meetings", listClientMeetings(clientId), setMeetings);
   }, [clientId]);
 
   const refresh = () => {
@@ -273,140 +313,418 @@ export default function ClientDetailPage({
   if (error && !client) return <p className="text-sm text-destructive">{error}</p>;
 
   return (
-    <div className="flex w-full flex-col gap-8">
-      <div>
-        <div className="flex items-center justify-between">
-          <Link
-            href="/clients"
-            className="-ml-3 mt-2 mb-4 inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          >
-            <ArrowLeft className="size-4" />
-            Clients
-          </Link>
-          {client !== null && (
-            <div className="flex items-center gap-1">
-              <EditClientButton client={client} onUpdated={refresh} />
-              <DeleteClientButton
-                clientId={clientId}
-                clientName={client.name}
-                onDeleted={() => router.push("/clients")}
-              />
-            </div>
-          )}
+    <div className="mx-auto flex w-full max-w-[96rem] flex-col gap-6">
+      <ClientHeader
+        clientId={clientId}
+        client={client}
+        onChange={refresh}
+        onAssignPackage={() => setAssignPackageOpen(true)}
+        onDeleted={() => router.push("/clients")}
+      />
+
+      <ClientSummary
+        client={client}
+        checklist={checklist}
+        threads={threads}
+        runs={workflowRuns}
+        assignments={workflowAssignments}
+      />
+
+      {client !== null && (
+        <AssignPackagePopup
+          open={assignPackageOpen}
+          onOpenChange={setAssignPackageOpen}
+          clientId={clientId}
+          assignedPackageIds={client.assigned_package_ids}
+          checklist={checklist}
+          onAssigned={refresh}
+        />
+      )}
+
+      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_22rem] 2xl:grid-cols-[minmax(0,1fr)_24rem]">
+        <div className="flex min-w-0 flex-col gap-6">
+          <ChecklistCard
+            clientId={clientId}
+            checklist={checklist}
+            documents={documents}
+            loadError={loadErrors.checklist}
+            onChange={refresh}
+            onEditPackage={() => setAssignPackageOpen(true)}
+          />
+
+          <WorkflowRunsCard
+            clientId={clientId}
+            runs={workflowRuns}
+            assignments={workflowAssignments}
+            loadError={workflowError}
+            onChange={refreshWorkflowRuns}
+          />
+
+          <DocumentVaultCard
+            clientId={clientId}
+            documents={documents}
+            checklist={checklist}
+            loadError={loadErrors.documents}
+            onChange={refresh}
+          />
+
+          <CommunicationCard threads={threads} loadError={loadErrors.threads} />
         </div>
-        {client === null ? (
-          <div className="flex flex-col gap-3">
-            <Skeleton className="h-14 w-72" />
-            <Skeleton className="h-4 w-48" />
-            <Skeleton className="h-3 w-40" />
-          </div>
-        ) : (
-          <div className="flex flex-col gap-2 animate-blur-in-sm">
-            <h1 className="text-4xl font-thin tracking-tight [font-family:var(--font-denton)] sm:text-5xl md:text-6xl">
+
+        {/* Grid on tablets (cards top-aligned), a full-width column beside the main content on xl. */}
+        <aside className="grid min-w-0 items-start gap-6 md:grid-cols-2 xl:flex xl:flex-col xl:items-stretch">
+          <ClientDetailsCard
+            client={client}
+            checklist={checklist}
+            onManagePackages={() => setAssignPackageOpen(true)}
+          />
+
+          <WaitingOnCard
+            clientId={clientId}
+            commitments={commitments}
+            loadError={loadErrors.commitments}
+            onChange={refresh}
+          />
+
+          <MeetingCard meetings={meetings} loadError={loadErrors.meetings} />
+
+          <UploadLinkCard clientId={clientId} />
+
+          <MemoryNotesCard
+            clientId={clientId}
+            notes={memoryNotes}
+            loadError={loadErrors.memoryNotes}
+            onChange={refresh}
+          />
+        </aside>
+      </div>
+    </div>
+  );
+}
+
+function ClientHeader({
+  clientId,
+  client,
+  onChange,
+  onAssignPackage,
+  onDeleted,
+}: {
+  clientId: number;
+  client: ClientDetail | null;
+  onChange: () => void;
+  onAssignPackage: () => void;
+  onDeleted: () => void;
+}) {
+  const [sending, setSending] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  const onSendReminder = async () => {
+    setSending(true);
+    setMessage(null);
+    try {
+      await sendChecklistReminder(clientId);
+      setMessage("Reminder sent. It's in the Email Log.");
+      onChange();
+    } catch (e) {
+      setMessage(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <header className="flex flex-col gap-4">
+      <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-sm text-muted-foreground">
+        <Link
+          href="/clients"
+          className="-ml-2 inline-flex items-center gap-1.5 rounded-md px-2 py-1 transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <ArrowLeft className="size-3.5" />
+          Clients
+        </Link>
+      </nav>
+      {client === null ? (
+        <div className="flex flex-col gap-3">
+          <Skeleton className="h-11 w-72" />
+          <Skeleton className="h-4 w-96" />
+        </div>
+      ) : (
+        <div className="flex flex-col gap-4 animate-blur-in-sm lg:flex-row lg:items-end lg:justify-between">
+          <div className="flex min-w-0 flex-col gap-2">
+            <h1 className="text-4xl leading-tight font-thin tracking-tight text-balance [font-family:var(--font-denton)] md:text-5xl">
               {client.name}
             </h1>
-            <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm text-muted-foreground">
+            <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+              <span className="inline-flex items-center gap-1.5 text-foreground">
+                <span
+                  className={cn(
+                    "size-1.5 rounded-full",
+                    client.status === "active" ? "bg-success" : "bg-muted-foreground/40"
+                  )}
+                />
+                {client.status.charAt(0).toUpperCase() + client.status.slice(1)}
+              </span>
               {[
                 client.email,
                 client.phone ? formatPhoneNumber(client.phone) : null,
                 client.company_name,
               ]
                 .filter((part): part is string => Boolean(part))
-                .map((part, i) => (
-                  <span key={i} className="inline-flex items-center gap-1.5">
+                .map((part) => (
+                  <span key={part} className="inline-flex items-center gap-2">
+                    <span aria-hidden className="text-muted-foreground/50">·</span>
                     {part}
-                    <span aria-hidden>·</span>
                   </span>
                 ))}
-              <span className="inline-flex items-center gap-1.5">
-                <span
-                  className={cn(
-                    "size-1.5 rounded-full",
-                    client.status === "active" ? "bg-accent" : "bg-muted-foreground/40"
-                  )}
-                />
-                {client.status.charAt(0).toUpperCase() + client.status.slice(1)}
-              </span>
-            </p>
-            <p className="text-xs text-muted-foreground/70">
-              Last reminder sent:{" "}
-              {client.last_reminder_sent_at
-                ? new Date(client.last_reminder_sent_at).toLocaleString()
-                : "never"}
             </p>
           </div>
-        )}
-      </div>
-
-      {error && <p className="text-sm text-destructive">{error}</p>}
-
-      {client !== null && (
-        <>
-          <div className="flex items-center justify-end gap-1.5">
-            <Button variant="outline" onClick={() => setAssignPackageOpen(true)}>
-              <Plus />
-              Assign package
-            </Button>
-            <PackageFormDialog onSaved={refresh} variant="outline" />
+          <div className="flex flex-col items-start gap-2 lg:items-end">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <EditClientButton client={client} onUpdated={onChange} />
+              <DeleteClientButton clientId={clientId} clientName={client.name} onDeleted={onDeleted} />
+              <span aria-hidden className="mx-1 h-5 w-px bg-border" />
+              <PackageFormDialog onSaved={onChange} variant="ghost" />
+              <Button variant="outline" onClick={onAssignPackage}>
+                <Plus />
+                Assign package
+              </Button>
+              <Button onClick={onSendReminder} disabled={sending}>
+                {sending ? <Loader2 className="animate-spin" /> : <Mail />}
+                {sending ? "Sending…" : "Send reminder"}
+              </Button>
+            </div>
+            {message && <p role="status" className="text-xs text-muted-foreground">{message}</p>}
           </div>
-
-          <AssignPackagePopup
-            open={assignPackageOpen}
-            onOpenChange={setAssignPackageOpen}
-            clientId={clientId}
-            assignedPackageIds={client.assigned_package_ids}
-            checklist={checklist}
-            onAssigned={refresh}
-          />
-        </>
+        </div>
       )}
+    </header>
+  );
+}
 
-      <ChecklistCard
-        clientId={clientId}
-        checklist={checklist}
-        documents={documents}
-        onChange={refresh}
-        onEditPackage={() => setAssignPackageOpen(true)}
-      />
+// One row of figures that answers "where does this client stand?" before
+// any detail: collection progress, what needs action, the next deadline,
+// the last contact, and workflow state.
+function ClientSummary({
+  client,
+  checklist,
+  threads,
+  runs,
+  assignments,
+}: {
+  client: ClientDetail | null;
+  checklist: ChecklistSummary | null;
+  threads: EmailThread[] | null;
+  runs: WorkflowRun[] | null;
+  assignments: ClientWorkflowAssignment[] | null;
+}) {
+  const today = useMemo(() => startOfDay(new Date()), []);
+  const loading = client === null || checklist === null;
 
-      <WaitingOnCard
-        clientId={clientId}
-        commitments={commitments}
-        onChange={refresh}
-      />
+  const nextDeadline = checklist?.items
+    .filter((i) => (i.status === "missing" || i.status === "wrong") && i.expected_date_range_end)
+    .sort((a, b) => a.expected_date_range_end!.localeCompare(b.expected_date_range_end!))[0];
+  const deadlineTier = nextDeadline ? TIER_META[computeTier(nextDeadline, today).tier] : null;
 
-      <CommunicationCard
-        clientId={clientId}
-        client={client}
-        threads={threads}
-        onChange={refresh}
-      />
+  const pendingDraft = threads
+    ?.flatMap((t) => t.messages)
+    .some((m) => m.direction === "outbound" && m.status === "draft");
+  const lastInbound = threads
+    ?.flatMap((t) => t.messages)
+    .filter((m) => m.direction === "inbound")
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
 
-      <MeetingCard meetings={meetings} />
+  const latestByWorkflow = new Map<number, WorkflowRun>();
+  for (const run of runs ?? []) {
+    const current = latestByWorkflow.get(run.workflow_id);
+    if (!current || run.created_at > current.created_at) latestByWorkflow.set(run.workflow_id, run);
+  }
+  const latestRuns = [...latestByWorkflow.values()];
+  const workflowCount = new Set([
+    ...(assignments ?? []).map((a) => a.workflow_id),
+    ...latestRuns.map((r) => r.workflow_id),
+  ]).size;
+  const needsReview = latestRuns.filter((r) => r.status === "needs_review" || r.status === "failed").length;
+  const running = latestRuns.filter((r) => r.status === "running").length;
+  const completed = latestRuns.filter((r) => r.status === "completed").length;
 
-      <DocumentVaultCard
-        clientId={clientId}
-        documents={documents}
-        checklist={checklist}
-        onChange={refresh}
-      />
+  const outstanding = checklist ? checklist.missing + checklist.wrong : 0;
+  const tiles: { label: string; value: React.ReactNode; detail: React.ReactNode; tone?: string }[] = checklist && client
+    ? [
+        {
+          label: "Documents",
+          value: (
+            <>
+              {checklist.received}
+              <span className="text-muted-foreground/70">/{checklist.total}</span>
+            </>
+          ),
+          detail: (
+            <span className="flex items-center gap-2">
+              <span className="h-1 w-16 overflow-hidden rounded-full bg-muted">
+                <span
+                  className="block h-full rounded-full bg-success"
+                  style={{ width: `${checklist.total ? (checklist.received / checklist.total) * 100 : 0}%` }}
+                />
+              </span>
+              received
+            </span>
+          ),
+        },
+        {
+          label: "Needs action",
+          value: outstanding,
+          tone: checklist.wrong > 0 ? "text-destructive" : outstanding > 0 ? "text-warning-foreground" : undefined,
+          detail:
+            outstanding === 0
+              ? "Nothing outstanding"
+              : [checklist.missing > 0 && `${checklist.missing} missing`, checklist.wrong > 0 && `${checklist.wrong} wrong`]
+                  .filter(Boolean)
+                  .join(" · "),
+        },
+        {
+          label: "Next deadline",
+          value: nextDeadline ? formatShortDate(nextDeadline.expected_date_range_end!) : "—",
+          tone: deadlineTier && deadlineTier !== TIER_META.on_track ? deadlineTier.text : undefined,
+          detail: nextDeadline
+            ? `${nextDeadline.doc_type_needed} · ${relativeDays(nextDeadline.expected_date_range_end!, today)}`
+            : "No open deadlines",
+        },
+        {
+          label: "Last reminder",
+          value: client.last_reminder_sent_at ? formatShortDate(client.last_reminder_sent_at) : "Never",
+          detail: pendingDraft ? (
+            <span className="text-warning-foreground">A drafted reminder is awaiting send</span>
+          ) : lastInbound ? (
+            `Client replied ${relativeDays(lastInbound.created_at, today)}`
+          ) : (
+            "No replies yet"
+          ),
+        },
+        {
+          label: "Workflows",
+          value: workflowCount,
+          tone: needsReview > 0 ? "text-destructive" : undefined,
+          detail:
+            workflowCount === 0
+              ? "None assigned"
+              : [
+                  needsReview > 0 && `${needsReview} need${needsReview === 1 ? "s" : ""} review`,
+                  running > 0 && `${running} running`,
+                  completed > 0 && `${completed} completed`,
+                ]
+                  .filter(Boolean)
+                  .join(" · ") || "Waiting on documents",
+        },
+      ]
+    : [];
 
-      <UploadLinkCard clientId={clientId} />
+  return (
+    <section
+      aria-label="Client summary"
+      className="grid grid-cols-2 overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10 md:grid-cols-3 xl:grid-cols-5"
+    >
+      {loading
+        ? Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="flex flex-col gap-3 border-border p-5 [&:not(:first-child)]:border-l">
+              <Skeleton className="h-3 w-20" />
+              <Skeleton className="h-7 w-12" />
+              <Skeleton className="h-3 w-28" />
+            </div>
+          ))
+        : tiles.map((tile, i) => (
+            <div
+              key={tile.label}
+              className={cn(
+                "flex min-w-0 flex-col gap-1.5 border-border p-5",
+                i > 0 && "border-l",
+                i === 2 && "max-md:border-l-0 max-md:border-t",
+                i >= 2 && "max-md:border-t",
+                i === 3 && "md:max-xl:border-l-0 md:max-xl:border-t",
+                i === 4 && "max-md:border-l-0 md:max-xl:border-t"
+              )}
+            >
+              <span className="text-[0.6875rem] tracking-wider text-muted-foreground uppercase">{tile.label}</span>
+              <span className={cn("text-2xl font-light tracking-tight tabular-nums", tile.tone)}>{tile.value}</span>
+              <span className="truncate text-xs text-muted-foreground">{tile.detail}</span>
+            </div>
+          ))}
+    </section>
+  );
+}
 
-      <WorkflowRunsCard
-        clientId={clientId}
-        runs={workflowRuns}
-        assignments={workflowAssignments}
-        loadError={workflowError}
-        onChange={refreshWorkflowRuns}
-      />
+function ClientDetailsCard({
+  client,
+  checklist,
+  onManagePackages,
+}: {
+  client: ClientDetail | null;
+  checklist: ChecklistSummary | null;
+  onManagePackages: () => void;
+}) {
+  const packageNames = Array.from(
+    new Set((checklist?.items ?? []).map((i) => i.package_name).filter((n): n is string => Boolean(n)))
+  );
+  const rows: [string, React.ReactNode][] = client
+    ? [
+        ["Email", <a key="e" href={`mailto:${client.email}`} className="break-all hover:underline">{client.email}</a>],
+        ["Phone", client.phone ? formatPhoneNumber(client.phone) : <span className="text-muted-foreground">—</span>],
+        ["Company", client.company_name ?? <span className="text-muted-foreground">—</span>],
+        [
+          "Packages",
+          packageNames.length > 0 ? (
+            <span className="flex flex-col gap-0.5">
+              {packageNames.map((n) => (
+                <span key={n}>{n}</span>
+              ))}
+            </span>
+          ) : (
+            <span className="text-muted-foreground">None assigned</span>
+          ),
+        ],
+        ["Client since", formatShortDate(client.created_at, true)],
+        [
+          "Last reminder",
+          client.last_reminder_sent_at ? (
+            new Date(client.last_reminder_sent_at).toLocaleString(undefined, {
+              month: "short",
+              day: "numeric",
+              year: "numeric",
+              hour: "numeric",
+              minute: "2-digit",
+            })
+          ) : (
+            <span className="text-muted-foreground">Never</span>
+          ),
+        ],
+      ]
+    : [];
 
-      <MemoryNotesCard
-        clientId={clientId}
-        notes={memoryNotes}
-        onChange={refresh}
-      />
-    </div>
+  return (
+    <SectionCard
+      title="Details"
+      action={
+        <Button variant="ghost" size="sm" onClick={onManagePackages}>
+          Manage packages
+        </Button>
+      }
+    >
+      {client === null ? (
+        <div className="flex flex-col gap-3">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Skeleton key={i} className="h-4 w-full" />
+          ))}
+        </div>
+      ) : (
+        <dl className="flex flex-col divide-y divide-border/60 text-sm">
+          {rows.map(([label, value]) => (
+            <div key={label} className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-3 py-2.5 first:pt-0 last:pb-0">
+              <dt className="text-muted-foreground">{label}</dt>
+              <dd className="min-w-0">{value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+    </SectionCard>
   );
 }
 
@@ -459,15 +777,22 @@ function EditClientButton({
 
   return (
     <>
-      <Button
-        variant="ghost"
-        size="sm"
-        className="mt-2 mb-4 text-muted-foreground hover:text-foreground"
-        onClick={openDialog}
-      >
-        <Pencil className="size-4" />
-        Edit
-      </Button>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Edit client"
+              className="text-muted-foreground hover:text-foreground"
+              onClick={openDialog}
+            />
+          }
+        >
+          <Pencil />
+        </TooltipTrigger>
+        <TooltipContent>Edit client</TooltipContent>
+      </Tooltip>
 
       <Dialog open={editing} onOpenChange={(open) => !submitting && setEditing(open)}>
         <DialogContent>
@@ -568,15 +893,22 @@ function DeleteClientButton({
 
   return (
     <>
-      <Button
-        variant="ghost"
-        size="sm"
-        className="mt-2 mb-4 text-muted-foreground hover:text-destructive"
-        onClick={() => setConfirming(true)}
-      >
-        <Trash2 className="size-4" />
-        Delete client
-      </Button>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Delete client"
+              className="text-muted-foreground hover:text-destructive"
+              onClick={() => setConfirming(true)}
+            />
+          }
+        >
+          <Trash2 />
+        </TooltipTrigger>
+        <TooltipContent>Delete client</TooltipContent>
+      </Tooltip>
 
       <Dialog open={confirming} onOpenChange={(open) => !deleting && setConfirming(open)}>
         <DialogContent>
@@ -609,12 +941,14 @@ function ChecklistCard({
   clientId,
   checklist,
   documents,
+  loadError,
   onChange,
   onEditPackage,
 }: {
   clientId: number;
   checklist: ChecklistSummary | null;
   documents: DocumentOut[] | null;
+  loadError?: string | null;
   onChange: () => void;
   onEditPackage: () => void;
 }) {
@@ -623,7 +957,6 @@ function ChecklistCard({
   const today = useMemo(() => startOfDay(new Date()), []);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [downloading, setDownloading] = useState(false);
   const [deselecting, setDeselecting] = useState(false);
   const [deselectOpen, setDeselectOpen] = useState(false);
 
@@ -645,35 +978,6 @@ function ChecklistCard({
       )
     : [];
   const packageNames = assignedPackages.map((p) => p.name);
-  const otherCount = checklist ? checklist.items.filter((i) => !i.package_name).length : 0;
-  // Comma-separated (not "and") so it reads cleanly with several packages,
-  // capped at 2 shown + a "+N more" tail so the line stays roughly bounded
-  // no matter how many packages a client ends up with.
-  const MAX_PACKAGE_NAMES_SHOWN = 2;
-  const packageLabels = packageNames.map((name) => `${name} Package`);
-  const shownPackageLabels = packageLabels.slice(0, MAX_PACKAGE_NAMES_SHOWN);
-  const hiddenPackageCount = packageLabels.length - shownPackageLabels.length;
-  const packageNamesPart =
-    hiddenPackageCount > 0
-      ? `${shownPackageLabels.join(", ")} +${hiddenPackageCount} more package${hiddenPackageCount === 1 ? "" : "s"}`
-      : shownPackageLabels.join(", ");
-  const packageSummary =
-    packageNames.length > 0
-      ? `${packageNamesPart}${
-          otherCount > 0 ? ` and ${otherCount} other requirement${otherCount === 1 ? "" : "s"}` : ""
-        }`
-      : null;
-
-  const onDownloadZip = async () => {
-    setDownloading(true);
-    try {
-      await downloadClientDocumentsZip(clientId);
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : String(e));
-    } finally {
-      setDownloading(false);
-    }
-  };
 
   const onDeselectPackage = async (packageId: number) => {
     setDeselecting(true);
@@ -691,57 +995,45 @@ function ChecklistCard({
 
   return (
     <SectionCard
-      title="Checklist requirements"
-      subtitle={
-        checklist && (
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-2">
-              <span>{checklist.total} total</span>
-              {actionRequired > 0 && (
-                <span className="rounded-full bg-warning/20 px-2 py-0.5 text-xs font-medium text-warning-foreground">
-                  {actionRequired} action required
-                </span>
-              )}
-            </div>
-            {packageSummary && (
-              <span className="block truncate" title={packageSummary}>
-                {packageSummary}
+      title="Documents requested"
+      loadError={loadError}
+      meta={
+        checklist &&
+        checklist.total > 0 && (
+          <span className="flex items-center gap-2">
+            {checklist.received} of {checklist.total} received
+            {actionRequired > 0 && (
+              <span className="rounded-full bg-warning/20 px-2 py-0.5 text-xs font-medium text-warning-foreground">
+                {actionRequired} need{actionRequired === 1 ? "s" : ""} action
               </span>
             )}
-          </div>
+          </span>
         )
       }
       action={
-        packageNames.length > 0 || (documents && documents.length > 0) ? (
-          <div className="flex items-center gap-1.5">
-            {packageNames.length > 0 && (
-              <Button variant="ghost" size="sm" onClick={onEditPackage}>
-                Edit package
-              </Button>
-            )}
-            {packageNames.length > 0 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-muted-foreground hover:text-destructive"
-                onClick={() => setDeselectOpen(true)}
+        <>
+          <Button variant="ghost" size="sm" onClick={() => setShowAddDialog(true)}>
+            <Plus />
+            Add requirement
+          </Button>
+          {packageNames.length > 0 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={<Button variant="ghost" size="icon-sm" aria-label="Package options" className="text-muted-foreground" />}
               >
-                Deselect package
-              </Button>
-            )}
-            {documents && documents.length > 0 && (
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={downloading}
-                onClick={onDownloadZip}
-              >
-                {downloading ? <Loader2 className="animate-spin" /> : <Download />}
-                {downloading ? "Zipping…" : "Download all"}
-              </Button>
-            )}
-          </div>
-        ) : undefined
+                <MoreHorizontal />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={onEditPackage}>
+                  <Pencil /> Edit packages
+                </DropdownMenuItem>
+                <DropdownMenuItem variant="destructive" onClick={() => setDeselectOpen(true)}>
+                  <Trash2 /> Deselect package
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </>
       }
     >
       {checklist === null ? (
@@ -750,33 +1042,31 @@ function ChecklistCard({
             <Skeleton key={i} className="h-9 w-full" />
           ))}
         </div>
+      ) : checklist.items.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          Nothing requested yet. Assign a package or add a requirement.
+        </p>
       ) : (
       <div className="overflow-x-auto">
       <table
-        className="w-full min-w-[640px] border-collapse text-sm animate-blur-in-sm"
+        className="w-full min-w-[560px] border-collapse text-sm animate-blur-in-sm"
         style={{ animationDelay: "60ms" }}
       >
         <thead>
           <tr className="border-b border-border text-left">
-            <th className="py-1.5 pr-4 pb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-              Doc type
-            </th>
-            <th className="py-1.5 pr-4 pb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-              Status
-            </th>
-            <th className="py-1.5 pr-4 pb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-              Deadline
-            </th>
-            <th className="py-1.5 pr-4 pb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-              Wrong attempts
-            </th>
-            <th className="py-1.5 pr-4 pb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-              Last wrong type
-            </th>
-            <th className="py-1.5 pr-4 pb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+            <th className={th}>
               Document
             </th>
-            <th className="py-1.5 pr-0 pb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+            <th className={th}>
+              Status
+            </th>
+            <th className={th}>
+              Deadline
+            </th>
+            <th className={th}>
+              File
+            </th>
+            <th className={cn(th, "pr-0")}>
               <span className="sr-only">Actions</span>
             </th>
           </tr>
@@ -787,44 +1077,48 @@ function ChecklistCard({
               ?.filter((d) => d.checklist_item_id === item.id)
               .sort((a, b) => b.received_at.localeCompare(a.received_at))[0];
             return (
-              <tr key={item.id} className="border-b border-border/40">
-                <td className="py-2 pr-4 font-medium">
-                  {item.doc_type_needed}
-                  {item.description && (
-                    <div className="text-xs font-normal text-muted-foreground">{item.description}</div>
+              <tr key={item.id} className="border-b border-border/50 last:border-0">
+                <td className="py-3 pr-4 align-top">
+                  <div className="font-medium">{item.doc_type_needed}</div>
+                  {(item.description || item.package_name) && (
+                    <div className="mt-0.5 text-xs text-muted-foreground">
+                      {[item.package_name, item.description].filter(Boolean).join(" · ")}
+                    </div>
                   )}
                 </td>
-                <td className="py-2 pr-4">
+                <td className="py-3 pr-4 align-top">
                   <StatusPill status={item.status} />
+                  {item.wrong_attempt_count > 0 && (
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {item.wrong_attempt_count} wrong attempt{item.wrong_attempt_count === 1 ? "" : "s"}
+                      {item.last_wrong_doc_type && <> · last sent {item.last_wrong_doc_type}</>}
+                    </div>
+                  )}
                 </td>
-                <td className="py-2 pr-4">
+                <td className="py-3 pr-4 align-top">
                   <DeadlineCell item={item} today={today} />
                 </td>
-                <td className="py-2 pr-4 text-muted-foreground">
-                  {item.wrong_attempt_count}
-                </td>
-                <td className="py-2 pr-4 text-muted-foreground">
-                  {item.last_wrong_doc_type ?? "—"}
-                </td>
-                <td className="py-2 pr-4">
+                <td className="max-w-56 py-3 pr-4 align-top">
                   {matched ? (
                     matched.download_url ? (
                       <a
                         href={matched.download_url}
                         target="_blank"
                         rel="noreferrer"
-                        className="underline underline-offset-4"
+                        title={matched.resolved_display_name}
+                        className="inline-flex max-w-full items-center gap-1.5 text-foreground/85 hover:text-foreground hover:underline"
                       >
-                        View
+                        <FileText className="size-3.5 shrink-0 text-muted-foreground" />
+                        <span className="truncate">{matched.resolved_display_name}</span>
                       </a>
                     ) : (
-                      <span className="text-muted-foreground">uploaded</span>
+                      <span className="text-muted-foreground">Uploaded</span>
                     )
                   ) : (
                     <span className="text-muted-foreground">—</span>
                   )}
                 </td>
-                <td className="py-2 pr-0 text-right">
+                <td className="py-2 pr-0 text-right align-top">
                   <ChecklistItemActions
                     clientId={clientId}
                     item={item}
@@ -834,28 +1128,12 @@ function ChecklistCard({
               </tr>
             );
           })}
-          {checklist?.items.length === 0 && (
-            <tr>
-              <td colSpan={7} className="py-4 text-muted-foreground">
-                No checklist items yet.
-              </td>
-            </tr>
-          )}
         </tbody>
       </table>
       </div>
       )}
 
       {error && <p className="text-sm text-destructive">{error}</p>}
-
-      <button
-        type="button"
-        onClick={() => setShowAddDialog(true)}
-        className="flex items-center gap-1.5 self-start border-t border-transparent pt-1 text-sm font-medium text-accent underline-offset-4 transition-colors hover:text-accent/70 hover:underline"
-      >
-        <Plus className="size-3.5" />
-        Add requirement
-      </button>
 
       <ChecklistItemFormDialog
         clientId={clientId}
@@ -1239,62 +1517,39 @@ function formatMeetingTime(startIso: string, endIso: string): string {
   return `${dateLabel}, ${timeLabel}`;
 }
 
-function MeetingCard({ meetings }: { meetings: MeetingRequest[] | null }) {
+function MeetingCard({
+  meetings,
+  loadError,
+}: {
+  meetings: MeetingRequest[] | null;
+  loadError?: string | null;
+}) {
   return (
-    <SectionCard
-      title="Meetings"
-      subtitle="Meeting times proposed or confirmed with this client over email."
-    >
+    <SectionCard title="Meetings" loadError={loadError}>
       {meetings === null ? (
         <div className="flex flex-col gap-2">
           <Skeleton className="h-9 w-full" />
-          <Skeleton className="h-9 w-full" />
         </div>
+      ) : meetings.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No meetings proposed yet.</p>
       ) : (
-        <div className="overflow-x-auto">
-          <table
-            className="w-full min-w-[560px] border-collapse text-sm animate-blur-in-sm"
-            style={{ animationDelay: "90ms" }}
-          >
-            <thead>
-              <tr className="border-b border-border text-left">
-                <th className="py-1.5 pr-4 pb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                  Purpose
-                </th>
-                <th className="py-1.5 pr-4 pb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                  Time
-                </th>
-                <th className="py-1.5 pr-0 pb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                  Status
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {meetings.map((m) => (
-                <tr key={m.id} className="border-b border-border/40">
-                  <td className="py-2 pr-4 font-medium">{m.purpose ?? "Meeting"}</td>
-                  <td className="py-2 pr-4 text-muted-foreground">
-                    {m.status === "confirmed" && m.confirmed_start && m.confirmed_end
-                      ? formatMeetingTime(m.confirmed_start, m.confirmed_end)
-                      : m.proposed_slots && m.proposed_slots.length > 0
-                      ? `${m.proposed_slots.length} time${m.proposed_slots.length === 1 ? "" : "s"} proposed, awaiting reply`
-                      : "—"}
-                  </td>
-                  <td className="py-2 pr-0">
-                    <MeetingStatusPill meeting={m} />
-                  </td>
-                </tr>
-              ))}
-              {meetings.length === 0 && (
-                <tr>
-                  <td colSpan={3} className="py-4 text-muted-foreground">
-                    No meetings proposed with this client yet.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        <ul className="flex flex-col divide-y divide-border/60 animate-blur-in-sm">
+          {meetings.map((m) => (
+            <li key={m.id} className="flex flex-col gap-1.5 py-3 first:pt-0 last:pb-0">
+              <div className="flex items-start justify-between gap-3">
+                <span className="text-sm font-medium">{m.purpose ?? "Meeting"}</span>
+                <MeetingStatusPill meeting={m} />
+              </div>
+              <span className="text-xs text-muted-foreground">
+                {m.status === "confirmed" && m.confirmed_start && m.confirmed_end
+                  ? formatMeetingTime(m.confirmed_start, m.confirmed_end)
+                  : m.proposed_slots && m.proposed_slots.length > 0
+                  ? `${m.proposed_slots.length} time${m.proposed_slots.length === 1 ? "" : "s"} proposed, awaiting reply`
+                  : "No time set"}
+              </span>
+            </li>
+          ))}
+        </ul>
       )}
     </SectionCard>
   );
@@ -1303,86 +1558,54 @@ function MeetingCard({ meetings }: { meetings: MeetingRequest[] | null }) {
 function WaitingOnCard({
   clientId,
   commitments,
+  loadError,
   onChange,
 }: {
   clientId: number;
   commitments: ClientCommitment[] | null;
+  loadError?: string | null;
   onChange: () => void;
 }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const open = commitments?.filter((c) => c.status === "pending" || c.status === "escalated") ?? [];
+  const closed = commitments?.filter((c) => c.status !== "pending" && c.status !== "escalated") ?? [];
   return (
     <SectionCard
       title="Waiting on"
-      subtitle="Promises this client has made to send something, tracked automatically from their emails."
+      meta={open.length > 0 ? `${open.length} open` : undefined}
+      loadError={loadError}
     >
       {commitments === null ? (
         <div className="flex flex-col gap-2">
           <Skeleton className="h-9 w-full" />
           <Skeleton className="h-9 w-full" />
         </div>
+      ) : commitments.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          Nothing promised. Commitments from the client&apos;s emails appear here.
+        </p>
       ) : (
-      <div className="overflow-x-auto">
-      <table
-        className="w-full min-w-[560px] border-collapse text-sm animate-blur-in-sm"
-        style={{ animationDelay: "90ms" }}
-      >
-        <thead>
-          <tr className="border-b border-border text-left">
-            <th className="py-1.5 pr-4 pb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-              Promise
-            </th>
-            <th className="py-1.5 pr-4 pb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-              Expected by
-            </th>
-            <th className="py-1.5 pr-4 pb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-              Status
-            </th>
-            <th className="py-1.5 pr-0 pb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-              <span className="sr-only">Actions</span>
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {commitments.map((c) => {
-            const overdue =
-              c.status === "pending" &&
-              c.expected_by !== null &&
-              c.expected_by < new Date().toISOString().slice(0, 10);
+        <ul className="flex flex-col divide-y divide-border/60 animate-blur-in-sm">
+          {[...open, ...closed].map((c) => {
+            const overdue = c.status === "pending" && c.expected_by !== null && c.expected_by < today;
             return (
-              <tr key={c.id} className="border-b border-border/40">
-                <td className="py-2 pr-4 font-medium">{c.description}</td>
-                <td
-                  className={cn(
-                    "py-2 pr-4",
-                    overdue ? "font-medium text-destructive" : "text-muted-foreground"
-                  )}
-                >
-                  {c.expected_by ?? "no date given"}
-                </td>
-                <td className="py-2 pr-4">
+              <li key={c.id} className="flex flex-col gap-1.5 py-3 first:pt-0 last:pb-0">
+                <div className="flex items-start justify-between gap-3">
+                  <span className="text-sm">{c.description}</span>
                   <CommitmentPill status={c.status} />
-                </td>
-                <td className="py-2 pr-0 text-right">
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className={cn("text-xs", overdue ? "font-medium text-destructive" : "text-muted-foreground")}>
+                    {c.expected_by ? `Expected ${formatShortDate(c.expected_by)}` : "No date given"}
+                  </span>
                   {(c.status === "pending" || c.status === "escalated") && (
-                    <CommitmentResolveActions
-                      clientId={clientId}
-                      commitment={c}
-                      onChange={onChange}
-                    />
+                    <CommitmentResolveActions clientId={clientId} commitment={c} onChange={onChange} />
                   )}
-                </td>
-              </tr>
+                </div>
+              </li>
             );
           })}
-          {commitments.length === 0 && (
-            <tr>
-              <td colSpan={4} className="py-4 text-muted-foreground">
-                No outstanding promises from this client.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-      </div>
+        </ul>
       )}
     </SectionCard>
   );
@@ -1416,11 +1639,11 @@ function CommitmentResolveActions({
   };
 
   return (
-    <div className="flex items-center justify-end gap-2">
+    <div className="-mr-2 flex items-center justify-end gap-0.5">
       {error && <p className="text-xs text-destructive">{error}</p>}
       <Button
         variant="ghost"
-        size="sm"
+        size="xs"
         disabled={pending}
         onClick={() => setConfirming("fulfilled")}
       >
@@ -1428,7 +1651,7 @@ function CommitmentResolveActions({
       </Button>
       <Button
         variant="ghost"
-        size="sm"
+        size="xs"
         className="text-muted-foreground hover:text-destructive"
         disabled={pending}
         onClick={() => setConfirming("cancelled")}
@@ -1467,78 +1690,24 @@ function CommitmentResolveActions({
 }
 
 function CommunicationCard({
-  clientId,
-  client,
   threads,
-  onChange,
+  loadError,
 }: {
-  clientId: number;
-  client: ClientDetail | null;
   threads: EmailThread[] | null;
-  onChange: () => void;
+  loadError?: string | null;
 }) {
-  const [sending, setSending] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-
-  const pendingReminder = threads
-    ?.flatMap((t) => t.messages)
-    .filter((m) => m.direction === "outbound" && m.status === "draft")
-    .sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
-
-  const onSendReminder = async () => {
-    setSending(true);
-    setMessage(null);
-    try {
-      await sendChecklistReminder(clientId);
-      setMessage("Reminder sent — check the Email Log.");
-      onChange();
-    } catch (e) {
-      setMessage(e instanceof ApiError ? e.message : String(e));
-    } finally {
-      setSending(false);
-    }
-  };
-
   return (
-    <SectionCard title="Communication hub">
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center gap-3">
-          <Button onClick={onSendReminder} disabled={sending}>
-            {sending ? "Sending…" : "Send reminder email"}
-          </Button>
-          {message && <p className="text-sm text-muted-foreground">{message}</p>}
-        </div>
-        {client === null ? (
-          <Skeleton className="h-3 w-40" />
-        ) : (
-        <p
-          className="text-xs text-muted-foreground animate-blur-in-sm"
-          style={{ animationDelay: "120ms" }}
-        >
-          Last sent:{" "}
-          {client.last_reminder_sent_at
-            ? new Date(client.last_reminder_sent_at).toLocaleString()
-            : "never"}
-          {pendingReminder && (
-            <>
-              {" "}
-              · A reminder drafted{" "}
-              {new Date(pendingReminder.created_at).toLocaleString()} is
-              awaiting send
-            </>
-          )}
-        </p>
-        )}
-      </div>
-
-      <Separator className="bg-border/60" />
-
-      <div className="flex flex-col gap-3">
-        <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-          Email threads
-        </h3>
-        <ThreadsList threads={threads} />
-      </div>
+    <SectionCard
+      title="Conversation"
+      meta={threads && threads.length > 0 ? `${threads.length} thread${threads.length === 1 ? "" : "s"}` : undefined}
+      loadError={loadError}
+      action={
+        <Button variant="ghost" size="sm" nativeButton={false} render={<Link href="/email-log" />}>
+          Email log
+        </Button>
+      }
+    >
+      <ThreadsList threads={threads} />
     </SectionCard>
   );
 }
@@ -1553,6 +1722,10 @@ function ThreadsList({ threads }: { threads: EmailThread[] | null }) {
         <Skeleton className="h-10 w-full" />
       </div>
     );
+  }
+
+  if (threads.length === 0) {
+    return <p className="text-sm text-muted-foreground">No emails with this client yet.</p>;
   }
 
   return (
@@ -1570,10 +1743,19 @@ function ThreadsList({ threads }: { threads: EmailThread[] | null }) {
               onClick={() =>
                 setExpandedThread(isOpen ? null : thread.thread_key)
               }
-              className="flex w-full items-center justify-between gap-3 px-3.5 py-2.5 text-left transition-colors hover:bg-muted/50"
+              className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50"
             >
-              <span className="truncate text-sm font-medium">
-                {latest?.subject || "(no subject)"}
+              <span className="flex min-w-0 flex-col gap-0.5">
+                <span className="truncate text-sm font-medium">
+                  {latest?.subject || "(no subject)"}
+                </span>
+                {latest && (
+                  <span className="truncate text-xs text-muted-foreground">
+                    {latest.direction === "inbound" ? "Client replied" : latest.status === "draft" ? "Draft awaiting send" : "Sent"}
+                    {" · "}
+                    {formatShortDate(latest.created_at)}
+                  </span>
+                )}
               </span>
               <span className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
                 {thread.messages.length} message
@@ -1622,11 +1804,6 @@ function ThreadsList({ threads }: { threads: EmailThread[] | null }) {
           </div>
         );
       })}
-      {threads?.length === 0 && (
-        <p className="px-3.5 py-3 text-sm text-muted-foreground">
-          No email threads yet.
-        </p>
-      )}
     </div>
   );
 }
@@ -1635,11 +1812,13 @@ function DocumentVaultCard({
   clientId,
   documents,
   checklist,
+  loadError,
   onChange,
 }: {
   clientId: number;
   documents: DocumentOut[] | null;
   checklist: ChecklistSummary | null;
+  loadError?: string | null;
   onChange: () => void;
 }) {
   const [dragOver, setDragOver] = useState(false);
@@ -1683,75 +1862,58 @@ function DocumentVaultCard({
   }, [checklist]);
 
   return (
+    // The whole card accepts dropped files; the Upload button covers click.
+    <div
+      className="relative"
+      onDragOver={(e) => {
+        e.preventDefault();
+        setDragOver(true);
+      }}
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragOver(false);
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDragOver(false);
+        const dropped = e.dataTransfer.files?.[0];
+        if (dropped) onUpload(dropped);
+      }}
+    >
+    {dragOver && (
+      <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-xl border-2 border-dashed border-accent bg-accent/5 text-sm font-medium text-accent">
+        Drop to upload
+      </div>
+    )}
     <SectionCard
-      title="Document vault"
+      title="Files"
+      meta={documents && documents.length > 0 ? `${documents.length} received` : undefined}
+      loadError={loadError}
       action={
-        documents && documents.length > 0 ? (
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={downloading}
-            onClick={onDownloadZip}
-          >
-            {downloading ? (
-              <Loader2 className="animate-spin" />
-            ) : (
-              <Download />
-            )}
-            {downloading ? "Zipping…" : "Download all"}
+        <>
+          {documents && documents.length > 0 && (
+            <Button variant="ghost" size="sm" disabled={downloading} onClick={onDownloadZip}>
+              {downloading ? <Loader2 className="animate-spin" /> : <Download />}
+              {downloading ? "Zipping…" : "Download all"}
+            </Button>
+          )}
+          <Button variant="outline" size="sm" disabled={submitting} onClick={() => fileInputRef.current?.click()}>
+            {submitting ? <Loader2 className="animate-spin" /> : <UploadCloud />}
+            {submitting ? "Uploading…" : "Upload"}
           </Button>
-        ) : undefined
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf,.csv,.tsv,.xls,.xlsx,.xlsm,.ods,.rtf,.docx,.odt,.pptx,.md,.txt,.json,.xml,.html,.htm,.png,.jpg,.jpeg,.gif,.webp,.tif,.tiff,.bmp"
+            className="hidden"
+            onChange={(e) => {
+              const picked = e.target.files?.[0];
+              if (picked) onUpload(picked);
+              e.target.value = "";
+            }}
+          />
+        </>
       }
     >
-      <div
-        role="button"
-        tabIndex={0}
-        onDragOver={(e) => {
-          e.preventDefault();
-          setDragOver(true);
-        }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={(e) => {
-          e.preventDefault();
-          setDragOver(false);
-          const dropped = e.dataTransfer.files?.[0];
-          if (dropped) onUpload(dropped);
-        }}
-        onClick={() => fileInputRef.current?.click()}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") fileInputRef.current?.click();
-        }}
-        className={cn(
-          "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-6 py-10 text-center transition-colors",
-          dragOver
-            ? "border-accent bg-accent/5"
-            : "border-border/70 hover:border-border hover:bg-muted/30"
-        )}
-      >
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".pdf,.csv,.tsv,.xls,.xlsx,.xlsm,.ods,.rtf,.docx,.odt,.pptx,.md,.txt,.json,.xml,.html,.htm,.png,.jpg,.jpeg,.gif,.webp,.tif,.tiff,.bmp"
-          className="hidden"
-          onChange={(e) => {
-            const picked = e.target.files?.[0];
-            if (picked) onUpload(picked);
-            e.target.value = "";
-          }}
-        />
-        <UploadCloud className="size-6 text-muted-foreground" />
-        <p className="text-sm text-muted-foreground">
-          {submitting ? (
-            "Uploading…"
-          ) : (
-            <>
-              <span className="font-medium text-foreground">Click to upload</span>{" "}
-              or drag and drop a document
-            </>
-          )}
-        </p>
-      </div>
-
       {error && <p className="text-sm text-destructive">{error}</p>}
       {result && (
         <div className="flex flex-col gap-1 rounded-lg border border-border/60 bg-muted/30 p-3 text-sm">
@@ -1771,14 +1933,14 @@ function DocumentVaultCard({
         </div>
       )}
 
-      <Separator className="bg-border/60" />
-
       {documents === null ? (
         <div className="flex flex-col gap-2">
           {Array.from({ length: 2 }).map((_, i) => (
             <Skeleton key={i} className="h-9 w-full" />
           ))}
         </div>
+      ) : documents.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No files yet. Upload one, or drop it anywhere on this card.</p>
       ) : (
       <div className="overflow-x-auto">
       <table
@@ -1787,19 +1949,19 @@ function DocumentVaultCard({
       >
         <thead>
           <tr className="border-b border-border text-left">
-            <th className="py-1.5 pr-4 pb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+            <th className={th}>
               Document
             </th>
-            <th className="hidden md:table-cell py-1.5 pr-4 pb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+            <th className={cn(th, "hidden md:table-cell")}>
               Source
             </th>
-            <th className="hidden md:table-cell py-1.5 pr-4 pb-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+            <th className={cn(th, "hidden md:table-cell")}>
               Status
             </th>
-            <th className="hidden md:table-cell py-1.5 pr-4 pb-2.5 text-right text-xs font-medium tracking-wide text-muted-foreground uppercase">
+            <th className={cn(th, "hidden text-right md:table-cell")}>
               Year
             </th>
-            <th className="hidden md:table-cell py-1.5 pr-4 pb-2.5 text-right text-xs font-medium tracking-wide text-muted-foreground uppercase">
+            <th className={cn(th, "hidden text-right md:table-cell")}>
               Received
             </th>
             <th className="py-1.5 pr-0" />
@@ -1812,8 +1974,8 @@ function DocumentVaultCard({
                 ? itemsById[doc.checklist_item_id]
                 : undefined;
             return (
-              <tr key={doc.id} className="border-b border-border/40">
-                <td className="py-2 pr-4 font-medium [overflow-wrap:anywhere]">
+              <tr key={doc.id} className="border-b border-border/50 last:border-0">
+                <td className="py-3 pr-4 font-medium [overflow-wrap:anywhere]">
                   {doc.resolved_display_name}
                   {doc.classified_type && doc.classified_type !== doc.resolved_display_name && (
                     <div className="text-xs font-normal text-muted-foreground">{doc.classified_type}</div>
@@ -1832,7 +1994,7 @@ function DocumentVaultCard({
                   {doc.year ?? "—"}
                 </td>
                 <td className="hidden py-2 pr-4 text-right text-muted-foreground md:table-cell">
-                  {new Date(doc.received_at).toLocaleString()}
+                  <span title={new Date(doc.received_at).toLocaleString()}>{formatShortDate(doc.received_at, true)}</span>
                 </td>
                 <td className="py-2 pr-0 text-right">
                   <DocumentActions clientId={clientId} doc={doc} checklistItem={item} onChange={onChange} />
@@ -1840,18 +2002,12 @@ function DocumentVaultCard({
               </tr>
             );
           })}
-          {documents?.length === 0 && (
-            <tr>
-              <td colSpan={6} className="py-4 text-muted-foreground">
-                No documents uploaded yet.
-              </td>
-            </tr>
-          )}
         </tbody>
       </table>
       </div>
       )}
     </SectionCard>
+    </div>
   );
 }
 
@@ -2099,26 +2255,31 @@ function UploadLinkCard({ clientId }: { clientId: number }) {
 
   return (
     <SectionCard
-      title="Client upload link"
-      subtitle="A secure link this client can use to upload documents — no Compozor account needed. Reused automatically when Compozor sends a document request, and stays valid until its expiry below."
+      title="Upload link"
+      action={
+        <Button variant="ghost" size="sm" disabled={busy} onClick={onRegenerate}>
+          {busy ? <Loader2 className="animate-spin" /> : <RotateCcw />}
+          {link ? "Regenerate" : "Create link"}
+        </Button>
+      }
     >
       {!loaded ? (
         <Skeleton className="h-9 w-full" />
       ) : (
         <div className="flex flex-col gap-3">
           {link?.upload_url ? (
-            <div className="flex flex-col gap-1.5 rounded-lg border border-border/60 bg-muted/30 p-3">
-              <div className="flex items-center gap-2">
-                <code className="min-w-0 flex-1 truncate text-sm">{link.upload_url}</code>
-                <Button variant="outline" size="sm" onClick={onCopy}>
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center gap-2 rounded-lg bg-muted/60 py-1 pr-1 pl-3">
+                <code className="min-w-0 flex-1 truncate text-xs text-foreground/80">{link.upload_url}</code>
+                <Button variant="outline" size="sm" className="bg-card" onClick={onCopy}>
                   {copied ? <CheckCircle2 className="text-accent" /> : <Copy />}
                   {copied ? "Copied" : "Copy"}
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                Expires{" "}
-                {new Date(link.expires_at).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })}
-                {" · "}Last used: {link.last_used_at ? new Date(link.last_used_at).toLocaleString() : "never"}
+                Expires {formatShortDate(link.expires_at, true)}
+                {" · "}
+                {link.last_used_at ? `Last used ${formatShortDate(link.last_used_at)}` : "Not used yet"}
               </p>
             </div>
           ) : link ? (
@@ -2132,31 +2293,23 @@ function UploadLinkCard({ clientId }: { clientId: number }) {
 
           {error && <p className="text-sm text-destructive">{error}</p>}
 
-          <Button
-            variant={link ? "outline" : "default"}
-            size="sm"
-            disabled={busy}
-            onClick={onRegenerate}
-            className="self-start"
-          >
-            {busy ? <Loader2 className="animate-spin" /> : <RotateCcw />}
-            {link ? "Regenerate link" : "Create link"}
-          </Button>
+
 
           {events && events.length > 0 && (
-            <div className="flex flex-col gap-1.5 border-t border-border/60 pt-3">
-              <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                Link activity
-              </h3>
-              <ul className="flex flex-col gap-1 text-xs text-muted-foreground">
+            <details className="group border-t border-border/60 pt-3">
+              <summary className="flex cursor-pointer list-none items-center justify-between text-xs text-muted-foreground hover:text-foreground">
+                Link activity ({events.length})
+                <ChevronDown className="size-3.5 transition-transform group-open:rotate-180" />
+              </summary>
+              <ul className="mt-2 flex flex-col gap-1 text-xs text-muted-foreground">
                 {events.map((e, i) => (
                   <li key={i} className="flex items-center justify-between gap-2">
                     <span>{UPLOAD_LINK_EVENT_LABELS[e.event] ?? e.event}</span>
-                    <span className="shrink-0">{new Date(e.created_at).toLocaleString()}</span>
+                    <span className="shrink-0">{formatShortDate(e.created_at)}</span>
                   </li>
                 ))}
               </ul>
-            </div>
+            </details>
           )}
         </div>
       )}
@@ -2271,13 +2424,12 @@ function WorkflowRunsCard({
   return (
     <SectionCard
       title="Workflows"
-      subtitle={<span className="text-[0.8125rem]">From collected documents to finished work.</span>}
       action={
         <AssignWorkflowDialog
           clientIds={[clientId]}
           onAssigned={onChange}
           trigger={
-            <Button variant="outline" size="sm">
+            <Button variant="ghost" size="sm">
               <Plus />
               Assign workflow
             </Button>
@@ -2442,17 +2594,16 @@ function RemoveWorkflowButton({
 function MemoryNotesCard({
   clientId,
   notes,
+  loadError,
   onChange,
 }: {
   clientId: number;
   notes: ClientMemoryNote[] | null;
+  loadError?: string | null;
   onChange: () => void;
 }) {
   return (
-    <SectionCard
-      title="What we know about this client"
-      subtitle="Durable facts the AI has extracted from this client's emails, used to inform future Q&A answers."
-    >
+    <SectionCard title="What we know" loadError={loadError}>
       {notes === null ? (
         <div className="flex flex-col gap-2">
           <Skeleton className="h-4 w-2/3" />
@@ -2460,14 +2611,14 @@ function MemoryNotesCard({
         </div>
       ) : (
       <div
-        className="flex flex-col gap-2 animate-blur-in-sm"
+        className="flex flex-col divide-y divide-border/60 animate-blur-in-sm"
         style={{ animationDelay: "240ms" }}
       >
         {notes.map((note) => (
           <div
             key={note.id}
             className={cn(
-              "flex items-start justify-between gap-3 rounded-lg border border-border/60 bg-muted/30 px-3.5 py-2.5 text-sm",
+              "-mr-2 flex items-start justify-between gap-2 py-2.5 text-sm first:pt-0 last:pb-0",
               note.superseded_at && "opacity-50"
             )}
           >
@@ -2481,7 +2632,7 @@ function MemoryNotesCard({
                 )}
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
-                {new Date(note.created_at).toLocaleString()}
+                Learned {formatShortDate(note.created_at, true)}
               </p>
             </div>
             <DeleteMemoryNoteButton
@@ -2492,7 +2643,9 @@ function MemoryNotesCard({
           </div>
         ))}
         {notes.length === 0 && (
-          <p className="text-sm text-muted-foreground">No memory notes yet.</p>
+          <p className="text-sm text-muted-foreground">
+            Nothing yet. Facts learned from this client&apos;s emails appear here.
+          </p>
         )}
       </div>
       )}
