@@ -134,3 +134,54 @@ test('targeted review progress stays with its submission and preserves its findi
   assert.match(rows[0].progressMessage,/reusing 7/);
   assert.equal(isToolFailure(rows[0]),true);
 });
+
+test('run timeline keeps model time and accounts for untraced gaps', async () => {
+  const { buildRunTimeline } = await import('../lib/agent-activity.ts');
+  const at = s => new Date(Date.parse('2026-09-20T09:00:00Z') + s * 1000).toISOString();
+  const trace = [
+    { tool: 'plan_workflow', round: 0, started_at: at(20), completed_at: at(30), result: 'Summarize spending' },
+    { tool: 'execute_workflow', round: 1, started_at: at(32), completed_at: at(212), result: 'Workflow execution step received.' },
+    { tool: 'code_interpreter', round: 1, started_at: at(212), completed_at: at(212), result: 'code' },
+    { tool: 'code_interpreter', round: 1, started_at: at(212), completed_at: at(212), result: 'code' },
+    { type: 'stage_progress', tool: 'code_interpreter', round: 1, started_at: at(225), result: 'Working files checkpointed.',
+      activity: { summary: 'Built monthly totals', details: ['Saved: totals.csv'] } },
+    { tool: 'finish_workflow', round: 1, started_at: at(240), completed_at: at(300), result: '{"status":"completed"}' },
+  ];
+  const rows = buildRunTimeline(trace, { startedAt: at(0), completedAt: at(310), running: false });
+  assert.deepEqual(rows.map(r => r.kind), ['gap', 'step', 'step', 'gap', 'step', 'gap']);
+  assert.equal(rows[2].title, 'Built monthly totals');
+  assert.equal(rows[2].end - rows[2].start, 193000);
+  assert.match(rows[2].details.at(-1), /2 Python operations/);
+  assert.equal(rows[0].end - rows[0].start, 20000);
+  assert.equal(rows.at(-1).end - rows.at(-1).start, 10000);
+
+  const live = buildRunTimeline(trace.slice(0, 2).map((s, i) => i ? { ...s, result: undefined, completed_at: undefined } : s),
+    { startedAt: at(0), running: true });
+  assert.equal(live.at(-1).state, 'running');
+  assert.equal(live.at(-1).end, undefined);
+  const idle = buildRunTimeline(trace.slice(0, 1), { startedAt: at(0), running: true });
+  assert.equal(idle.at(-1).kind, 'gap');
+  assert.equal(idle.at(-1).state, 'running');
+});
+
+test('streamed Python operations keep their own timing under the model step', async () => {
+  const { buildRunTimeline } = await import('../lib/agent-activity.ts');
+  const at = s => new Date(Date.parse('2026-09-20T09:00:00Z') + s * 1000).toISOString();
+  const op = (a, b, summary) => ({ tool: 'code_interpreter', round: 1, started_at: at(a), completed_at: at(b), result: 'code', activity: { summary, details: [] } });
+  const trace = [
+    { tool: 'execute_workflow', round: 1, started_at: at(0), completed_at: at(120), result: 'Workflow execution step received.' },
+    op(30, 70, 'Build monthly totals'), op(80, 95, 'Draw charts'),
+    { type: 'stage_progress', tool: 'code_interpreter', round: 1, started_at: at(126), result: 'Working files checkpointed.',
+      activity: { summary: 'Build monthly totals; Draw charts', details: ['Saved: totals.csv'] } },
+  ];
+  const [row] = buildRunTimeline(trace, { startedAt: at(0), completedAt: at(126), running: false });
+  assert.equal(row.title, 'Build monthly totals; Draw charts');
+  assert.deepEqual(row.children.map(c => [c.title, (c.end - c.start) / 1000]), [['Build monthly totals', 40], ['Draw charts', 15]]);
+  assert.equal(row.end - row.start, 126000);
+  assert.match(row.details.at(-1), /Python ran for 55s across 2 operations/);
+
+  const live = buildRunTimeline([{ ...trace[0], result: undefined, completed_at: undefined }, op(30, 70, 'Build monthly totals'),
+    { tool: 'code_interpreter', round: 1, started_at: at(80) }], { startedAt: at(0), running: true });
+  assert.equal(live[0].state, 'running');
+  assert.equal(live[0].children.at(-1).state, 'running');
+});

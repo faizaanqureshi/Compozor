@@ -2286,6 +2286,8 @@ function WorkflowRunsCard({
   onChange: () => void;
 }) {
   const [runningId, setRunningId] = useState<number | null>(null);
+  // Workflows whose run was just requested, until a worker picks it up.
+  const [requestedIds, setRequestedIds] = useState<number[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [openWorkflowIds, setOpenWorkflowIds] = useState<number[]>([]);
   // Refs, not state, for values the live-event handler only needs to read
@@ -2299,6 +2301,8 @@ function WorkflowRunsCard({
   });
 
   const groups = useMemo(() => groupClientWorkflows(runs ?? [], assignments ?? []), [runs, assignments]);
+  const pendingStart = requestedIds.filter(id => groups.find(g => g.workflowId === id)?.runs[0]?.status === "queued");
+  if (pendingStart.length !== requestedIds.length && runs) setRequestedIds(pendingStart);
 
   // Open an already-running workflow on first load. Its persisted trace
   // supplies the progress even if this tab missed the original SSE events.
@@ -2334,11 +2338,17 @@ function WorkflowRunsCard({
     return () => { unsubscribe(); clearInterval(poll); window.removeEventListener("focus", refresh); };
   }, [clientId]);
 
+  const requestStart = (runId: number) => {
+    const workflowId = runs?.find(run => run.id === runId)?.workflow_id;
+    if (workflowId !== undefined) setRequestedIds(prev => prev.includes(workflowId) ? prev : [...prev, workflowId]);
+  };
+
   const onRunNow = async (runId: number) => {
     setRunningId(runId);
     setError(null);
     try {
       await runQueuedWorkflowRun(clientId, runId);
+      requestStart(runId);
       onChange();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : String(e));
@@ -2352,6 +2362,7 @@ function WorkflowRunsCard({
     setError(null);
     try {
       await rerunWorkflowRun(clientId, runId);
+      requestStart(runId);
       onChange();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : String(e));
@@ -2365,7 +2376,8 @@ function WorkflowRunsCard({
     setStartingId(assignmentId);
     setError(null);
     try {
-      await startAssignedWorkflow(clientId, assignmentId);
+      const run = await startAssignedWorkflow(clientId, assignmentId);
+      setRequestedIds(prev => prev.includes(run.workflow_id) ? prev : [...prev, run.workflow_id]);
       onChange();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : String(e));
@@ -2424,6 +2436,7 @@ function WorkflowRunsCard({
                 awaitingFirstRun={awaitingFirstRun}
                 executionMode={group.assignment?.execution_mode}
                 readiness={group.assignment ? assignmentReadiness(group.assignment) : undefined}
+                starting={requestedIds.includes(group.workflowId)}
                 actions={<>
                     {awaitingFirstRun && group.assignment && !group.workflowArchived && (
                       <Button variant="outline" size="sm"
@@ -2438,7 +2451,7 @@ function WorkflowRunsCard({
                         variant="outline"
                         size="sm"
                         onClick={() => onRunNow(latest.id)}
-                        disabled={runningId === latest.id}
+                        disabled={runningId === latest.id || requestedIds.includes(group.workflowId)}
                       >
                         {runningId === latest.id ? <Loader2 className="animate-spin" /> : <Play />}
                         Run now

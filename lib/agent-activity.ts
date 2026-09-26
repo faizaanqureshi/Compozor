@@ -18,7 +18,10 @@ export interface TraceStep {
 // Presentation only: retain every original event in the saved audit trail.
 // The executor runs tools sequentially; nested verification and extraction
 // progress immediately follow their parent in that round's trajectory.
-export function groupActivity(trajectory: TraceStep[]): TraceStep[] {
+// keepExecution is the run timeline's view: it retains each round's model
+// call (execute_workflow), where most of a run's time goes, and leaves each
+// Python operation separate so its own timing survives.
+export function groupActivity(trajectory: TraceStep[], { keepExecution = false } = {}): TraceStep[] {
   const visible: TraceStep[] = [];
   let finishIndex: number | undefined;
   let extractionIndex: number | undefined;
@@ -29,8 +32,10 @@ export function groupActivity(trajectory: TraceStep[]): TraceStep[] {
       round = step.round;
     }
     const previous = visible.at(-1);
-    if (step.type === "stage_progress" && step.tool === "code_interpreter" && previous?.tool === "code_interpreter") {
-      visible[visible.length - 1] = { ...previous, activity: step.activity ?? previous.activity };
+    if (!keepExecution && step.type === "stage_progress" && step.tool === "code_interpreter" && previous?.tool === "code_interpreter") {
+      // The checkpoint lands after changed files are saved; that time belongs here.
+      visible[visible.length - 1] = { ...previous, activity: step.activity ?? previous.activity,
+        completed_at: step.started_at ?? previous.completed_at };
       continue;
     }
     if (step.type === "stage_progress" && step.tool === "verify_workflow" && finishIndex !== undefined) {
@@ -51,9 +56,9 @@ export function groupActivity(trajectory: TraceStep[]): TraceStep[] {
           ? step.activity ?? parent.activity : outcome.activity } : {}) };
       continue;
     }
-    if (step.tool === "execute_workflow" && step.result === "Workflow execution step received.") continue;
+    if (!keepExecution && step.tool === "execute_workflow" && step.result === "Workflow execution step received.") continue;
     const last = visible.at(-1);
-    if (step.tool === "code_interpreter" && last?.tool === step.tool && last.round === step.round
+    if (!keepExecution && step.tool === "code_interpreter" && last?.tool === step.tool && last.round === step.round
         && !isToolFailure(last) && !isToolFailure(step)) {
       visible[visible.length - 1] = { ...last,
         operationCount: (last.operationCount ?? 1) + 1,
@@ -232,4 +237,163 @@ export function splitAttempts(trajectory: TraceStep[], startedAt?: string | null
     (isCurrent ? current : previous).push(step);
   });
   return { current, previous };
+}
+
+// Workflow run timeline ------------------------------------------------------
+
+export type TimelineState = "done" | "running" | "failed" | "stopped";
+
+// One row of a workflow run's timeline. "gap" rows account for time the
+// trace has no event for (loading sources, saving files between steps), so
+// the rows always add up to the run's elapsed time.
+export interface TimelineEntry {
+  key: string;
+  kind: "step" | "gap";
+  title: string;
+  details: string[];
+  notes: string[];
+  state: TimelineState;
+  start?: number;
+  end?: number;
+  // A model step's individually timed Python operations.
+  children?: TimelineEntry[];
+}
+
+// Shorter pauses are ordinary bookkeeping and would only add noise.
+const GAP_MS = 4000;
+
+const time = (iso?: string | null) => {
+  const value = iso ? Date.parse(iso) : NaN;
+  return Number.isFinite(value) ? value : undefined;
+};
+const latest = (...values: (number | undefined)[]) => {
+  const known = values.filter((v): v is number => v !== undefined);
+  return known.length ? Math.max(...known) : undefined;
+};
+
+function executionTitle(step: TraceStep, state: TimelineState) {
+  if (state === "running") return "Reading sources and working on the files";
+  if (state === "stopped") return "Work stopped before the model responded";
+  if (step.result?.startsWith("Retrying validation")) return "Resubmitted saved files for checking";
+  if (step.result === "Workflow execution step received.") return "Reviewed progress and chose the next action";
+  return summarizeToolStep(step);
+}
+
+function stepEntry(step: TraceStep, index: number, running: boolean): TimelineEntry {
+  const state: TimelineState = step.result == null ? (running ? "running" : "stopped") : isToolFailure(step) ? "failed" : "done";
+  const details = activityDetails(step);
+  const title = step.tool === "execute_workflow" ? executionTitle(step, state)
+    : state === "stopped" ? `${humanizeToolName(step.tool)} (stopped before completion)`
+    : state === "failed" && details.length > 0 ? step.activity?.summary ?? "Output needs correction"
+    : summarizeToolStep(step);
+  return {
+    key: `${step.round}-${step.tool}-${index}`, kind: "step", title, details,
+    notes: step.progressMessage ? [step.progressMessage] : [], state,
+    start: time(step.started_at), end: time(step.completed_at),
+  };
+}
+
+function gap(key: string, title: string, start: number, end?: number): TimelineEntry {
+  return { key, kind: "gap", title, details: [], notes: [], state: end === undefined ? "running" : "done", start, end };
+}
+
+const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
+
+type Row = TimelineEntry & { round?: number; execution?: boolean; summary?: TraceStep["activity"] };
+
+// Python runs inside the model step. Newer traces time each operation as it
+// runs; older ones saved them all at one instant after the step returned.
+function finishExecution(row: Row) {
+  const operations = row.children ?? [];
+  if (!operations.length) return;
+  const timed = operations.filter(op => op.state === "running" || (op.start !== undefined && op.end !== undefined && op.end > op.start));
+  if (row.summary?.summary) {
+    row.title = row.summary.summary;
+    row.details = [...row.summary.details];
+  } else if (row.state === "done") {
+    row.title = `Ran ${plural(operations.length, "Python operation")} on the documents`;
+  }
+  if (!timed.length) {
+    row.children = undefined;
+    if (row.state !== "running") row.details.push(`Includes reasoning and ${plural(operations.length, "Python operation")} in the sandbox.`);
+  } else if (row.state !== "running") {
+    const python = timed.reduce((total, op) => total + ((op.end ?? op.start ?? 0) - (op.start ?? 0)), 0);
+    row.details.push(`Python ran for ${formatDuration(python)} across ${plural(operations.length, "operation")}; the rest was the model reading sources and deciding what to do.`);
+  }
+}
+
+/**
+ * Turns a run's saved trace into rows that account for its whole duration.
+ * Each round's model call is kept, since it is where most time goes, with
+ * that round's Python operations nested under it.
+ */
+export function buildRunTimeline(trajectory: TraceStep[], { startedAt, completedAt, running }: {
+  startedAt?: string | null; completedAt?: string | null; running: boolean;
+}): TimelineEntry[] {
+  const rows: Row[] = [];
+  let execution: Row | undefined;
+  groupActivity(trajectory, { keepExecution: true }).forEach((step, index) => {
+    const previous = rows.at(-1);
+    if (step.tool === "code_interpreter" && execution?.round === step.round) {
+      if (step.type === "stage_progress") {
+        execution.summary = step.activity ?? execution.summary;
+        if (execution.end !== undefined) execution.end = latest(execution.end, time(step.started_at));
+      } else {
+        const op = stepEntry(step, index, running);
+        op.key = `${execution.key}-op-${index}`;
+        op.title = step.activity?.summary ?? (op.state === "running" ? "Running Python on the working files" : "Ran Python on the working files");
+        op.details = [];
+        (execution.children ??= []).push(op);
+        if (execution.end !== undefined) execution.end = latest(execution.end, op.end);
+      }
+      return;
+    }
+    if (step.type === "stage_progress" && previous) {
+      if (step.result) previous.notes.push(step.result);
+      if (previous.end !== undefined) previous.end = latest(previous.end, time(step.started_at));
+      return;
+    }
+    const row: Row = { ...stepEntry(step, index, running), round: step.round, execution: step.tool === "execute_workflow" };
+    if (row.execution) execution = row;
+    else if (execution?.round !== step.round) execution = undefined;
+    rows.push(row);
+  });
+  rows.forEach(finishExecution);
+
+  const entries: TimelineEntry[] = [];
+  const start = time(startedAt);
+  let cursor = start;
+  rows.forEach((row, index) => {
+    if (cursor !== undefined && row.start !== undefined && row.start - cursor >= GAP_MS) {
+      entries.push(gap(`gap-${index}`, index === 0 ? "Loaded documents and prepared the workspace"
+        : "Saved progress and prepared the next step", cursor, row.start));
+    }
+    entries.push(row);
+    cursor = row.state === "running" ? undefined : latest(row.end, row.start, cursor);
+  });
+
+  const last = entries.at(-1);
+  const end = time(completedAt);
+  if (running && cursor !== undefined && last?.state !== "running") {
+    entries.push(gap("gap-live", rows.length === 0 ? "Loading documents and preparing the workspace" : "Saving progress and preparing the next step", cursor));
+  } else if (!running && cursor !== undefined && end !== undefined && end - cursor >= GAP_MS) {
+    entries.push(gap("gap-final", "Saved outputs and finished the run", cursor, end));
+  }
+  return entries;
+}
+
+export function formatDuration(ms: number): string {
+  const seconds = Math.max(0, Math.round(ms / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ${String(seconds % 60).padStart(2, "0")}s`;
+  return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, "0")}m`;
+}
+
+// Clock-style offset from the start of the run, e.g. 0:42 or 12:05.
+export function formatOffset(ms: number): string {
+  const seconds = Math.max(0, Math.floor(ms / 1000));
+  const hours = Math.floor(seconds / 3600), minutes = Math.floor((seconds % 3600) / 60);
+  const rest = String(seconds % 60).padStart(2, "0");
+  return hours ? `${hours}:${String(minutes).padStart(2, "0")}:${rest}` : `${minutes}:${rest}`;
 }
