@@ -83,6 +83,8 @@ import {
   runQueuedWorkflowRun,
   sendChecklistItemReminder,
   sendChecklistReminder,
+  sendEmailLogEntry,
+  createQuestionnairePortalEmail,
   subscribeToEmailLogStream,
   unassignPackageFromClient,
   unassignWorkflowFromClient,
@@ -99,6 +101,7 @@ import { ClientWorkflowActivity } from "@/components/client-workflow-activity";
 import { AssignWorkflowDialog } from "@/components/assign-workflow-dialog";
 import { PackageDocumentPicker } from "@/components/package-document-picker";
 import { PackageFormDialog } from "@/components/package-form-dialog";
+import { ClientQuestionnairesCard } from "@/components/client-questionnaires-card";
 import { ChecklistItemFormDialog } from "@/components/checklist-item-form-dialog";
 import {
   Accordion,
@@ -320,6 +323,8 @@ export default function ClientDetailPage({
             onChange={refresh}
             onEditPackage={() => setAssignPackageOpen(true)}
           />
+
+          <ClientQuestionnairesCard clientId={clientId} />
 
           <WorkflowRunsCard
             clientId={clientId}
@@ -2165,6 +2170,7 @@ function UploadLinkCard({ clientId }: { clientId: number }) {
   const [events, setEvents] = useState<UploadLinkEvent[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(() => {
@@ -2207,6 +2213,21 @@ function UploadLinkCard({ clientId }: { clientId: number }) {
     }
   };
 
+  const onSendPortal = async () => {
+    setBusy(true);
+    setError(null);
+    setSent(false);
+    try {
+      const draft = await createQuestionnairePortalEmail(clientId);
+      await sendEmailLogEntry(clientId, draft.id);
+      setSent(true);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <Panel
       title="Upload link"
@@ -2229,6 +2250,10 @@ function UploadLinkCard({ clientId }: { clientId: number }) {
                   {copied ? <CheckCircle2 className="text-accent" /> : <Copy />}
                   {copied ? "Copied" : "Copy"}
                 </Button>
+                <Button size="sm" disabled={busy} onClick={onSendPortal}>
+                  {busy ? <Loader2 className="animate-spin" /> : <Mail />}
+                  Send
+                </Button>
               </div>
               <p className="text-xs text-muted-foreground">
                 Expires {formatShortDate(link.expires_at, true)}
@@ -2245,6 +2270,7 @@ function UploadLinkCard({ clientId }: { clientId: number }) {
             <p className="text-sm text-muted-foreground">No upload link has been created yet.</p>
           )}
 
+          {sent && <p className="text-sm text-accent">Portal link sent. It is recorded in the Email Log.</p>}
           {error && <p className="text-sm text-destructive">{error}</p>}
 
 

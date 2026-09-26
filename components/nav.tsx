@@ -13,6 +13,7 @@ import {
   Mail,
   MailQuestion,
   Package,
+  ClipboardList,
   Settings,
   Users,
   Workflow,
@@ -38,6 +39,7 @@ const links = [
   { href: "/clients", label: "Clients", icon: Users, tourId: "clients" },
   { href: "/workflows", label: "Workflows", icon: Workflow, tourId: "workflows" },
   { href: "/packages", label: "Packages", icon: Package, tourId: "packages" },
+  { href: "/questionnaires", label: "Questionnaires", icon: ClipboardList, tourId: "questionnaires" },
   { href: "/email-log", label: "Email Log", icon: Mail, tourId: "email-log" },
   {
     href: "/unmatched-emails",

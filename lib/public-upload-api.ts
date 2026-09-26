@@ -3,6 +3,8 @@
 // on the public /upload/[token] page - there's no Clerk session here, and
 // the token itself (not a Clerk session) is what authorizes these calls.
 
+import type { PortalBootstrap } from "./client-portal-api";
+
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
@@ -49,6 +51,8 @@ function json(method: string, body: unknown): RequestInit {
 export interface UploadLinkInfo {
   client_name: string;
   organization_name: string;
+  // Server-calculated portal state; absent on older API versions.
+  portal?: PortalBootstrap | null;
 }
 
 export interface UploadBatchCreated {
