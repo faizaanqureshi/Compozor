@@ -241,7 +241,7 @@ export function UrgencyDashboard({
   }
 
   return (
-    <div className="flex animate-blur-in-sm flex-col gap-4">
+    <div className="flex animate-fade-in flex-col gap-4">
       <div className="flex flex-col gap-4 rounded-2xl bg-muted/30 p-4 ring-1 ring-foreground/10">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
         <StatTile
@@ -539,7 +539,7 @@ function ClientGroupRow({
   return (
     <>
       <tr
-        className="group/row animate-blur-in-sm cursor-pointer border-b border-border/40 text-sm transition-colors last:border-0 hover:bg-muted/30"
+        className="group/row animate-fade-in cursor-pointer border-b border-border/40 text-sm transition-colors last:border-0 hover:bg-muted/30"
         onClick={onToggleExpand}
         aria-expanded={expanded}
       >

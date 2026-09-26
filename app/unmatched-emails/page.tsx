@@ -418,7 +418,7 @@ export default function UnmatchedEmailsPage() {
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
-      <div className="animate-blur-in-sm rounded-2xl bg-card p-6 ring-1 ring-foreground/10">
+      <div className="animate-fade-in rounded-2xl bg-card p-6 ring-1 ring-foreground/10">
         {emailsLoading ? (
           <div className="overflow-x-auto">
           <table className="w-full min-w-[640px] border-collapse text-sm">
@@ -471,13 +471,12 @@ export default function UnmatchedEmailsPage() {
               </tr>
             </thead>
             <tbody>
-              {emailsList.map((email, i) => {
+              {emailsList.map((email) => {
                 const isOpen = expandedId === email.id;
                 return (
                   <Fragment key={email.id}>
                     <tr
-                      className="group/row animate-blur-in-sm border-b border-border/40"
-                      style={{ animationDelay: `${Math.min(i, 10) * 25}ms` }}
+                      className="group/row animate-fade-in border-b border-border/40"
                     >
                       <td className="py-3 pr-4 align-top">
                         <button

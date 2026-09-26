@@ -466,14 +466,13 @@ function AutomationSection({
         </div>
       ) : (
       <div className="flex flex-col gap-2.5">
-        {automationOptions.map((opt, i) => {
+        {automationOptions.map((opt) => {
           const selected = current?.automation_level === opt.value;
           return (
             <label
-              style={{ animationDelay: `${i * 40}ms` }}
               key={opt.value}
               className={cn(
-                "flex cursor-pointer animate-blur-in-sm items-center justify-between gap-4 rounded-lg border-2 px-4 py-3 transition-colors",
+                "flex cursor-pointer animate-fade-in items-center justify-between gap-4 rounded-lg border-2 px-4 py-3 transition-colors",
                 selected
                   ? "border-foreground bg-muted/60"
                   : "border-border/60 hover:bg-muted/30"
@@ -553,8 +552,7 @@ function ReminderSection({
             checked={enabled}
             onCheckedChange={onToggle}
             disabled={savingInterval}
-            className="animate-blur-in-sm"
-            style={{ animationDelay: "100ms" }}
+            className="animate-fade-in"
           />
         ) : (
           <Skeleton className="h-5 w-9 rounded-full" />
@@ -567,10 +565,9 @@ function ReminderSection({
       ) : (
       <div
         className={cn(
-          "flex items-center gap-3 transition-opacity animate-blur-in-sm",
+          "flex items-center gap-3 transition-opacity animate-fade-in",
           !enabled && "pointer-events-none opacity-40"
         )}
-        style={{ animationDelay: "100ms" }}
       >
         <span className="text-sm text-foreground/80">Remind after</span>
         <Input
@@ -715,8 +712,7 @@ function ConnectionsSection({
         <Skeleton className="h-16 w-full rounded-lg" />
       ) : merged.length > 0 ? (
         <div
-          className="flex flex-col divide-y divide-border/50 rounded-lg border border-border/60 animate-blur-in-sm"
-          style={{ animationDelay: "200ms" }}
+          className="flex flex-col divide-y divide-border/50 rounded-lg border border-border/60 animate-fade-in"
         >
           {merged.map((conn) => (
             <div key={`${conn.provider}:${conn.email}`} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
@@ -755,8 +751,7 @@ function ConnectionsSection({
         </div>
       ) : (
         <div
-          className="flex flex-col items-start gap-3 rounded-lg border border-dashed border-border/60 px-4 py-6 animate-blur-in-sm"
-          style={{ animationDelay: "200ms" }}
+          className="flex flex-col items-start gap-3 rounded-lg border border-dashed border-border/60 px-4 py-6 animate-fade-in"
         >
           <p className="text-sm text-muted-foreground">Nothing connected yet.</p>
         </div>

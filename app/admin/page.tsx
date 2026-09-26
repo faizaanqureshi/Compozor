@@ -206,18 +206,17 @@ export default function AdminPage() {
                     </tr>
                   ))}
                 {!isLoading &&
-                  rows.map((org, i) => (
+                  rows.map((org) => (
                     <OrganizationRow
                       key={org.id}
                       org={org}
                       currency={currency}
                       toDisplay={toDisplay}
-                      delayMs={Math.min(i, 10) * 25}
                     />
                   ))}
                 {!isLoading && rows.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="animate-blur-in-sm py-8 text-center text-muted-foreground">
+                    <td colSpan={5} className="animate-fade-in py-8 text-center text-muted-foreground">
                       No organizations yet.
                     </td>
                   </tr>
@@ -235,15 +234,13 @@ function OrganizationRow({
   org,
   currency,
   toDisplay,
-  delayMs,
 }: {
   org: OrganizationUsageOut;
   currency: string;
   toDisplay: (usd: number) => number;
-  delayMs: number;
 }) {
   return (
-    <tr className="group/row animate-blur-in-sm" style={{ animationDelay: `${delayMs}ms` }}>
+    <tr className="group/row animate-fade-in">
       <td className="border-b border-border/50 py-3 pr-4">
         <Link
           href={`/admin/${org.id}`}

@@ -594,18 +594,17 @@ export default function ClientsPage() {
               <div className="absolute top-2 bottom-2 left-3.5 w-px bg-border/70" />
             )}
             {!loading &&
-              recentActivity.map((group, i) => (
+              recentActivity.map((group) => (
                 <ActivityGroupRow
                   key={group.clientId}
                   group={group}
                   expanded={expandedClients.has(group.clientId)}
                   onToggle={() => toggleExpanded(group.clientId)}
                   clientName={clientsById[group.clientId]?.name ?? "Unknown client"}
-                  delayMs={Math.min(i, 10) * 25}
                 />
               ))}
             {!loading && recentActivity.length === 0 && (
-              <p className="animate-blur-in-sm py-3 text-sm text-muted-foreground">No activity yet.</p>
+              <p className="animate-fade-in py-3 text-sm text-muted-foreground">No activity yet.</p>
             )}
           </div>
         </div>
@@ -631,7 +630,7 @@ export default function ClientsPage() {
           </div>
         </div>
         {selectedIds.size > 0 && (
-          <div className="flex items-center gap-3 rounded-lg bg-accent/[0.08] px-4 py-2.5 text-sm animate-blur-in-sm">
+          <div className="flex items-center gap-3 rounded-lg bg-accent/[0.08] px-4 py-2.5 text-sm animate-fade-in">
             <span className="font-medium text-accent">
               {selectedIds.size} client{selectedIds.size === 1 ? "" : "s"} selected
             </span>
@@ -728,8 +727,7 @@ export default function ClientsPage() {
                   </tr>
                 ))}
               {!loading &&
-                rows.map((c, i) => {
-                  const revealStyle = { animationDelay: `${Math.min(i, 10) * 25}ms` };
+                rows.map((c) => {
                   const summary = c.checklist_summary;
                   const activity = lastActivity[c.id];
                   const workflow = deriveWorkflowStatus(c, summary);
@@ -742,7 +740,7 @@ export default function ClientsPage() {
                       )}
                     >
                       <td className="border-b border-border/50 py-3 pr-2">
-                        <div className="animate-blur-in-sm motion-reduce:animate-none" style={revealStyle}>
+                        <div className="animate-fade-in">
                           <input
                             type="checkbox"
                             aria-label={`Select ${c.name}`}
@@ -753,7 +751,7 @@ export default function ClientsPage() {
                         </div>
                       </td>
                       <td className="border-b border-border/50 py-3 pr-4">
-                        <div className="animate-blur-in-sm motion-reduce:animate-none" style={revealStyle}>
+                        <div className="animate-fade-in">
                           <Link
                             href={`/clients/${c.id}`}
                             className="font-thin underline-offset-4 [font-family:var(--font-denton)] group-hover/row:underline"
@@ -763,12 +761,12 @@ export default function ClientsPage() {
                         </div>
                       </td>
                       <td className="border-b border-border/50 py-3 pr-4 text-foreground/70">
-                        <div className="animate-blur-in-sm motion-reduce:animate-none" style={revealStyle}>
+                        <div className="animate-fade-in">
                           {c.email}
                         </div>
                       </td>
                       <td className="border-b border-border/50 py-3 pr-4 text-foreground/70">
-                        <div className="animate-blur-in-sm motion-reduce:animate-none" style={revealStyle}>
+                        <div className="animate-fade-in">
                           <span className="inline-flex items-center gap-1.5">
                             {summary
                               ? summary.total > 0
@@ -794,12 +792,12 @@ export default function ClientsPage() {
                         </div>
                       </td>
                       <td className="border-b border-border/50 py-3 pr-4 text-foreground/70">
-                        <div className="animate-blur-in-sm motion-reduce:animate-none" style={revealStyle}>
+                        <div className="animate-fade-in">
                           {activity ? formatRelativeTime(activity) : "No activity yet"}
                         </div>
                       </td>
                       <td className="border-b border-border/50 py-3 pr-4">
-                        <div className="animate-blur-in-sm motion-reduce:animate-none" style={revealStyle}>
+                        <div className="animate-fade-in">
                           <span className="inline-flex items-center gap-2">
                             <span className={cn("size-1.5 rounded-full", toneClasses[workflow.tone])} />
                             <span className="text-foreground/80">{workflow.label}</span>
@@ -807,7 +805,7 @@ export default function ClientsPage() {
                         </div>
                       </td>
                       <td className="border-b border-border/50 py-3 pr-4">
-                        <div className="animate-blur-in-sm motion-reduce:animate-none" style={revealStyle}>
+                        <div className="animate-fade-in">
                           <WorkflowStatusCell
                             clientId={c.id}
                             workflowStatuses={c.workflow_statuses}
@@ -816,7 +814,7 @@ export default function ClientsPage() {
                         </div>
                       </td>
                       <td className="border-b border-border/50 py-3 pr-4">
-                        <div className="animate-blur-in-sm motion-reduce:animate-none" style={revealStyle}>
+                        <div className="animate-fade-in">
                           <PackageStatusCell
                             clientId={c.id}
                             assignedPackages={c.assigned_packages}
@@ -829,7 +827,7 @@ export default function ClientsPage() {
                 })}
               {!loading && rows.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="animate-blur-in-sm py-8 text-center text-muted-foreground">
+                  <td colSpan={8} className="animate-fade-in py-8 text-center text-muted-foreground">
                     {clients?.length === 0 ? "No clients yet." : "No clients match your search."}
                   </td>
                 </tr>
@@ -1279,7 +1277,6 @@ function ActivityGroupRow({
   expanded,
   onToggle,
   clientName,
-  delayMs = 0,
 }: {
   group: {
     clientId: number;
@@ -1290,7 +1287,6 @@ function ActivityGroupRow({
   expanded: boolean;
   onToggle: () => void;
   clientName: string;
-  delayMs?: number;
 }) {
   const latestEntry = group.entries[0];
   const { Icon, iconTone } = describeActivity(latestEntry);
@@ -1301,8 +1297,7 @@ function ActivityGroupRow({
 
   return (
     <div
-      className="relative flex flex-col animate-blur-in-sm"
-      style={{ animationDelay: `${delayMs}ms` }}
+      className="relative flex flex-col animate-fade-in"
     >
       <div
         role={hasMultiple ? "button" : undefined}

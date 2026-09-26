@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import useSWR from "swr";
+import { packagesKey } from "@/lib/swr-keys";
 import { Package as PackageIcon } from "lucide-react";
 import {
   ApiError,
@@ -23,16 +25,10 @@ import {
 import { PackageFormDialog } from "@/components/package-form-dialog";
 
 export default function PackagesPage() {
-  const [packages, setPackages] = useState<PackageWithAssignmentCount[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const refresh = () => {
-    listPackages()
-      .then(setPackages)
-      .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
-  };
-
-  useEffect(refresh, []);
+  const { data, error: loadError, mutate } = useSWR(packagesKey(), listPackages);
+  const packages: PackageWithAssignmentCount[] | null = data ?? null;
+  const error = loadError ? (loadError instanceof ApiError ? loadError.message : String(loadError)) : null;
+  const refresh = () => void mutate();
 
   return (
     <div className="flex w-full flex-col gap-8">
@@ -67,7 +63,7 @@ export default function PackagesPage() {
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4 animate-blur-in-sm md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 animate-fade-in md:grid-cols-2 xl:grid-cols-3">
           {packages.map((pkg) => (
             <PackageCard key={pkg.id} pkg={pkg} onChange={refresh} />
           ))}

@@ -5,6 +5,17 @@ import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { groupClientWorkflows, assignmentReadiness } from "@/lib/client-workflows";
 import { createSnapshotRefresh } from "@/lib/snapshot-refresh";
 import Link from "next/link";
+import useSWR from "swr";
+import {
+  clientChecklistKey,
+  clientCommitmentsKey,
+  clientDocumentsKey,
+  clientKey,
+  clientMeetingsKey,
+  clientMemoryNotesKey,
+  clientThreadsKey,
+  clientWorkflowSnapshotKey,
+} from "@/lib/swr-keys";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -149,6 +160,10 @@ function SectionCard({
 // Shared quiet table header cell.
 const th = "py-1.5 pr-4 pb-2.5 text-[0.6875rem] font-normal tracking-wider text-muted-foreground uppercase";
 
+function errorMessage(e: unknown): string {
+  return e instanceof ApiError ? e.message : String(e);
+}
+
 function formatShortDate(iso: string, withYear = false): string {
   return new Date(iso.length === 10 ? `${iso}T00:00:00` : iso).toLocaleDateString("en-US", {
     month: "short",
@@ -216,8 +231,6 @@ function DeadlineCell({ item, today }: { item: ChecklistItem; today: Date }) {
   );
 }
 
-type LoadKey = "checklist" | "threads" | "documents" | "memoryNotes" | "commitments" | "meetings";
-
 export default function ClientDetailPage({
   params,
 }: {
@@ -226,22 +239,44 @@ export default function ClientDetailPage({
   const { id } = use(params);
   const clientId = Number(id);
 
-  const [client, setClient] = useState<ClientDetail | null>(null);
-  const [checklist, setChecklist] = useState<ChecklistSummary | null>(null);
-  const [threads, setThreads] = useState<EmailThread[] | null>(null);
-  const [documents, setDocuments] = useState<DocumentOut[] | null>(null);
-  const [memoryNotes, setMemoryNotes] = useState<ClientMemoryNote[] | null>(
-    null
-  );
-  const [commitments, setCommitments] = useState<ClientCommitment[] | null>(
-    null
-  );
-  const [meetings, setMeetings] = useState<MeetingRequest[] | null>(null);
-  const [workflowAssignments, setWorkflowAssignments] = useState<ClientWorkflowAssignment[] | null>(null);
+  // Every section is cached by SWR, so reopening a client shows the last known
+  // state immediately and refreshes it in the background.
+  const clientQuery = useSWR(clientKey(clientId), () => getClient(clientId));
+  const checklistQuery = useSWR(clientChecklistKey(clientId), () => listChecklistItems(clientId));
+  const threadsQuery = useSWR(clientThreadsKey(clientId), () => listEmailThreads(clientId));
+  const documentsQuery = useSWR(clientDocumentsKey(clientId), () => listClientDocuments(clientId));
+  const memoryNotesQuery = useSWR(clientMemoryNotesKey(clientId), () => listClientMemoryNotes(clientId));
+  const commitmentsQuery = useSWR(clientCommitmentsKey(clientId), () => listClientCommitments(clientId));
+  const meetingsQuery = useSWR(clientMeetingsKey(clientId), () => listClientMeetings(clientId));
+  // Workflows keep their live refresher (SSE + polling, serialized); it writes
+  // each snapshot into this cache entry instead of component state.
+  const { data: workflowSnapshot, mutate: setWorkflowSnapshot } = useSWR<
+    [WorkflowRun[], ClientWorkflowAssignment[]]
+  >(clientWorkflowSnapshotKey(clientId), null);
+
+  const client = clientQuery.data ?? null;
+  const checklist = checklistQuery.data ?? null;
+  const threads = threadsQuery.data ?? null;
+  const documents = documentsQuery.data ?? null;
+  const memoryNotes = memoryNotesQuery.data ?? null;
+  const commitments = commitmentsQuery.data ?? null;
+  const meetings = meetingsQuery.data ?? null;
+  const workflowRuns = workflowSnapshot?.[0] ?? null;
+  const workflowAssignments = workflowSnapshot?.[1] ?? null;
+  const error = clientQuery.error ? errorMessage(clientQuery.error) : null;
+  // A section only shows its error when there's nothing cached to show.
+  const sectionError = (query: { data?: unknown; error?: unknown }) =>
+    query.data === undefined && query.error ? errorMessage(query.error) : null;
+  const loadErrors = {
+    checklist: sectionError(checklistQuery),
+    threads: sectionError(threadsQuery),
+    documents: sectionError(documentsQuery),
+    memoryNotes: sectionError(memoryNotesQuery),
+    commitments: sectionError(commitmentsQuery),
+    meetings: sectionError(meetingsQuery),
+  };
+
   const [workflowError, setWorkflowError] = useState<string | null>(null);
-  const [workflowRuns, setWorkflowRuns] = useState<WorkflowRun[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loadErrors, setLoadErrors] = useState<Partial<Record<LoadKey, string>>>({});
   const [assignPackageOpen, setAssignPackageOpen] = useState(false);
   const router = useRouter();
   const workflowRefreshRef = useRef<ReturnType<typeof createSnapshotRefresh<[WorkflowRun[], ClientWorkflowAssignment[]]>> | null>(null);
@@ -255,12 +290,11 @@ export default function ClientDetailPage({
         setWorkflowError(null);
         return snapshot;
       },
-      onValue: ([runs, assignments]) => {
-        setWorkflowRuns(runs);
-        setWorkflowAssignments(assignments);
+      onValue: (snapshot) => {
+        void setWorkflowSnapshot(snapshot, { revalidate: false });
         setWorkflowError(null);
       },
-      onError: (e) => setWorkflowError(e instanceof ApiError ? e.message : String(e)),
+      onError: (e) => setWorkflowError(errorMessage(e)),
     });
     workflowRefreshRef.current = controller;
     controller.refresh({ immediate: true });
@@ -268,47 +302,26 @@ export default function ClientDetailPage({
       controller.stop();
       workflowRefreshRef.current = null;
     };
-  }, [clientId]);
+  }, [clientId, setWorkflowSnapshot]);
 
   const refreshWorkflowRuns = useCallback(() => {
     workflowRefreshRef.current?.refresh();
   }, []);
 
-  const refreshClient = useCallback(() => {
-    // Each section loads (and fails) on its own.
-    const load = <T,>(key: LoadKey, request: Promise<T>, set: (value: T) => void) =>
-      request
-        .then((value) => {
-          set(value);
-          setLoadErrors((prev) => {
-            if (!(key in prev)) return prev;
-            const next = { ...prev };
-            delete next[key];
-            return next;
-          });
-        })
-        .catch((e) =>
-          setLoadErrors((prev) => ({ ...prev, [key]: e instanceof ApiError ? e.message : String(e) }))
-        );
-    getClient(clientId)
-      .then((value) => {
-        setClient(value);
-        setError(null);
-      })
-      .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
-    load("checklist", listChecklistItems(clientId), setChecklist);
-    load("threads", listEmailThreads(clientId), setThreads);
-    load("documents", listClientDocuments(clientId), setDocuments);
-    load("memoryNotes", listClientMemoryNotes(clientId), setMemoryNotes);
-    load("commitments", listClientCommitments(clientId), setCommitments);
-    load("meetings", listClientMeetings(clientId), setMeetings);
-  }, [clientId]);
+  const refreshClient = () => {
+    void clientQuery.mutate();
+    void checklistQuery.mutate();
+    void threadsQuery.mutate();
+    void documentsQuery.mutate();
+    void memoryNotesQuery.mutate();
+    void commitmentsQuery.mutate();
+    void meetingsQuery.mutate();
+  };
 
   const refresh = () => {
     refreshClient();
     refreshWorkflowRuns();
   };
-  useEffect(refreshClient, [refreshClient]);
 
   if (error && !client) return <p className="text-sm text-destructive">{error}</p>;
 
@@ -449,7 +462,7 @@ function ClientHeader({
           <Skeleton className="h-4 w-96" />
         </div>
       ) : (
-        <div className="flex flex-col gap-4 animate-blur-in-sm lg:flex-row lg:items-end lg:justify-between">
+        <div className="flex flex-col gap-4 animate-fade-in lg:flex-row lg:items-end lg:justify-between">
           <div className="flex min-w-0 flex-col gap-2">
             <h1 className="text-4xl leading-tight font-thin tracking-tight text-balance [font-family:var(--font-denton)] md:text-5xl">
               {client.name}
@@ -1049,8 +1062,7 @@ function ChecklistCard({
       ) : (
       <div className="overflow-x-auto">
       <table
-        className="w-full min-w-[560px] border-collapse text-sm animate-blur-in-sm"
-        style={{ animationDelay: "60ms" }}
+        className="w-full min-w-[560px] border-collapse text-sm animate-fade-in"
       >
         <thead>
           <tr className="border-b border-border text-left">
@@ -1533,7 +1545,7 @@ function MeetingCard({
       ) : meetings.length === 0 ? (
         <p className="text-sm text-muted-foreground">No meetings proposed yet.</p>
       ) : (
-        <ul className="flex flex-col divide-y divide-border/60 animate-blur-in-sm">
+        <ul className="flex flex-col divide-y divide-border/60 animate-fade-in">
           {meetings.map((m) => (
             <li key={m.id} className="flex flex-col gap-1.5 py-3 first:pt-0 last:pb-0">
               <div className="flex items-start justify-between gap-3">
@@ -1585,7 +1597,7 @@ function WaitingOnCard({
           Nothing promised. Commitments from the client&apos;s emails appear here.
         </p>
       ) : (
-        <ul className="flex flex-col divide-y divide-border/60 animate-blur-in-sm">
+        <ul className="flex flex-col divide-y divide-border/60 animate-fade-in">
           {[...open, ...closed].map((c) => {
             const overdue = c.status === "pending" && c.expected_by !== null && c.expected_by < today;
             return (
@@ -1730,8 +1742,7 @@ function ThreadsList({ threads }: { threads: EmailThread[] | null }) {
 
   return (
     <div
-      className="flex flex-col divide-y divide-border/50 rounded-lg border border-border/60 animate-blur-in-sm"
-      style={{ animationDelay: "120ms" }}
+      className="flex flex-col divide-y divide-border/50 rounded-lg border border-border/60 animate-fade-in"
     >
       {threads?.map((thread) => {
         const latest = thread.messages[thread.messages.length - 1];
@@ -1944,8 +1955,7 @@ function DocumentVaultCard({
       ) : (
       <div className="overflow-x-auto">
       <table
-        className="w-full md:min-w-[600px] border-collapse text-sm animate-blur-in-sm"
-        style={{ animationDelay: "180ms" }}
+        className="w-full md:min-w-[600px] border-collapse text-sm animate-fade-in"
       >
         <thead>
           <tr className="border-b border-border text-left">
@@ -2611,8 +2621,7 @@ function MemoryNotesCard({
         </div>
       ) : (
       <div
-        className="flex flex-col divide-y divide-border/60 animate-blur-in-sm"
-        style={{ animationDelay: "240ms" }}
+        className="flex flex-col divide-y divide-border/60 animate-fade-in"
       >
         {notes.map((note) => (
           <div

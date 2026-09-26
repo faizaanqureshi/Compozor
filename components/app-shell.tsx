@@ -35,7 +35,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <MobileTopBar />
                 <main className="relative flex-1 p-6 xl:p-10">
                   <DashboardBackground />
-                  {children}
+                  {/* One identical entrance for every page, keyed so it replays per navigation. */}
+                  <div key={pathname} className="animate-blur-in-sm">
+                    {children}
+                  </div>
                 </main>
               </div>
             </div>

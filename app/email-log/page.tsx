@@ -752,7 +752,7 @@ export default function EmailLogPage() {
                 </div>
               ))}
             {!loading &&
-              threads.map((thread, i) => (
+              threads.map((thread) => (
                 <ThreadRow
                   key={thread.key}
                   thread={thread}
@@ -764,12 +764,11 @@ export default function EmailLogPage() {
                     setMobileDetailOpen(true);
                   }}
                   onCheck={() => toggleThreadSelection(thread.key)}
-                  delayMs={Math.min(i, 10) * 25}
                   live={liveRuns[thread.key]}
                 />
               ))}
             {!loading && threads.length === 0 && (
-              <p className="animate-blur-in-sm px-3 py-8 text-center text-sm text-muted-foreground">
+              <p className="animate-fade-in px-3 py-8 text-center text-sm text-muted-foreground">
                 No entries.
               </p>
             )}
@@ -795,8 +794,7 @@ export default function EmailLogPage() {
             </div>
           ) : selectedThread ? (
             <div
-              className="flex flex-col gap-4 p-6 animate-blur-in-sm"
-              style={{ animationDelay: "100ms" }}
+              className="flex flex-col gap-4 p-6 animate-fade-in"
             >
               <div className="flex items-center justify-between gap-4">
                 <div className="flex flex-col gap-1">
@@ -839,7 +837,7 @@ export default function EmailLogPage() {
               </div>
             </div>
           ) : (
-            <p className="animate-blur-in-sm flex h-full items-center justify-center text-sm text-muted-foreground">
+            <p className="animate-fade-in flex h-full items-center justify-center text-sm text-muted-foreground">
               Select a thread to read it.
             </p>
           )}
@@ -865,7 +863,6 @@ function ThreadRow({
   checked,
   onSelect,
   onCheck,
-  delayMs = 0,
   live,
 }: {
   thread: Thread;
@@ -874,7 +871,6 @@ function ThreadRow({
   checked: boolean;
   onSelect: () => void;
   onCheck: () => void;
-  delayMs?: number;
   live?: LiveRun;
 }) {
   const latest = thread.messages[thread.messages.length - 1];
@@ -891,9 +887,8 @@ function ThreadRow({
       onKeyDown={(e) => {
         if (e.key === "Enter") onSelect();
       }}
-      style={{ animationDelay: `${delayMs}ms` }}
       className={cn(
-        "flex w-full cursor-pointer animate-blur-in-sm items-start gap-2.5 border-b border-border/40 px-3 py-2.5 text-left transition-colors hover:bg-muted/40",
+        "flex w-full cursor-pointer animate-fade-in items-start gap-2.5 border-b border-border/40 px-3 py-2.5 text-left transition-colors hover:bg-muted/40",
         selected && "bg-muted/60"
       )}
     >
