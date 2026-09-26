@@ -185,3 +185,11 @@ test('streamed Python operations keep their own timing under the model step', as
   assert.equal(live[0].state, 'running');
   assert.equal(live[0].children.at(-1).state, 'running');
 });
+
+test('a failed step is named in the run timeline', async () => {
+  const { buildRunTimeline } = await import('../lib/agent-activity.ts');
+  const failed = (tool) => ({ tool, round: 3, result: '{"error":"x"}', activity: { summary: 'Step needs correction', details: ['No saved file named x.pdf'], failed: true } });
+  const titles = buildRunTimeline([failed('record_progress'), failed('custom_tool'),
+    { ...failed('finish_workflow'), activity: { summary: 'Output needs correction', details: ['Totals differ'], failed: true } }], { running: false }).map(r => r.title);
+  assert.deepEqual(titles, ['Saving progress needs correction', 'Needs correction: custom tool', 'Output needs correction']);
+});

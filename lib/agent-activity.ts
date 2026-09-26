@@ -279,12 +279,38 @@ function executionTitle(step: TraceStep, state: TimelineState) {
   return summarizeToolStep(step);
 }
 
+// What a step was doing, for naming the one that needs correction.
+const CORRECTION_LABELS: Record<string, string> = {
+  record_progress: "Saving progress",
+  read_document: "Reading a document",
+  search_documents: "Searching documents",
+  prepare_documents: "Preparing source files",
+  extract_records: "Extracting information",
+  extract_transactions: "Extracting transactions",
+  transform_table: "Transforming a table",
+  render_report: "Building the PDF",
+  build_workbook: "Building the workbook",
+  inspect_work_sample: "Inspecting the work sample",
+  inspect_office_document: "Inspecting an Office document",
+  edit_office_document: "Editing an Office document",
+  render_office_document: "Rendering an Office document",
+  restore_source_cells: "Restoring source cells",
+};
+
+function failureTitle(step: TraceStep) {
+  const summary = step.activity?.summary;
+  // The backend's generic label doesn't say which step failed.
+  if (summary && summary !== "Step needs correction") return summary;
+  const label = CORRECTION_LABELS[step.tool];
+  return label ? `${label} needs correction` : `Needs correction: ${humanizeToolName(step.tool).toLowerCase()}`;
+}
+
 function stepEntry(step: TraceStep, index: number, running: boolean): TimelineEntry {
   const state: TimelineState = step.result == null ? (running ? "running" : "stopped") : isToolFailure(step) ? "failed" : "done";
   const details = activityDetails(step);
   const title = step.tool === "execute_workflow" ? executionTitle(step, state)
     : state === "stopped" ? `${humanizeToolName(step.tool)} (stopped before completion)`
-    : state === "failed" && details.length > 0 ? step.activity?.summary ?? "Output needs correction"
+    : state === "failed" && details.length > 0 ? (step.tool === "finish_workflow" ? step.activity?.summary ?? "Output needs correction" : failureTitle(step))
     : summarizeToolStep(step);
   return {
     key: `${step.round}-${step.tool}-${index}`, kind: "step", title, details,
