@@ -102,6 +102,7 @@ import { AssignWorkflowDialog } from "@/components/assign-workflow-dialog";
 import { PackageDocumentPicker } from "@/components/package-document-picker";
 import { PackageFormDialog } from "@/components/package-form-dialog";
 import { ClientQuestionnairesCard } from "@/components/client-questionnaires-card";
+import { QuestionnairePdfAccess } from "@/components/questionnaire-pdf-access";
 import { ChecklistItemFormDialog } from "@/components/checklist-item-form-dialog";
 import {
   Accordion,
@@ -1853,7 +1854,7 @@ function DocumentVaultCard({
           {documents && documents.length > 0 && (
             <Button variant="ghost" size="sm" disabled={downloading} onClick={onDownloadZip}>
               {downloading ? <Loader2 className="animate-spin" /> : <Download />}
-              {downloading ? "Zipping…" : "Download all"}
+              {downloading ? "Zipping…" : "Download uploads"}
             </Button>
           )}
           <Button variant="outline" size="sm" disabled={submitting} onClick={() => fileInputRef.current?.click()}>
@@ -1940,14 +1941,14 @@ function DocumentVaultCard({
                     <div className="text-xs font-normal text-muted-foreground">{doc.classified_type}</div>
                   )}
                   <div className="mt-2 md:hidden">
-                    <DocumentValidationResult metadata={doc.extracted_metadata} collected={item?.status === "received"} />
+                    {doc.source_channel === "generated_questionnaire" ? "Internal record" : <DocumentValidationResult metadata={doc.extracted_metadata} collected={item?.status === "received"} />}
                   </div>
                 </td>
                 <td className="hidden py-2 pr-4 text-muted-foreground md:table-cell">
                   {sourceChannelLabel(doc.source_channel)}
                 </td>
                 <td className="hidden py-2 pr-4 md:table-cell">
-                  <DocumentValidationResult metadata={doc.extracted_metadata} collected={item?.status === "received"} />
+                  {doc.source_channel === "generated_questionnaire" ? "Internal record" : <DocumentValidationResult metadata={doc.extracted_metadata} collected={item?.status === "received"} />}
                 </td>
                 <td className="hidden py-2 pr-4 text-right text-muted-foreground md:table-cell">
                   {doc.year ?? "—"}
@@ -1974,6 +1975,7 @@ const SOURCE_CHANNEL_LABELS: Record<string, string> = {
   manual_upload: "Manual upload",
   email: "Email",
   upload_link: "Upload link",
+  generated_questionnaire: "Questionnaire",
 };
 
 function sourceChannelLabel(source: string | null): string {
@@ -2064,6 +2066,13 @@ function DocumentActions({
     }
   };
 
+  if (doc.source_channel === "generated_questionnaire") {
+    return doc.questionnaire_submission_id && doc.questionnaire_assignment_id
+      ? <QuestionnairePdfAccess clientId={clientId} assignmentId={doc.questionnaire_assignment_id}
+          submissionId={doc.questionnaire_submission_id}
+          snapshot={{ submission_id: doc.questionnaire_submission_id, document_id: doc.id, status: "ready", attempt_count: 1, failure_code: null, generated_at: doc.received_at, retrospective: false }} />
+      : <span className="text-xs text-muted-foreground">Unavailable</span>;
+  }
   return (
     <div className="flex items-center justify-end gap-2">
       {error && <p className="text-xs text-destructive">{error}</p>}
