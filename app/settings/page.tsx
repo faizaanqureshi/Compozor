@@ -4,10 +4,10 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
 import { useClerk, useUser } from "@clerk/nextjs";
-import { Check, Loader2, Pencil } from "lucide-react";
+import { Loader2, Pencil } from "lucide-react";
 import { GmailIcon } from "@/components/icons/gmail";
 import { OutlookIcon } from "@/components/icons/outlook";
-import { SectionCard } from "@/components/section-card";
+import { Panel } from "@/components/panel";
 import { calendarConnectionsKey, inboxConnectionsKey, organizationKey } from "@/lib/swr-keys";
 import {
   ApiError,
@@ -43,26 +43,87 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-function EditButton({ onClick }: { onClick: () => void }) {
+type SectionId = "profile" | "firm" | "sign-off" | "automation" | "connections";
+
+const SECTIONS: { id: SectionId; label: string }[] = [
+  { id: "profile", label: "Profile" },
+  { id: "firm", label: "Firm" },
+  { id: "sign-off", label: "Email sign-off" },
+  { id: "automation", label: "Automation" },
+  { id: "connections", label: "Connections" },
+];
+
+function errorMessage(e: unknown) {
+  return e instanceof ApiError ? e.message : String(e);
+}
+
+// One setting: what it is (and, briefly, why it matters) on the left, its
+// value or control on the right. Stacks on phones.
+function SettingRow({
+  label,
+  htmlFor,
+  description,
+  children,
+}: {
+  label: string;
+  htmlFor?: string;
+  description?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-    >
-      <Pencil className="size-3.5" />
-      Edit
-    </button>
+    <div className="grid gap-2 border-t border-border/60 py-5 first:border-t-0 first:pt-1 last:pb-1 md:grid-cols-[14rem_minmax(0,1fr)] md:gap-8">
+      <div className="flex flex-col gap-1">
+        {htmlFor ? (
+          <Label htmlFor={htmlFor} className="text-sm font-medium text-foreground">
+            {label}
+          </Label>
+        ) : (
+          <span className="text-sm font-medium">{label}</span>
+        )}
+        {description && <p className="text-xs leading-relaxed text-pretty text-muted-foreground">{description}</p>}
+      </div>
+      <div className="min-w-0 text-sm">{children}</div>
+    </div>
   );
 }
 
-function DisplayField({ label, value }: { label: string; value?: string | null }) {
+function Value({ children }: { children?: React.ReactNode }) {
+  return children ? (
+    <span className="whitespace-pre-wrap text-foreground">{children}</span>
+  ) : (
+    <span className="text-muted-foreground">Not set</span>
+  );
+}
+
+function EditButton({ onClick }: { onClick: () => void }) {
   return (
-    <div className="flex flex-col gap-1">
-      <span className="text-xs font-medium text-muted-foreground">{label}</span>
-      <span className="text-sm text-foreground">
-        {value ? <span className="whitespace-pre-wrap">{value}</span> : <span className="text-muted-foreground/60">Not set</span>}
-      </span>
+    <Button variant="ghost" size="sm" onClick={onClick}>
+      <Pencil />
+      Edit
+    </Button>
+  );
+}
+
+function EditFooter({ saving, label, onSave, onCancel }: { saving: boolean; label: string; onSave: () => void; onCancel: () => void }) {
+  return (
+    <div className="flex justify-end gap-2 border-t border-border/60 pt-4">
+      <Button variant="outline" disabled={saving} onClick={onCancel}>
+        Cancel
+      </Button>
+      <Button disabled={saving} onClick={onSave}>
+        {saving && <Loader2 className="animate-spin" />}
+        {saving ? "Saving…" : label}
+      </Button>
+    </div>
+  );
+}
+
+function RowsSkeleton({ rows }: { rows: number }) {
+  return (
+    <div className="flex flex-col gap-4">
+      {Array.from({ length: rows }).map((_, i) => (
+        <Skeleton key={i} className="h-10 w-full" />
+      ))}
     </div>
   );
 }
@@ -71,21 +132,21 @@ const automationOptions: { value: AutomationLevel; label: string; description: s
   {
     value: "no_automation",
     label: "No automation",
-    description: "Every AI-drafted email always needs a human to click send.",
+    description: "Every drafted email waits for someone to press send.",
   },
   {
     value: "medium_automation",
     label: "Medium automation",
-    description: "Autosends only when the model is quite confident (high bar).",
+    description: "Sends on its own only when the draft clears a high confidence bar.",
   },
   {
     value: "high_automation",
     label: "High automation",
-    description: "Autosends unless the model's confidence is low (sends most of the time).",
+    description: "Sends most drafts, holding back only those with low confidence.",
   },
 ];
 
-function YourProfileSection({
+function ProfileSection({
   current,
   error,
   saving,
@@ -100,24 +161,17 @@ function YourProfileSection({
   const { openUserProfile } = useClerk();
   const [edit, setEdit] = useState(false);
   const [contactName, setContactName] = useState("");
-  // Canonical digits-only, same as what's persisted - may be incomplete
-  // (< 10 digits) mid-type, or briefly > 10 if the user's typed/pasted too
-  // many, which phoneError below surfaces rather than silently trimming.
+  // Digits only, as stored; may be incomplete while typing, and phoneError
+  // flags too many digits rather than trimming them silently.
   const [phoneDigits, setPhoneDigits] = useState("");
   const [phoneError, setPhoneError] = useState<string | null>(null);
 
   const startEdit = () => {
-    // Prefill from Clerk's name only as a starting point for an org that's
-    // never set contact_name - once saved, the stored value always wins.
+    // Clerk's name is only a starting point until a contact name is saved.
     setContactName(current?.contact_name ?? user?.fullName ?? "");
     setPhoneDigits(current?.phone ?? "");
     setPhoneError(null);
     setEdit(true);
-  };
-
-  const onPhoneChange = (raw: string) => {
-    setPhoneDigits(extractPhoneDigits(raw));
-    setPhoneError(null);
   };
 
   const save = async () => {
@@ -129,75 +183,72 @@ function YourProfileSection({
   };
 
   const accountEmail = (
-    <div className="flex flex-col gap-1">
-      <span className="text-xs font-medium text-muted-foreground">Account email</span>
-      <div className="flex items-center gap-3">
-        <span className="text-sm text-foreground">{user?.primaryEmailAddress?.emailAddress ?? "—"}</span>
-        <button
-          type="button"
-          onClick={() => openUserProfile()}
-          className="text-xs font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-        >
+    <SettingRow label="Sign-in email" description="Managed through your account.">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <span className="break-all">{user?.primaryEmailAddress?.emailAddress ?? "—"}</span>
+        <Button variant="link" size="sm" className="h-auto px-0 text-muted-foreground" onClick={() => openUserProfile()}>
           Manage account
-        </button>
+        </Button>
       </div>
-    </div>
+    </SettingRow>
   );
 
   return (
-    <SectionCard
-      title="Your profile"
-      subtitle="Your own name and contact details, separate from your firm's information below."
+    <Panel
+      title="Profile"
+      meta="Your own details"
       action={current && !edit ? <EditButton onClick={startEdit} /> : undefined}
     >
       {error && <p className="text-sm text-destructive">{error}</p>}
       {!current ? (
-        <div className="flex flex-col gap-3">
-          <Skeleton className="h-9 w-full" />
-          <Skeleton className="h-9 w-full" />
-        </div>
+        <RowsSkeleton rows={3} />
       ) : !edit ? (
-        <div className="flex flex-col gap-4">
-          <DisplayField label="Name" value={current.contact_name} />
-          <DisplayField label="Phone number" value={current.phone ? formatPhoneDisplay(current.phone) : null} />
+        <div className="flex flex-col">
+          <SettingRow label="Name">
+            <Value>{current.contact_name}</Value>
+          </SettingRow>
+          <SettingRow label="Phone number">
+            <Value>{current.phone ? formatPhoneDisplay(current.phone) : null}</Value>
+          </SettingRow>
           {accountEmail}
         </div>
       ) : (
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="contact-name">Name</Label>
-            <Input id="contact-name" placeholder="e.g. Jane Doe" value={contactName}
-              onChange={(e) => setContactName(e.target.value)} />
+        <>
+          <div className="flex flex-col">
+            <SettingRow label="Name" htmlFor="contact-name">
+              <Input
+                id="contact-name"
+                placeholder="Jane Doe"
+                value={contactName}
+                onChange={(e) => setContactName(e.target.value)}
+              />
+            </SettingRow>
+            <SettingRow label="Phone number" htmlFor="contact-phone">
+              <div className="flex flex-col gap-1.5">
+                <Input
+                  id="contact-phone"
+                  type="tel"
+                  placeholder="(416) 000-1234"
+                  value={phoneDigits.length > 10 ? phoneDigits : formatPhoneDisplay(phoneDigits)}
+                  onChange={(e) => {
+                    setPhoneDigits(extractPhoneDigits(e.target.value));
+                    setPhoneError(null);
+                  }}
+                  aria-invalid={Boolean(phoneError)}
+                />
+                {phoneError && <p className="text-sm text-destructive">{phoneError}</p>}
+              </div>
+            </SettingRow>
+            {accountEmail}
           </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="contact-phone">Phone number</Label>
-            <Input
-              id="contact-phone"
-              type="tel"
-              placeholder="e.g. (416) 000-1234"
-              value={phoneDigits.length > 10 ? phoneDigits : formatPhoneDisplay(phoneDigits)}
-              onChange={(e) => onPhoneChange(e.target.value)}
-              aria-invalid={Boolean(phoneError)}
-            />
-            {phoneError && <p className="text-sm text-destructive">{phoneError}</p>}
-          </div>
-          {accountEmail}
-          <div className="flex gap-2">
-            <Button size="sm" disabled={saving} onClick={save}>
-              {saving && <Loader2 className="animate-spin" />}
-              {saving ? "Saving…" : "Save profile"}
-            </Button>
-            <Button size="sm" variant="ghost" disabled={saving} onClick={() => setEdit(false)}>
-              Cancel
-            </Button>
-          </div>
-        </div>
+          <EditFooter saving={saving} label="Save profile" onSave={save} onCancel={() => setEdit(false)} />
+        </>
       )}
-    </SectionCard>
+    </Panel>
   );
 }
 
-function OrganizationSection({
+function FirmSection({
   current,
   error,
   saving,
@@ -215,10 +266,8 @@ function OrganizationSection({
   const [customType, setCustomType] = useState("");
   const [description, setDescription] = useState("");
   const [jurisdiction, setJurisdiction] = useState("");
-  // The category value awaiting confirmation - non-null while the dialog
-  // is open. Only ever set when actually changing an already-persisted
-  // practice_type (see selectCategory), never on first-time setup or
-  // reselecting what's already chosen.
+  // The category awaiting confirmation. Only set when changing an already
+  // saved practice type, never on first-time setup or a reselect.
   const [pendingCategoryValue, setPendingCategoryValue] = useState<string | null>(null);
 
   const startEdit = () => {
@@ -237,10 +286,8 @@ function OrganizationSection({
     setEdit(true);
   };
 
-  // Applies a category selection: switches categoryValue and, only for a
-  // preset with a real seed, autofills the description (see the module
-  // doc on PRACTICE_CATEGORIES - "Other" has no seed, so an existing
-  // description is deliberately left untouched rather than blanked).
+  // A preset with a seed also fills in the description; "Other" has no seed,
+  // so an existing description is left as it is rather than blanked.
   const applyCategory = (value: string) => {
     setCategoryValue(value);
     if (value === "other") return;
@@ -250,131 +297,142 @@ function OrganizationSection({
 
   const selectCategory = (value: string) => {
     if (value === categoryValue) return;
-    // Only warn when this edit session actually started from an
-    // already-persisted type - never on first-time setup, and never
-    // twice for the same no-op reselect (handled by the check above).
-    if (current?.practice_type) {
-      setPendingCategoryValue(value);
-    } else {
-      applyCategory(value);
-    }
+    if (current?.practice_type) setPendingCategoryValue(value);
+    else applyCategory(value);
   };
 
-  const pendingSeed = pendingCategoryValue ? PRACTICE_CATEGORIES.find((c) => c.value === pendingCategoryValue)?.seed : undefined;
+  const pendingSeed = pendingCategoryValue
+    ? PRACTICE_CATEGORIES.find((c) => c.value === pendingCategoryValue)?.seed
+    : undefined;
 
-  const effectiveType = categoryValue === "other" ? customType : (PRACTICE_CATEGORIES.find((c) => c.value === categoryValue)?.label ?? "");
+  const effectiveType =
+    categoryValue === "other" ? customType : (PRACTICE_CATEGORIES.find((c) => c.value === categoryValue)?.label ?? "");
+
   const save = async () => {
     const ok = await onSave({
-      name: name.trim(), practice_type: effectiveType.trim(),
-      practice_description: description.trim(), jurisdiction: jurisdiction.trim(),
+      name: name.trim(),
+      practice_type: effectiveType.trim(),
+      practice_description: description.trim(),
+      jurisdiction: jurisdiction.trim(),
     });
     if (ok) setEdit(false);
   };
 
+  const descriptionHelp = "How Compozor describes your firm in every email it writes.";
+  const jurisdictionHelp = "Which government and regulatory sources Compozor treats as authoritative.";
+
   return (
     <>
-    <SectionCard
-      title="Organization"
-      subtitle="Your firm's information — the same details you set during onboarding, editable anytime."
-      action={current && !edit ? <EditButton onClick={startEdit} /> : undefined}
-    >
-      {error && <p className="text-sm text-destructive">{error}</p>}
-      {!current ? (
-        <div className="flex flex-col gap-3">
-          <Skeleton className="h-9 w-full" />
-          <Skeleton className="h-24 w-full" />
-        </div>
-      ) : !edit ? (
-        <div className="flex flex-col gap-4">
-          <DisplayField label="Organization / firm name" value={current.name} />
-          <DisplayField label="Practice type" value={current.practice_type} />
-          <DisplayField label="Practice / company description" value={current.practice_description} />
-          <DisplayField label="Jurisdiction" value={current.jurisdiction} />
-        </div>
-      ) : (
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="org-name">Organization / firm name</Label>
-            <Input id="org-name" placeholder="e.g. Smith & Associates" value={name} onChange={(e) => setName(e.target.value)} />
+      <Panel
+        title="Firm"
+        meta="Set during onboarding"
+        action={current && !edit ? <EditButton onClick={startEdit} /> : undefined}
+      >
+        {error && <p className="text-sm text-destructive">{error}</p>}
+        {!current ? (
+          <RowsSkeleton rows={4} />
+        ) : !edit ? (
+          <div className="flex flex-col">
+            <SettingRow label="Firm name">
+              <Value>{current.name}</Value>
+            </SettingRow>
+            <SettingRow label="Practice type">
+              <Value>{current.practice_type}</Value>
+            </SettingRow>
+            <SettingRow label="Description" description={descriptionHelp}>
+              <p className="max-w-prose text-pretty">
+                <Value>{current.practice_description}</Value>
+              </p>
+            </SettingRow>
+            <SettingRow label="Jurisdiction" description={jurisdictionHelp}>
+              <Value>{current.jurisdiction}</Value>
+            </SettingRow>
           </div>
-          <div className="flex flex-col gap-2">
-            <Label>Practice type</Label>
-            <div className="flex flex-wrap gap-2">
-              {PRACTICE_CATEGORIES.map((category) => (
-                <button
-                  type="button"
-                  key={category.value}
-                  aria-pressed={categoryValue === category.value}
-                  onClick={() => selectCategory(category.value)}
-                  className={cn(
-                    "rounded-lg border-2 px-3 py-1.5 text-left text-sm font-medium transition-colors",
-                    categoryValue === category.value
-                      ? "border-accent bg-accent/[0.08] text-accent"
-                      : "border-border bg-muted/40 hover:bg-muted/70"
+        ) : (
+          <>
+            <div className="flex flex-col">
+              <SettingRow label="Firm name" htmlFor="org-name">
+                <Input id="org-name" placeholder="Smith & Associates" value={name} onChange={(e) => setName(e.target.value)} />
+              </SettingRow>
+              <SettingRow label="Practice type">
+                <div className="flex flex-col gap-2">
+                  <div role="group" aria-label="Practice type" className="flex flex-wrap gap-1.5">
+                    {PRACTICE_CATEGORIES.map((category) => {
+                      const active = categoryValue === category.value;
+                      return (
+                        <button
+                          type="button"
+                          key={category.value}
+                          aria-pressed={active}
+                          onClick={() => selectCategory(category.value)}
+                          className={cn(
+                            "inline-flex h-8 items-center rounded-lg border px-3 text-[0.8125rem] transition-colors",
+                            active
+                              ? "border-foreground bg-foreground text-background"
+                              : "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+                          )}
+                        >
+                          {category.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {categoryValue === "other" && (
+                    <Input
+                      placeholder="Bookkeeping"
+                      aria-label="Practice type"
+                      value={customType}
+                      onChange={(e) => setCustomType(e.target.value)}
+                    />
                   )}
-                >
-                  {category.label}
-                </button>
-              ))}
+                </div>
+              </SettingRow>
+              <SettingRow label="Description" htmlFor="org-description" description={descriptionHelp}>
+                <Textarea id="org-description" rows={5} value={description} onChange={(e) => setDescription(e.target.value)} />
+              </SettingRow>
+              <SettingRow label="Jurisdiction" htmlFor="org-jurisdiction" description={jurisdictionHelp}>
+                <Input
+                  id="org-jurisdiction"
+                  placeholder="Ontario, Canada"
+                  value={jurisdiction}
+                  onChange={(e) => setJurisdiction(e.target.value)}
+                />
+              </SettingRow>
             </div>
-            {categoryValue === "other" && (
-              <Input placeholder="e.g. Bookkeeping" value={customType} onChange={(e) => setCustomType(e.target.value)} />
-            )}
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="org-description">Practice / company description</Label>
-            <Textarea id="org-description" value={description} onChange={(e) => setDescription(e.target.value)} />
-            <p className="text-xs text-muted-foreground">Drives how the AI describes your firm to clients in every email it writes.</p>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="org-jurisdiction">Jurisdiction</Label>
-            <Input id="org-jurisdiction" placeholder="e.g. Ontario, Canada" value={jurisdiction} onChange={(e) => setJurisdiction(e.target.value)} />
-            <p className="text-xs text-muted-foreground">Which government/regulatory sources the AI should treat as authoritative.</p>
-          </div>
-          <div className="flex gap-2">
-            <Button size="sm" disabled={saving} onClick={save}>
-              {saving && <Loader2 className="animate-spin" />}
-              {saving ? "Saving…" : "Save organization"}
-            </Button>
-            <Button size="sm" variant="ghost" disabled={saving} onClick={() => setEdit(false)}>
+            <EditFooter saving={saving} label="Save firm details" onSave={save} onCancel={() => setEdit(false)} />
+          </>
+        )}
+      </Panel>
+
+      <Dialog open={pendingCategoryValue !== null} onOpenChange={(open) => !open && setPendingCategoryValue(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Change practice type?</DialogTitle>
+            <DialogDescription>
+              This changes how Compozor understands your business and may affect how it writes to clients.
+              {pendingSeed ? " Your description will also switch to the default for the new type, which you can edit." : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPendingCategoryValue(null)}>
               Cancel
             </Button>
-          </div>
-        </div>
-      )}
-    </SectionCard>
-
-    <Dialog open={pendingCategoryValue !== null} onOpenChange={(open) => !open && setPendingCategoryValue(null)}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Change organization type?</DialogTitle>
-          <DialogDescription>
-            Changing your organization type will change how Compozor understands your business and may affect your AI experience.
-            {pendingSeed
-              ? " Your practice description will also be updated to the default for the new organization type, which you can edit afterward."
-              : ""}
-          </DialogDescription>
-        </DialogHeader>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => setPendingCategoryValue(null)}>
-            Cancel
-          </Button>
-          <Button
-            onClick={() => {
-              if (pendingCategoryValue) applyCategory(pendingCategoryValue);
-              setPendingCategoryValue(null);
-            }}
-          >
-            Yes, change organization type
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+            <Button
+              onClick={() => {
+                if (pendingCategoryValue) applyCategory(pendingCategoryValue);
+                setPendingCategoryValue(null);
+              }}
+            >
+              Change practice type
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
 
-function EmailSignOffSection({
+function SignOffSection({
   current,
   error,
   saving,
@@ -391,54 +449,65 @@ function EmailSignOffSection({
   const resolved = current?.email_signature || `Best,\n${fallbackName}`;
   const preview = signature.trim() ? signature : `Best,\n${fallbackName}`;
 
-  const startEdit = () => {
-    setSignature(current?.email_signature ?? "");
-    setEdit(true);
-  };
-
   const save = async () => {
     if (await onSave(signature)) setEdit(false);
   };
 
+  const sheet = (text: string) => (
+    <div className="rounded-lg bg-muted/40 px-4 py-3 text-sm whitespace-pre-wrap text-foreground/85 ring-1 ring-foreground/5">
+      {text}
+    </div>
+  );
+
   return (
-    <SectionCard
+    <Panel
       title="Email sign-off"
-      subtitle="Exactly what appears at the bottom of every email Compozor sends — the AI never writes its own closing; this is what's deterministically appended instead."
-      action={current && !edit ? <EditButton onClick={startEdit} /> : undefined}
+      meta="On every email"
+      action={
+        current && !edit ? (
+          <EditButton
+            onClick={() => {
+              setSignature(current?.email_signature ?? "");
+              setEdit(true);
+            }}
+          />
+        ) : undefined
+      }
     >
       {error && <p className="text-sm text-destructive">{error}</p>}
       {!current ? (
-        <Skeleton className="h-32 w-full" />
+        <Skeleton className="h-24 w-full" />
       ) : !edit ? (
-        <div className="whitespace-pre-wrap rounded-lg border border-border/60 bg-muted/30 p-3 text-sm text-foreground/80">
-          {resolved}
+        <div className="flex flex-col">
+          <SettingRow
+            label="Closing"
+            description="Compozor never writes its own sign-off. This text is appended exactly as written."
+          >
+            <div className="max-w-md">{sheet(resolved)}</div>
+          </SettingRow>
         </div>
       ) : (
-        <div className="flex flex-col gap-4">
-          <Textarea
-            rows={5}
-            placeholder={`Best regards,\n\n${fallbackName}`}
-            value={signature}
-            onChange={(e) => setSignature(e.target.value)}
-          />
-          <div className="flex flex-col gap-1.5">
-            <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Preview</span>
-            <div className="whitespace-pre-wrap rounded-lg border border-border/60 bg-muted/30 p-3 text-sm text-foreground/80">
-              {preview}
+        <>
+          <div className="grid gap-5 md:grid-cols-2">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="sign-off">Sign-off</Label>
+              <Textarea
+                id="sign-off"
+                rows={5}
+                placeholder={`Best regards,\n\n${fallbackName}`}
+                value={signature}
+                onChange={(e) => setSignature(e.target.value)}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <span className="text-sm font-medium">Preview</span>
+              {sheet(preview)}
             </div>
           </div>
-          <div className="flex gap-2">
-            <Button size="sm" disabled={saving} onClick={save}>
-              {saving && <Loader2 className="animate-spin" />}
-              {saving ? "Saving…" : "Save sign-off"}
-            </Button>
-            <Button size="sm" variant="ghost" disabled={saving} onClick={() => setEdit(false)}>
-              Cancel
-            </Button>
-          </div>
-        </div>
+          <EditFooter saving={saving} label="Save sign-off" onSave={save} onCancel={() => setEdit(false)} />
+        </>
       )}
-    </SectionCard>
+    </Panel>
   );
 }
 
@@ -446,88 +515,20 @@ function AutomationSection({
   current,
   error,
   savingAutomation,
+  savingInterval,
   onChangeAutomation,
+  onSaveInterval,
 }: {
   current: Organization | null;
   error: string | null;
   savingAutomation: boolean;
-  onChangeAutomation: (level: AutomationLevel) => void;
-}) {
-  return (
-    <SectionCard
-      title="Automation level"
-      subtitle="Controls whether AI-drafted emails (checklist reminders, document-received acknowledgments, wrong-document follow-ups, answered/clarifying client questions) send themselves automatically."
-    >
-      {error && <p className="text-sm text-destructive">{error}</p>}
-      {!current ? (
-        <div className="flex flex-col gap-2.5">
-          {automationOptions.map((_, i) => (
-            <Skeleton key={i} className="h-[3.75rem] w-full rounded-lg" />
-          ))}
-        </div>
-      ) : (
-      <div className="flex flex-col gap-2.5">
-        {automationOptions.map((opt) => {
-          const selected = current?.automation_level === opt.value;
-          return (
-            <label
-              key={opt.value}
-              className={cn(
-                "flex cursor-pointer animate-fade-in items-center justify-between gap-4 rounded-lg border-2 px-4 py-3 transition-colors",
-                selected
-                  ? "border-foreground bg-muted/60"
-                  : "border-border/60 hover:bg-muted/30"
-              )}
-            >
-              <input
-                type="radio"
-                name="automation_level"
-                className="sr-only"
-                checked={selected}
-                disabled={savingAutomation || !current}
-                onChange={() => onChangeAutomation(opt.value)}
-              />
-              <div className="flex flex-col gap-0.5">
-                <span className="text-sm font-medium">{opt.label}</span>
-                <span className="text-xs text-muted-foreground">{opt.description}</span>
-              </div>
-              <div
-                className={cn(
-                  "flex size-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors",
-                  selected
-                    ? "border-foreground bg-foreground text-background"
-                    : "border-border/60"
-                )}
-              >
-                {selected && <Check className="size-3.5" />}
-              </div>
-            </label>
-          );
-        })}
-      </div>
-      )}
-    </SectionCard>
-  );
-}
-
-function ReminderSection({
-  current,
-  savingInterval,
-  error,
-  onSaveInterval,
-}: {
-  current: Organization | null;
   savingInterval: boolean;
-  error: string | null;
+  onChangeAutomation: (level: AutomationLevel) => void;
   onSaveInterval: (days: number | null) => void;
 }) {
-  const [enabled, setEnabled] = useState(
-    () => current?.reminder_interval_days !== null && current !== null
-  );
+  const [enabled, setEnabled] = useState(() => current !== null && current.reminder_interval_days !== null);
   const [days, setDays] = useState(() =>
-    current && current.reminder_interval_days !== null
-      ? String(current.reminder_interval_days)
-      : "7"
+    current && current.reminder_interval_days !== null ? String(current.reminder_interval_days) : "7"
   );
 
   const onToggle = (next: boolean) => {
@@ -544,56 +545,100 @@ function ReminderSection({
   };
 
   return (
-    <SectionCard
-      title="Proactive reminders"
-      subtitle="When on, clients with outstanding checklist items who haven't been reminded in this many days get an automatic re-reminder. The first reminder to any client is always manual — this only re-nudges clients who've already been contacted at least once."
-      action={
-        current ? (
-          <Switch
-            checked={enabled}
-            onCheckedChange={onToggle}
-            disabled={savingInterval}
-            className="animate-fade-in"
-          />
-        ) : (
-          <Skeleton className="h-5 w-9 rounded-full" />
-        )
-      }
+    <Panel
+      title="Automation"
+      meta={savingAutomation || savingInterval ? "Saving…" : "Saved as you change it"}
     >
       {error && <p className="text-sm text-destructive">{error}</p>}
       {!current ? (
-        <Skeleton className="h-8 w-48" />
+        <RowsSkeleton rows={3} />
       ) : (
-      <div
-        className={cn(
-          "flex items-center gap-3 transition-opacity animate-fade-in",
-          !enabled && "pointer-events-none opacity-40"
-        )}
-      >
-        <span className="text-sm text-foreground/80">Remind after</span>
-        <Input
-          type="number"
-          min={1}
-          value={days}
-          onChange={(e) => setDays(e.target.value)}
-          onBlur={commitDays}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              commitDays();
-            }
-          }}
-          disabled={!enabled || savingInterval}
-          aria-label="Remind after, in days"
-          className="w-20 text-center"
-        />
-        <span className="text-sm text-foreground/80">days</span>
-        {savingInterval && (
-          <span className="text-xs text-muted-foreground">Saving…</span>
-        )}
-      </div>
+        <div className="flex flex-col">
+          <SettingRow
+            label="Sending drafted emails"
+            description="Reminders, receipts, follow-ups on wrong documents, and answers to client questions."
+          >
+            <div
+              role="radiogroup"
+              aria-label="Automation level"
+              className="flex flex-col divide-y divide-border/60 overflow-hidden rounded-lg ring-1 ring-foreground/10"
+            >
+              {automationOptions.map((opt) => {
+                const selected = current.automation_level === opt.value;
+                return (
+                  <label
+                    key={opt.value}
+                    className={cn(
+                      "flex cursor-pointer items-start gap-3 px-4 py-3 transition-colors",
+                      selected ? "bg-muted/50" : "hover:bg-muted/30"
+                    )}
+                  >
+                    <input
+                      type="radio"
+                      name="automation_level"
+                      className="sr-only"
+                      checked={selected}
+                      disabled={savingAutomation}
+                      onChange={() => onChangeAutomation(opt.value)}
+                    />
+                    <span
+                      aria-hidden
+                      className={cn(
+                        "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border transition-colors",
+                        selected ? "border-foreground" : "border-foreground/25"
+                      )}
+                    >
+                      {selected && <span className="size-2 rounded-full bg-foreground" />}
+                    </span>
+                    <span className="flex flex-col gap-0.5">
+                      <span className="text-sm font-medium">{opt.label}</span>
+                      <span className="text-xs text-muted-foreground">{opt.description}</span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </SettingRow>
+
+          <SettingRow
+            label="Follow-up reminders"
+            description="Re-reminds clients who still owe documents. The first reminder to a client is always sent by you."
+          >
+            <div className="flex flex-col gap-3">
+              <label className="flex w-fit cursor-pointer items-center gap-3">
+                <Switch checked={enabled} onCheckedChange={onToggle} disabled={savingInterval} />
+                <span className="text-sm">{enabled ? "On" : "Off"}</span>
+              </label>
+              <div
+                className={cn(
+                  "flex items-center gap-3 transition-opacity",
+                  !enabled && "pointer-events-none opacity-40"
+                )}
+              >
+                <span className="text-sm text-foreground/80">Every</span>
+                <Input
+                  type="number"
+                  min={1}
+                  value={days}
+                  onChange={(e) => setDays(e.target.value)}
+                  onBlur={commitDays}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      commitDays();
+                    }
+                  }}
+                  disabled={!enabled || savingInterval}
+                  aria-label="Remind every, in days"
+                  className="w-20 text-center"
+                />
+                <span className="text-sm text-foreground/80">days since the last reminder</span>
+              </div>
+            </div>
+          </SettingRow>
+        </div>
       )}
-    </SectionCard>
+    </Panel>
   );
 }
 
@@ -607,12 +652,9 @@ interface MergedConnection {
   needsReauth: boolean;
 }
 
-// Gmail and Outlook connections are one combined "Connect Google"/"Connect
-// Outlook" click on the backend now (see gmail_oauth.py's GMAIL_SCOPES /
-// outlook_client.py's SCOPES - one consent grant covers both mail and
-// calendar), so the two API resources are merged into one row per account
-// here rather than shown as two separate lists the client has to reconcile
-// themselves.
+// One Google or Outlook consent covers both mail and calendar (see
+// gmail_oauth.py's GMAIL_SCOPES / outlook_client.py's SCOPES), so the two
+// API resources are merged into one row per account.
 function mergeConnections(
   inboxConnections: InboxConnection[],
   calendarConnections: CalendarConnection[]
@@ -663,13 +705,11 @@ function ConnectionsSection({
 }) {
   const loaded = inboxConnections !== null && calendarConnections !== null;
   const merged = loaded ? mergeConnections(inboxConnections!, calendarConnections!) : [];
-  const missingProviders = loaded ? (["gmail", "outlook"] as const).filter(
-    (provider) => !merged.some((connection) => connection.provider === provider)
-  ) : [];
-  // Intl.supportedValuesOf is a browser-native list of every real IANA
-  // name - no bundled timezone data needed, and it can never drift out of
-  // sync with what the backend's own zoneinfo.available_timezones() check
-  // accepts (see app/routers/organizations.py).
+  const missingProviders = loaded
+    ? (["gmail", "outlook"] as const).filter((provider) => !merged.some((c) => c.provider === provider))
+    : [];
+  // Every IANA name the browser knows; matches the backend's own
+  // zoneinfo.available_timezones() check without bundling timezone data.
   const timezones = useMemo(() => {
     try {
       return Intl.supportedValuesOf("timeZone");
@@ -679,96 +719,112 @@ function ConnectionsSection({
   }, []);
 
   return (
-    <SectionCard title="Connections">
-      <p className="text-sm text-muted-foreground">
-        Connect Gmail or Outlook once to read/reply to client email and let the AI propose real open meeting
-        times from that same account&apos;s calendar - no separate calendar connection needed.
-      </p>
+    <Panel title="Connections" meta="Mail and calendar">
       {error && <p className="text-sm text-destructive">{error}</p>}
-
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="org-timezone">Timezone</Label>
-        <NativeSelect
-          id="org-timezone"
-          className="max-w-sm"
-          value={organization?.timezone ?? ""}
-          disabled={savingTimezone || !organization}
-          onChange={(e) => onSaveTimezone(e.target.value)}
+      <div className="flex flex-col">
+        <SettingRow
+          label="Mailboxes"
+          description="Compozor reads and replies to client email here, and proposes meeting times from the same account's calendar."
         >
-          <option value="" disabled>
-            Select a timezone…
-          </option>
-          {timezones.map((tz) => (
-            <option key={tz} value={tz}>
-              {tz}
-            </option>
-          ))}
-        </NativeSelect>
-        <p className="text-xs text-muted-foreground">
-          Required before meeting times can be proposed to clients.
-        </p>
-      </div>
-
-      {!loaded ? (
-        <Skeleton className="h-16 w-full rounded-lg" />
-      ) : merged.length > 0 ? (
-        <div
-          className="flex flex-col divide-y divide-border/50 rounded-lg border border-border/60 animate-fade-in"
-        >
-          {merged.map((conn) => (
-            <div key={`${conn.provider}:${conn.email}`} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-              <div className="flex flex-wrap items-center gap-2.5">
-                {conn.provider === "outlook" ? <OutlookIcon className="size-5 shrink-0 text-foreground" /> : <GmailIcon className="size-5 shrink-0" />}
-                <span className="break-all text-sm font-medium">{conn.email}</span>
-                <span className="text-xs text-muted-foreground">{conn.provider === "outlook" ? "Outlook" : "Google"}</span>
-                {conn.needsReauth ? (
-                  <span className="inline-flex items-center gap-1.5 text-xs font-medium text-destructive">
-                    <span className="size-1.5 rounded-full bg-destructive" />
-                    needs reauth
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1.5 text-xs font-medium text-success">
-                    <span className="size-1.5 rounded-full bg-success" />
-                    connected
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center gap-4">
-                {conn.needsReauth && (
-                  <Button variant="ghost" size="sm" disabled={connecting} onClick={() => onConnect(conn.provider)}>
-                    {connecting ? "Redirecting…" : "Reconnect"}
-                  </Button>
-                )}
-                <button
-                  onClick={() => onDelete(conn)}
-                  disabled={deletingId === (conn.inboxId ?? conn.calendarId)}
-                  className="text-xs font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline disabled:opacity-50"
-                >
-                  {deletingId === (conn.inboxId ?? conn.calendarId) ? "Removing…" : "Disconnect"}
-                </button>
-              </div>
+          {!loaded ? (
+            <Skeleton className="h-14 w-full rounded-lg" />
+          ) : (
+            <div className="flex flex-col gap-3">
+              {merged.length > 0 ? (
+                <ul className="flex flex-col divide-y divide-border/60 rounded-lg ring-1 ring-foreground/10">
+                  {merged.map((conn) => {
+                    const id = conn.inboxId ?? conn.calendarId;
+                    return (
+                      <li key={`${conn.provider}:${conn.email}`} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
+                        {conn.provider === "outlook" ? (
+                          <OutlookIcon className="size-5 shrink-0 text-foreground" />
+                        ) : (
+                          <GmailIcon className="size-5 shrink-0" />
+                        )}
+                        <div className="flex min-w-0 flex-1 flex-col">
+                          <span className="truncate font-medium">{conn.email}</span>
+                          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                            {conn.provider === "outlook" ? "Outlook" : "Google"}
+                            <span aria-hidden className="text-muted-foreground/50">·</span>
+                            {conn.needsReauth ? (
+                              <span className="inline-flex items-center gap-1.5 text-destructive">
+                                <span className="size-1.5 rounded-full bg-destructive" />
+                                Needs reconnecting
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5">
+                                <span className="size-1.5 rounded-full bg-success" />
+                                Connected
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          {conn.needsReauth && (
+                            <Button variant="outline" size="sm" disabled={connecting} onClick={() => onConnect(conn.provider)}>
+                              {connecting ? "Redirecting…" : "Reconnect"}
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-muted-foreground"
+                            disabled={deletingId === id}
+                            onClick={() => onDelete(conn)}
+                          >
+                            {deletingId === id ? "Removing…" : "Disconnect"}
+                          </Button>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <p className="text-muted-foreground">Nothing connected yet.</p>
+              )}
+              {missingProviders.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {missingProviders.map((provider) => (
+                    <Button key={provider} variant="outline" onClick={() => onConnect(provider)} disabled={connecting}>
+                      {provider === "gmail" ? <GmailIcon className="size-4" /> : <OutlookIcon className="size-4" />}
+                      {connecting ? "Redirecting…" : `Connect ${provider === "gmail" ? "Google" : "Outlook"}`}
+                    </Button>
+                  ))}
+                </div>
+              )}
+              {missingProviders.includes("outlook") && (
+                <p className="text-xs text-muted-foreground">
+                  Outlook works with Microsoft 365 work accounts and personal Outlook or Hotmail accounts.
+                </p>
+              )}
             </div>
-          ))}
-        </div>
-      ) : (
-        <div
-          className="flex flex-col items-start gap-3 rounded-lg border border-dashed border-border/60 px-4 py-6 animate-fade-in"
+          )}
+        </SettingRow>
+
+        <SettingRow
+          label="Timezone"
+          htmlFor="org-timezone"
+          description="Needed before Compozor can propose meeting times to clients."
         >
-          <p className="text-sm text-muted-foreground">Nothing connected yet.</p>
-        </div>
-      )}
-      {missingProviders.length > 0 && (
-        <div className="flex flex-wrap gap-3">
-          {missingProviders.map((provider) => (
-            <Button key={provider} variant="outline" onClick={() => onConnect(provider)} disabled={connecting}>
-              {provider === "gmail" ? <GmailIcon className="size-4" /> : <OutlookIcon className="size-4" />}
-              {connecting ? "Redirecting…" : `Connect ${provider === "gmail" ? "Google" : "Outlook"}`}
-            </Button>
-          ))}
-        </div>
-      )}
-      {missingProviders.includes("outlook") && <p className="text-xs text-muted-foreground">Outlook supports Microsoft 365 work accounts and personal Outlook or Hotmail accounts.</p>}
-    </SectionCard>
+          <NativeSelect
+            id="org-timezone"
+            className="max-w-sm"
+            value={organization?.timezone ?? ""}
+            disabled={savingTimezone || !organization}
+            onChange={(e) => onSaveTimezone(e.target.value)}
+          >
+            <option value="" disabled>
+              Select a timezone…
+            </option>
+            {timezones.map((tz) => (
+              <option key={tz} value={tz}>
+                {tz}
+              </option>
+            ))}
+          </NativeSelect>
+        </SettingRow>
+      </div>
+    </Panel>
   );
 }
 
@@ -778,36 +834,11 @@ const legalLinks = [
   { href: "/cookies", label: "Cookie Policy" },
 ];
 
-function LegalLinksSection() {
-  return (
-    <SectionCard title="Legal">
-      <div className="flex flex-col gap-1">
-        {legalLinks.map((link) => (
-          <Link
-            key={link.href}
-            href={link.href}
-            className="w-fit text-sm text-foreground/80 underline underline-offset-2 hover:text-foreground"
-          >
-            {link.label}
-          </Link>
-        ))}
-      </div>
-    </SectionCard>
-  );
-}
-
 export default function SettingsPage() {
-  const {
-    data: org,
-    error: orgFetchError,
-    mutate: mutateOrg,
-  } = useSWR(organizationKey(), getMyOrganization);
-  const [savingAutomation, setSavingAutomation] = useState(false);
-  const [savingInterval, setSavingInterval] = useState(false);
-  const [savingProfile, setSavingProfile] = useState(false);
-  const [savingOrganization, setSavingOrganization] = useState(false);
-  const [savingSignature, setSavingSignature] = useState(false);
-  const [orgError, setOrgError] = useState<string | null>(null);
+  const { data: org, error: orgFetchError, mutate: mutateOrg } = useSWR(organizationKey(), getMyOrganization);
+  const [saving, setSaving] = useState<Partial<Record<"profile" | "firm" | "sign-off" | "automation" | "interval" | "timezone", boolean>>>({});
+  // Errors stay with the section whose save failed.
+  const [errors, setErrors] = useState<Partial<Record<SectionId, string | null>>>({});
 
   const {
     data: connections,
@@ -819,217 +850,161 @@ export default function SettingsPage() {
     error: calendarConnectionsFetchError,
     mutate: mutateCalendarConnections,
   } = useSWR(calendarConnectionsKey(), listCalendarConnections);
-  const [connectionsError, setConnectionsError] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
-  const [savingTimezone, setSavingTimezone] = useState(false);
 
-  const orgErrorMessage =
-    orgError ??
-    (orgFetchError
-      ? orgFetchError instanceof ApiError
-        ? orgFetchError.message
-        : String(orgFetchError)
-      : null);
-  const connectionsErrorMessage =
-    connectionsError ??
+  const loadError = orgFetchError ? errorMessage(orgFetchError) : null;
+  const errorFor = (section: SectionId) => errors[section] ?? loadError;
+  const connectionsError =
+    errors.connections ??
     (connectionsFetchError
-      ? connectionsFetchError instanceof ApiError
-        ? connectionsFetchError.message
-        : String(connectionsFetchError)
+      ? errorMessage(connectionsFetchError)
       : calendarConnectionsFetchError
-      ? calendarConnectionsFetchError instanceof ApiError
-        ? calendarConnectionsFetchError.message
-        : String(calendarConnectionsFetchError)
-      : null);
+        ? errorMessage(calendarConnectionsFetchError)
+        : null);
 
-  const onChangeAutomation = async (level: AutomationLevel) => {
-    setSavingAutomation(true);
-    setOrgError(null);
-    try {
-      const updated = await updateMyOrganization({ automation_level: level });
-      mutateOrg(updated, { revalidate: false });
-    } catch (e) {
-      setOrgError(e instanceof ApiError ? e.message : String(e));
-    } finally {
-      setSavingAutomation(false);
-    }
-  };
-
-  const onSaveInterval = async (days: number | null) => {
-    setSavingInterval(true);
-    setOrgError(null);
-    try {
-      const updated = await updateMyOrganization({ reminder_interval_days: days });
-      mutateOrg(updated, { revalidate: false });
-    } catch (e) {
-      setOrgError(e instanceof ApiError ? e.message : String(e));
-    } finally {
-      setSavingInterval(false);
-    }
-  };
-
-  const onSaveProfile = async (fields: { contact_name: string; phone: string }) => {
-    setSavingProfile(true);
-    setOrgError(null);
+  // Saves organization fields for one section, keeping its busy flag and
+  // error separate from the others.
+  const saveOrg = async (
+    busyKey: keyof typeof saving,
+    section: SectionId,
+    fields: Parameters<typeof updateMyOrganization>[0]
+  ) => {
+    setSaving((prev) => ({ ...prev, [busyKey]: true }));
+    setErrors((prev) => ({ ...prev, [section]: null }));
     try {
       const updated = await updateMyOrganization(fields);
       mutateOrg(updated, { revalidate: false });
       return true;
     } catch (e) {
-      setOrgError(e instanceof ApiError ? e.message : String(e));
+      setErrors((prev) => ({ ...prev, [section]: errorMessage(e) }));
       return false;
     } finally {
-      setSavingProfile(false);
+      setSaving((prev) => ({ ...prev, [busyKey]: false }));
     }
   };
 
-  const onSaveOrganization = async (fields: {
-    name: string; practice_type: string; practice_description: string; jurisdiction: string;
-  }) => {
-    setSavingOrganization(true);
-    setOrgError(null);
-    try {
-      const updated = await updateMyOrganization(fields);
-      mutateOrg(updated, { revalidate: false });
-      return true;
-    } catch (e) {
-      setOrgError(e instanceof ApiError ? e.message : String(e));
-      return false;
-    } finally {
-      setSavingOrganization(false);
-    }
-  };
-
-  const onSaveSignature = async (signature: string) => {
-    setSavingSignature(true);
-    setOrgError(null);
-    try {
-      const updated = await updateMyOrganization({ email_signature: signature });
-      mutateOrg(updated, { revalidate: false });
-      return true;
-    } catch (e) {
-      setOrgError(e instanceof ApiError ? e.message : String(e));
-      return false;
-    } finally {
-      setSavingSignature(false);
-    }
-  };
-
-  // One click now grants both mail and calendar scopes together (see
-  // gmail_oauth.py's GMAIL_SCOPES / outlook_client.py's SCOPES) - no
-  // separate "Connect Calendar" URL to fetch.
-  const onConnect = async (provider: "gmail" | "outlook") => {
+  // One click grants both mail and calendar scopes together.
+  const onConnect = async (provider: MailProvider) => {
     setConnecting(true);
-    setConnectionsError(null);
+    setErrors((prev) => ({ ...prev, connections: null }));
     try {
       const { authorization_url } = await (provider === "outlook" ? getOutlookConnectUrl() : getGmailConnectUrl());
       window.location.href = authorization_url;
     } catch (e) {
-      setConnectionsError(e instanceof ApiError ? e.message : String(e));
+      setErrors((prev) => ({ ...prev, connections: errorMessage(e) }));
       setConnecting(false);
     }
   };
 
-  // Deleting either half of a connection cascades to remove both on the
-  // backend (see calendar_client.disconnect) - refresh both caches either way.
+  // Deleting either half of a connection removes both on the backend (see
+  // calendar_client.disconnect), so both caches refresh either way.
   const onDeleteConnection = async (connection: MergedConnection) => {
     const id = connection.inboxId ?? connection.calendarId;
     if (id === null) return;
     setDeletingId(id);
     try {
-      if (connection.inboxId !== null) {
-        await deleteInboxConnection(connection.inboxId);
-      } else if (connection.calendarId !== null) {
-        await deleteCalendarConnection(connection.calendarId);
-      }
+      if (connection.inboxId !== null) await deleteInboxConnection(connection.inboxId);
+      else if (connection.calendarId !== null) await deleteCalendarConnection(connection.calendarId);
       mutateConnections();
       mutateCalendarConnections();
     } catch (e) {
-      setConnectionsError(e instanceof ApiError ? e.message : String(e));
+      setErrors((prev) => ({ ...prev, connections: errorMessage(e) }));
     } finally {
       setDeletingId(null);
     }
   };
 
-  const onSaveTimezone = async (timezone: string) => {
-    setSavingTimezone(true);
-    setOrgError(null);
-    try {
-      const updated = await updateMyOrganization({ timezone });
-      mutateOrg(updated, { revalidate: false });
-    } catch (e) {
-      setOrgError(e instanceof ApiError ? e.message : String(e));
-    } finally {
-      setSavingTimezone(false);
-    }
-  };
+  const current = org ?? null;
 
   return (
-    <div className="flex w-full flex-col gap-12">
-      <div className="flex flex-col gap-2">
-        <h1 className="text-4xl font-thin tracking-tight [font-family:var(--font-denton)] sm:text-5xl md:text-6xl">
+    <div className="mx-auto flex w-full max-w-[96rem] flex-col gap-8">
+      <header className="flex flex-col gap-2">
+        <h1 className="text-4xl leading-tight font-thin tracking-tight [font-family:var(--font-denton)] md:text-5xl">
           Settings
         </h1>
-        <p className="text-sm text-muted-foreground">
-          Your profile, organization details, email sign-off, automation, reminders, and connections.
-        </p>
-      </div>
+        <p className="text-sm text-muted-foreground">How Compozor represents your firm, and how much it does on its own.</p>
+      </header>
 
-      <div className="flex w-full flex-col gap-6">
-        <YourProfileSection
-          key={`profile-${org?.id ?? "loading"}`}
-          current={org ?? null}
-          error={orgErrorMessage}
-          saving={savingProfile}
-          onSave={onSaveProfile}
-        />
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-10 xl:grid-cols-[11rem_minmax(0,56rem)]">
+        {/* Section index beside the content on wide screens. */}
+        <nav aria-label="Settings sections" className="hidden xl:block">
+          <ul className="sticky top-10 flex flex-col gap-0.5 border-l border-border">
+            {SECTIONS.map((s) => (
+              <li key={s.id}>
+                <a
+                  href={`#${s.id}`}
+                  className="-ml-px block border-l border-transparent py-1.5 pl-4 text-sm text-muted-foreground transition-colors hover:border-foreground hover:text-foreground"
+                >
+                  {s.label}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </nav>
 
-        <OrganizationSection
-          key={`org-${org?.id ?? "loading"}`}
-          current={org ?? null}
-          error={orgErrorMessage}
-          saving={savingOrganization}
-          onSave={onSaveOrganization}
-        />
+        <div className="flex min-w-0 flex-col gap-6 [&>*]:scroll-mt-10">
+          <div id="profile">
+            <ProfileSection
+              key={`profile-${org?.id ?? "loading"}`}
+              current={current}
+              error={errorFor("profile")}
+              saving={!!saving.profile}
+              onSave={(fields) => saveOrg("profile", "profile", fields)}
+            />
+          </div>
+          <div id="firm">
+            <FirmSection
+              key={`firm-${org?.id ?? "loading"}`}
+              current={current}
+              error={errorFor("firm")}
+              saving={!!saving.firm}
+              onSave={(fields) => saveOrg("firm", "firm", fields)}
+            />
+          </div>
+          <div id="sign-off">
+            <SignOffSection
+              key={`sign-off-${org?.id ?? "loading"}`}
+              current={current}
+              error={errorFor("sign-off")}
+              saving={!!saving["sign-off"]}
+              onSave={(signature) => saveOrg("sign-off", "sign-off", { email_signature: signature })}
+            />
+          </div>
+          <div id="automation">
+            <AutomationSection
+              key={`automation-${org?.id ?? "loading"}`}
+              current={current}
+              error={errorFor("automation")}
+              savingAutomation={!!saving.automation}
+              savingInterval={!!saving.interval}
+              onChangeAutomation={(level) => void saveOrg("automation", "automation", { automation_level: level })}
+              onSaveInterval={(days) => void saveOrg("interval", "automation", { reminder_interval_days: days })}
+            />
+          </div>
+          <div id="connections">
+            <ConnectionsSection
+              organization={current}
+              inboxConnections={connections ?? null}
+              calendarConnections={calendarConnections ?? null}
+              error={connectionsError}
+              connecting={connecting}
+              deletingId={deletingId}
+              savingTimezone={!!saving.timezone}
+              onConnect={onConnect}
+              onDelete={onDeleteConnection}
+              onSaveTimezone={(timezone) => void saveOrg("timezone", "connections", { timezone })}
+            />
+          </div>
 
-        <EmailSignOffSection
-          key={`signature-${org?.id ?? "loading"}`}
-          current={org ?? null}
-          error={orgErrorMessage}
-          saving={savingSignature}
-          onSave={onSaveSignature}
-        />
-
-        <AutomationSection
-          current={org ?? null}
-          error={orgErrorMessage}
-          savingAutomation={savingAutomation}
-          onChangeAutomation={onChangeAutomation}
-        />
-
-        <ReminderSection
-          key={org?.id ?? "loading"}
-          current={org ?? null}
-          savingInterval={savingInterval}
-          error={orgErrorMessage}
-          onSaveInterval={onSaveInterval}
-        />
-
-        <ConnectionsSection
-          organization={org ?? null}
-          inboxConnections={connections ?? null}
-          calendarConnections={calendarConnections ?? null}
-          error={connectionsErrorMessage}
-          connecting={connecting}
-          deletingId={deletingId}
-          savingTimezone={savingTimezone}
-          onConnect={onConnect}
-          onDelete={onDeleteConnection}
-          onSaveTimezone={onSaveTimezone}
-        />
-
-        <LegalLinksSection />
+          <footer className="flex flex-wrap gap-x-5 gap-y-2 border-t border-border/60 pt-5 text-xs text-muted-foreground">
+            {legalLinks.map((link) => (
+              <Link key={link.href} href={link.href} className="underline-offset-4 hover:text-foreground hover:underline">
+                {link.label}
+              </Link>
+            ))}
+          </footer>
+        </div>
       </div>
     </div>
   );
