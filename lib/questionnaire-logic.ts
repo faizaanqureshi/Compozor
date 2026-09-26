@@ -499,3 +499,35 @@ export function completion(ctx: QuestionnaireContext): number {
   }
   return total === 0 ? 1 : answered / total;
 }
+
+// ---- Condition values authored in the builder -------------------------------
+
+const LIST_OPERATORS = new Set(["in", "not_in"]);
+const BOOLEAN_TYPES = new Set<QuestionType>(["yes_no", "confirmation"]);
+
+function coerceConditionItem(question: QuestionDefinition | undefined, raw: string): unknown {
+  const text = raw.trim();
+  if (question && BOOLEAN_TYPES.has(question.type)) {
+    // The backend compares JSON types exactly: the string "true" never equals true.
+    if (/^(true|yes)$/i.test(text)) return true;
+    if (/^(false|no)$/i.test(text)) return false;
+    return text;
+  }
+  if (question?.type === "number" && /^-?\d+(\.\d+)?$/.test(text)) return Number(text);
+  return text;
+}
+
+/** Converts builder input into the JSON value the backend evaluator compares against. */
+export function conditionValueFromInput(question: QuestionDefinition | undefined, operator: string, raw: string): unknown {
+  if (LIST_OPERATORS.has(operator)) {
+    return raw.split(",").map((part) => part.trim()).filter(Boolean).map((part) => coerceConditionItem(question, part));
+  }
+  return coerceConditionItem(question, raw);
+}
+
+/** Renders a stored condition value back into editable text. */
+export function conditionValueToInput(value: unknown): string {
+  if (Array.isArray(value)) return value.map((item) => conditionValueToInput(item)).join(", ");
+  if (value === undefined || value === null) return "";
+  return String(value);
+}
