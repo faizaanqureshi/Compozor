@@ -321,13 +321,22 @@ export interface EmailThread {
   messages: EmailLogEntry[];
 }
 
-export interface ClientMemoryNote {
+export interface ClientFact {
   id: number;
-  client_id: number;
-  note: string;
-  source_email_log_id: number | null;
-  superseded_at: string | null;
+  category: string;
+  subject: string;
+  attribute: string;
+  value: string;
+  statement: string;
+  source_type: string;
+  source_id: number | null;
+  source_quote: string | null;
+  as_of: string | null;
+  status: "active" | "replaced" | "conflict";
+  related_fact_id: number | null;
+  verified: boolean;
   created_at: string;
+  updated_at: string;
 }
 
 export interface ClientCommitment {
@@ -886,13 +895,13 @@ export function subscribeToEmailLogStream(
     event => onEvent(event as EmailLogStreamEvent), onError, onConnect);
 }
 
-// ---------- Client memory notes ----------
+// ---------- Client facts ----------
 
-export const listClientMemoryNotes = (clientId: number) =>
-  request<ClientMemoryNote[]>(`/clients/${clientId}/memory-notes`);
+export const listClientFacts = (clientId: number) =>
+  request<ClientFact[]>(`/clients/${clientId}/facts`);
 
-export const deleteClientMemoryNote = (clientId: number, noteId: number) =>
-  request<void>(`/clients/${clientId}/memory-notes/${noteId}`, {
+export const deleteClientFact = (clientId: number, noteId: number) =>
+  request<void>(`/clients/${clientId}/facts/${noteId}`, {
     method: "DELETE",
   });
 
