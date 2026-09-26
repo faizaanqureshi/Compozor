@@ -18,6 +18,7 @@ import {
 } from "@/lib/swr-keys";
 import { useRouter } from "next/navigation";
 import {
+  AlertTriangle,
   ArrowLeft,
   CheckCircle2,
   ChevronDown,
@@ -26,6 +27,7 @@ import {
   Loader2,
   Mail,
   MoreHorizontal,
+  Paperclip,
   Pencil,
   Play,
   Plus,
@@ -47,6 +49,7 @@ import {
   CommitmentStatus,
   DocumentOut,
   DocumentUploadResult,
+  EmailLogEntry,
   EmailThread,
   MeetingRequest,
   MeetingRequestStatus,
@@ -62,6 +65,7 @@ import {
   downloadClientDocumentsZip,
   getClient,
   getClientUploadLink,
+  getEmailLogHtml,
   listChecklistItems,
   listClientCommitments,
   listClientDocuments,
@@ -96,7 +100,6 @@ import { AssignWorkflowDialog } from "@/components/assign-workflow-dialog";
 import { PackageDocumentPicker } from "@/components/package-document-picker";
 import { PackageFormDialog } from "@/components/package-form-dialog";
 import { ChecklistItemFormDialog } from "@/components/checklist-item-form-dialog";
-import { Linkify } from "@/components/linkify";
 import {
   Accordion,
 } from "@/components/ui/accordion";
@@ -106,6 +109,9 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Panel } from "@/components/panel";
+import { EmailBody } from "@/components/email-body";
+import { EmailHtmlFrame } from "@/components/email-html-frame";
+import { StateLabel, messageState, threadMessagesState } from "@/components/email-state-label";
 import { ProgressRule, StatStrip, type StatStripItem } from "@/components/stat-strip";
 import {
   Dialog,
@@ -331,7 +337,7 @@ export default function ClientDetailPage({
             onChange={refresh}
           />
 
-          <CommunicationCard threads={threads} loadError={loadErrors.threads} />
+          <CommunicationCard threads={threads} clientName={client?.name} loadError={loadErrors.threads} />
         </div>
 
         {/* Grid on tablets (cards top-aligned), a full-width column beside the main content on xl. */}
@@ -1604,9 +1610,11 @@ function CommitmentResolveActions({
 
 function CommunicationCard({
   threads,
+  clientName,
   loadError,
 }: {
   threads: EmailThread[] | null;
+  clientName?: string;
   loadError?: string | null;
 }) {
   return (
@@ -1620,12 +1628,12 @@ function CommunicationCard({
         </Button>
       }
     >
-      <ThreadsList threads={threads} />
+      <ThreadsList threads={threads} clientName={clientName} />
     </Panel>
   );
 }
 
-function ThreadsList({ threads }: { threads: EmailThread[] | null }) {
+function ThreadsList({ threads, clientName }: { threads: EmailThread[] | null; clientName?: string }) {
   const [expandedThread, setExpandedThread] = useState<string | null>(null);
 
   if (threads === null) {
@@ -1642,74 +1650,42 @@ function ThreadsList({ threads }: { threads: EmailThread[] | null }) {
   }
 
   return (
-    <div
-      className="flex flex-col divide-y divide-border/50 rounded-lg border border-border/60 animate-fade-in"
-    >
-      {threads?.map((thread) => {
+    <div className="flex flex-col divide-y divide-border/60 rounded-lg border border-border/60 animate-fade-in">
+      {threads.map((thread) => {
         const latest = thread.messages[thread.messages.length - 1];
         const isOpen = expandedThread === thread.thread_key;
         return (
           <div key={thread.thread_key}>
             <button
               type="button"
-              onClick={() =>
-                setExpandedThread(isOpen ? null : thread.thread_key)
-              }
-              className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50"
+              aria-expanded={isOpen}
+              onClick={() => setExpandedThread(isOpen ? null : thread.thread_key)}
+              className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/40"
             >
-              <span className="flex min-w-0 flex-col gap-0.5">
-                <span className="truncate text-sm font-medium">
-                  {latest?.subject || "(no subject)"}
-                </span>
+              <span className="flex min-w-0 flex-col gap-1">
+                <span className="truncate text-sm font-medium">{latest?.subject || "(no subject)"}</span>
                 {latest && (
-                  <span className="truncate text-xs text-muted-foreground">
-                    {latest.direction === "inbound" ? "Client replied" : latest.status === "draft" ? "Draft awaiting send" : "Sent"}
-                    {" · "}
+                  <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+                    <StateLabel state={threadMessagesState(thread.messages)} />
+                    <span aria-hidden className="text-muted-foreground/50">·</span>
                     {formatShortDate(latest.created_at)}
+                    {thread.messages.length > 1 && (
+                      <>
+                        <span aria-hidden className="text-muted-foreground/50">·</span>
+                        {thread.messages.length} messages
+                      </>
+                    )}
                   </span>
                 )}
               </span>
-              <span className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
-                {thread.messages.length} message
-                {thread.messages.length === 1 ? "" : "s"}
-                <ChevronDown
-                  className={cn(
-                    "size-3.5 transition-transform",
-                    isOpen && "rotate-180"
-                  )}
-                />
-              </span>
+              <ChevronDown
+                className={cn("size-3.5 shrink-0 text-muted-foreground transition-transform", isOpen && "rotate-180")}
+              />
             </button>
             {isOpen && (
-              <div className="flex flex-col divide-y divide-border/40 border-t border-border/60 bg-muted/30">
+              <div className="flex flex-col divide-y divide-border/50 border-t border-border/60 bg-muted/20">
                 {thread.messages.map((m) => (
-                  <div key={m.id} className="px-3.5 py-2.5 text-sm">
-                    <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1.5">
-                        {m.direction} · {m.status}
-                        {m.is_clarifying_question && (
-                          <span
-                            title="Clarifying question — awaiting a resolving reply"
-                            className="inline-flex size-4 items-center justify-center rounded-full bg-accent/15 text-[10px] font-semibold text-accent"
-                          >
-                            ?
-                          </span>
-                        )}
-                      </span>
-                      <span>{new Date(m.created_at).toLocaleString()}</span>
-                    </div>
-                    <p className="whitespace-pre-wrap text-foreground/80">
-                      <Linkify text={m.content} />
-                    </p>
-                    {m.escalation_reason && (
-                      <p className="mt-1 text-xs text-warning-foreground">
-                        {m.escalation_reason}
-                      </p>
-                    )}
-                    {m.tool_trajectory && m.tool_trajectory.length > 0 && (
-                      <AgentActivityDisclosure trajectory={m.tool_trajectory} />
-                    )}
-                  </div>
+                  <ConversationMessage key={m.id} entry={m} clientName={clientName} />
                 ))}
               </div>
             )}
@@ -1717,6 +1693,73 @@ function ThreadsList({ threads }: { threads: EmailThread[] | null }) {
         );
       })}
     </div>
+  );
+}
+
+// One message in the client's conversation, read-only: the same sender line,
+// status, original formatting, and review note as the email log.
+function ConversationMessage({ entry, clientName }: { entry: EmailLogEntry; clientName?: string }) {
+  const inbound = entry.direction === "inbound";
+  const unresolved = entry.status === "needs_human_attention" && !entry.resolved_at;
+  return (
+    <article className="flex min-w-0 flex-col gap-3 px-4 py-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <span className="text-sm font-medium">{inbound ? clientName ?? entry.from_email ?? "Client" : "Your firm"}</span>
+        <span className="flex items-center gap-3">
+          <StateLabel state={messageState(entry)} />
+          <time
+            dateTime={entry.created_at}
+            title={new Date(entry.created_at).toLocaleString()}
+            className="text-xs text-muted-foreground tabular-nums"
+          >
+            {new Date(entry.created_at).toLocaleString(undefined, {
+              month: "short",
+              day: "numeric",
+              hour: "numeric",
+              minute: "2-digit",
+            })}
+          </time>
+        </span>
+      </div>
+
+      {entry.status === "needs_human_attention" && entry.escalation_reason && (
+        <div
+          className={cn(
+            "flex items-start gap-2.5 rounded-lg px-3 py-2.5 text-sm",
+            unresolved ? "bg-destructive/[0.06]" : "bg-muted/60 text-muted-foreground"
+          )}
+        >
+          <AlertTriangle className={cn("mt-0.5 size-3.5 shrink-0", unresolved && "text-destructive")} />
+          <span className="text-pretty whitespace-pre-wrap">{entry.escalation_reason}</span>
+        </div>
+      )}
+
+      {inbound && entry.has_html ? (
+        <EmailHtmlFrame
+          cacheKey={["email-html", entry.id]}
+          load={() => getEmailLogHtml(entry.id)}
+          fallback={<EmailBody content={entry.content} className="max-w-prose" />}
+        />
+      ) : (
+        <EmailBody content={entry.content} className="max-w-prose" />
+      )}
+
+      {(entry.documents.length > 0 || entry.is_clarifying_question) && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+          {entry.documents.length > 0 && (
+            <span className="inline-flex items-center gap-1.5">
+              <Paperclip className="size-3" />
+              {entry.documents.length} attachment{entry.documents.length === 1 ? "" : "s"}
+            </span>
+          )}
+          {entry.is_clarifying_question && <span>Clarifying question, awaiting the client&apos;s answer</span>}
+        </div>
+      )}
+
+      {entry.tool_trajectory && entry.tool_trajectory.length > 0 && (
+        <AgentActivityDisclosure trajectory={entry.tool_trajectory} />
+      )}
+    </article>
   );
 }
 

@@ -168,3 +168,10 @@ export function docToPlainText(doc: JSONContent): string {
 
   return parts.join("\n\n").trim();
 }
+
+// One-line preview of a message body for inbox lists: markdown links reduced
+// to their text, whitespace collapsed, and cut at `length` characters.
+export function snippet(content: string | null, length = 140): string {
+  const flat = (content ?? "").replace(/\[([^\]]+)\]\([^)]+\)/g, "$1").replace(/\s+/g, " ").trim();
+  return flat.length > length ? `${flat.slice(0, length).trimEnd()}…` : flat;
+}
