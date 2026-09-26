@@ -1,15 +1,8 @@
 "use client";
 
 import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  CheckCircle2,
-  Circle,
-  Loader2,
-  RotateCcw,
-  Trash2,
-  UploadCloud,
-  XCircle,
-} from "lucide-react";
+import { Check, FileText, Loader2, Lock, RotateCcw, Upload, X } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,7 +13,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ProgressRule } from "@/components/stat-strip";
 import { cn } from "@/lib/utils";
 import {
   MAX_UPLOAD_BATCH_BYTES,
@@ -311,159 +305,187 @@ export default function PublicUploadPage({
     await finishAndProcess();
   }, [canCompleteUpload, finishAndProcess]);
 
+  const firm = linkInfo && !("error" in linkInfo) ? linkInfo.organization_name : null;
+  const firstName = linkInfo && !("error" in linkInfo) ? linkInfo.client_name.split(" ")[0] : null;
+
   if (linkInfo !== null && "error" in linkInfo) {
     return (
-      <PublicShell>
-        <div className="flex flex-col gap-1">
-          <h1 className="text-2xl font-medium tracking-tight sm:text-3xl">
-            Upload link unavailable
+      <PublicShell firm={null}>
+        <div className="mx-auto flex max-w-lg flex-col gap-4 py-10 text-center sm:py-20">
+          <h1 className="text-4xl leading-tight font-thin tracking-tight text-balance [font-family:var(--font-denton)] sm:text-5xl">
+            This link isn&apos;t available
           </h1>
-          <p className="text-sm text-destructive">{linkInfo.error}</p>
+          <p className="text-sm text-pretty text-muted-foreground">{linkInfo.error}</p>
         </div>
       </PublicShell>
     );
   }
 
+  const hasChecklist = checklist !== null && checklist.total > 0;
+
   return (
-    <PublicShell>
-      <div className="flex flex-col gap-1">
-        <h1 className="text-3xl font-thin tracking-tight [font-family:var(--font-denton)] sm:text-4xl">
-          Secure document upload
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          {linkInfo
-            ? `For ${linkInfo.client_name} · ${linkInfo.organization_name}`
-            : "Loading…"}
+    <PublicShell firm={firm}>
+      <div className="flex flex-col gap-4">
+        <p className="flex items-center gap-3 text-[0.6875rem] tracking-widest text-muted-foreground uppercase">
+          <span aria-hidden className="h-px w-7 bg-accent" />
+          Document request
         </p>
+        {linkInfo ? (
+          <>
+            <h1 className="text-[2.5rem] leading-[1.05] font-thin tracking-tight text-balance [font-family:var(--font-denton)] sm:text-5xl lg:text-6xl">
+              {firstName ? `${firstName}, share your documents with ${firm}.` : `Share your documents with ${firm}.`}
+            </h1>
+            <p className="max-w-xl text-[0.9375rem] leading-relaxed text-pretty text-foreground/80">
+              {`Upload everything below in one go. Files go straight to ${firm} over an encrypted connection, and you'll see each one checked off as it's received.`}
+            </p>
+          </>
+        ) : (
+          <div className="flex flex-col gap-3">
+            <Skeleton className="h-14 w-full max-w-xl" />
+            <Skeleton className="h-4 w-80" />
+          </div>
+        )}
       </div>
 
-      <ChecklistPanel checklist={checklist} />
+      <div
+        className={cn(
+          "grid grid-cols-[minmax(0,1fr)] items-start gap-6",
+          hasChecklist && "lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] lg:gap-8"
+        )}
+      >
+        {hasChecklist && <ChecklistPanel checklist={checklist} />}
 
-      {!finalized && (
-        <div
-          role="button"
-          tabIndex={0}
-          onDragOver={(e) => {
-            e.preventDefault();
-            setDragOver(true);
-          }}
-          onDragLeave={() => setDragOver(false)}
-          onDrop={(e) => {
-            e.preventDefault();
-            setDragOver(false);
-            addFiles(Array.from(e.dataTransfer.files ?? []));
-          }}
-          onClick={() => fileInputRef.current?.click()}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") fileInputRef.current?.click();
-          }}
+        <section
+          aria-label="Upload files"
           className={cn(
-            "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-6 py-14 text-center transition-colors",
-            dragOver
-              ? "border-accent bg-accent/5"
-              : "border-border/70 hover:border-border hover:bg-muted/30"
+            "flex min-w-0 flex-col gap-5 rounded-xl bg-card p-5 ring-1 ring-foreground/10 sm:p-6",
+            !hasChecklist && "mx-auto w-full max-w-2xl"
           )}
         >
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            accept={ACCEPT}
-            className="hidden"
-            onChange={(e) => {
-              addFiles(Array.from(e.target.files ?? []));
-              e.target.value = "";
-            }}
-          />
-          <UploadCloud className="size-6 text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">
-            <span className="font-medium text-foreground">Click to upload</span>{" "}
-            or drag and drop your documents — as many as you need, all at once.
-          </p>
-          <p className="text-xs text-muted-foreground/70">
-            Up to {formatBytes(MAX_UPLOAD_FILE_BYTES)} per file · {formatBytes(MAX_UPLOAD_BATCH_BYTES)} per upload
-          </p>
-        </div>
-      )}
-
-      {queue.length > 0 && (
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">
-              {uploadedCount} / {queue.length} uploaded
-              {failedCount > 0 && (
-                <span className="text-destructive"> · {failedCount} failed</span>
-              )}
-            </span>
-          </div>
-          <Progress value={(uploadedCount / queue.length) * 100} />
-
-          <div className="flex max-h-80 flex-col gap-1 overflow-y-auto rounded-lg border border-border/60 bg-muted/20 p-2">
-            {queue.map((entry) => (
-              <QueueRow
-                key={entry.key}
-                entry={entry}
-                onRetry={() => retryOne(entry)}
-                onRemove={() => removeOne(entry)}
-              />
-            ))}
-          </div>
-
-          {!finalized && (
-            <div className="flex flex-col gap-1.5">
-              <Button
-                disabled={!canCompleteUpload}
-                onClick={() => setConfirmOpen(true)}
-                className="self-start"
-              >
-                {isUploading ? (
-                  <>
-                    <Loader2 className="animate-spin" /> Uploading…
-                  </>
-                ) : (
-                  "Finish upload"
+          {finalized ? (
+            <div className="flex animate-fade-in flex-col items-start gap-3">
+              <span className="flex size-9 items-center justify-center rounded-full bg-success/10 text-success">
+                <Check className="size-4" />
+              </span>
+              <h2 className="text-xl font-light tracking-tight">Sent to {firm ?? "your firm"}.</h2>
+              <p className="text-sm text-pretty text-muted-foreground">
+                Your files are being checked against the request{hasChecklist ? " and will be ticked off as they're matched" : ""}.
+                You can close this page, or add anything you missed.
+              </p>
+              <Button variant="outline" onClick={onUploadMore}>
+                Upload more files
+              </Button>
+            </div>
+          ) : (
+            <>
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <h2 className="text-[0.9375rem] font-medium tracking-tight">Your files</h2>
+                <span className="text-xs text-muted-foreground">
+                  Up to {formatBytes(MAX_UPLOAD_FILE_BYTES)} each · {formatBytes(MAX_UPLOAD_BATCH_BYTES)} in total
+                </span>
+              </div>
+              <div
+                role="button"
+                tabIndex={0}
+                aria-label="Choose files to upload"
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDragOver(true);
+                }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDragOver(false);
+                  addFiles(Array.from(e.dataTransfer.files ?? []));
+                }}
+                onClick={() => fileInputRef.current?.click()}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    fileInputRef.current?.click();
+                  }
+                }}
+                className={cn(
+                  "flex cursor-pointer flex-col items-center justify-center gap-3 rounded-lg border border-dashed px-6 text-center transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+                  queue.length > 0 ? "py-8" : "py-14",
+                  dragOver ? "border-foreground/50 bg-muted/60" : "border-foreground/20 hover:border-foreground/35 hover:bg-muted/30"
                 )}
-              </Button>
-              {!isUploading && hasUnresolvedFailures && (
-                <p className="text-xs text-destructive">
-                  Retry or remove the failed file(s) above before finishing.
-                </p>
-              )}
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept={ACCEPT}
+                  className="hidden"
+                  onChange={(e) => {
+                    addFiles(Array.from(e.target.files ?? []));
+                    e.target.value = "";
+                  }}
+                />
+                <span className="flex size-10 items-center justify-center rounded-full bg-muted text-foreground/70">
+                  <Upload className="size-4" />
+                </span>
+                <div className="flex flex-col gap-1">
+                  <p className="text-sm">
+                    <span className="font-medium">Choose files</span>
+                    <span className="text-muted-foreground"> or drag them here</span>
+                  </p>
+                  <p className="text-xs text-muted-foreground">PDFs, photos, spreadsheets and documents. Add as many as you need.</p>
+                </div>
+              </div>
+            </>
+          )}
+
+          {queue.length > 0 && (
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                <span className="tabular-nums">
+                  {uploadedCount} of {queue.length} uploaded
+                  {failedCount > 0 && <span className="text-destructive"> · {failedCount} failed</span>}
+                </span>
+              </div>
+              <ProgressRule value={uploadedCount} total={queue.length} className="w-full" />
+              <ul className="flex max-h-96 flex-col divide-y divide-border/60 overflow-y-auto rounded-lg ring-1 ring-foreground/10">
+                {queue.map((entry) => (
+                  <QueueRow key={entry.key} entry={entry} onRetry={() => retryOne(entry)} onRemove={() => removeOne(entry)} />
+                ))}
+              </ul>
             </div>
           )}
 
-          {finalized && (
-            <div className="flex flex-col gap-2 rounded-lg border border-border/60 bg-muted/30 p-3">
-              <p className="text-sm font-medium text-foreground">
-                Files uploaded successfully
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Your documents are being processed. You can close this page,
-                or upload more documents if you forgot something.
-              </p>
-              <Button variant="outline" size="sm" onClick={onUploadMore} className="self-start">
-                Upload more documents
+          {!finalized && queue.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-4">
+              <span className={cn("text-xs", hasUnresolvedFailures && !isUploading ? "text-destructive" : "text-muted-foreground")}>
+                {isUploading
+                  ? "Keep this page open until uploading finishes."
+                  : hasUnresolvedFailures
+                    ? "Retry or remove the files that failed before sending."
+                    : "Everything's uploaded. Send when you're ready."}
+              </span>
+              <Button disabled={!canCompleteUpload} onClick={() => setConfirmOpen(true)}>
+                {isUploading && <Loader2 className="animate-spin" />}
+                {isUploading ? "Uploading…" : `Send to ${firm ?? "your firm"}`}
               </Button>
             </div>
           )}
-        </div>
-      )}
+        </section>
+      </div>
 
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Is everything added?</DialogTitle>
+            <DialogTitle>Is everything here?</DialogTitle>
             <DialogDescription>
-              Make sure you&apos;ve uploaded all the documents you want to
-              send. You can review the requested document checklist above
-              before finishing.
+              {hasChecklist
+                ? "Check the requested list before sending. You can still upload more afterwards."
+                : "You can still upload more after sending."}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmOpen(false)}>
-              Go Back
+              Go back
             </Button>
-            <Button onClick={onConfirmDone}>Yes, I&apos;m Done</Button>
+            <Button onClick={onConfirmDone}>Send files</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -471,147 +493,163 @@ export default function PublicUploadPage({
   );
 }
 
-function QueueRow({
-  entry,
-  onRetry,
-  onRemove,
-}: {
-  entry: QueueEntry;
-  onRetry: () => void;
-  onRemove: () => void;
-}) {
-  const label = entry.serverStatus ?? entry.clientPhase;
-  const isTerminalFail = entry.clientPhase === "failed" || entry.serverStatus === "failed";
-  const isDone = entry.serverStatus === "completed";
+// Words a client understands for each stage, from picking a file to it being
+// checked on the firm's side.
+function entryStatus(entry: QueueEntry): { label: string; tone: "muted" | "done" | "failed" } {
+  if (entry.clientPhase === "failed" || entry.serverStatus === "failed") return { label: "Failed", tone: "failed" };
+  switch (entry.serverStatus) {
+    case "completed":
+      return { label: "Received", tone: "done" };
+    case "processing":
+      return { label: "Checking", tone: "muted" };
+    case "queued":
+      return { label: "Queued", tone: "muted" };
+  }
+  switch (entry.clientPhase) {
+    case "pending":
+      return { label: "Waiting", tone: "muted" };
+    case "uploading":
+      return { label: `${Math.round(entry.progress * 100)}%`, tone: "muted" };
+    default:
+      return { label: "Uploaded", tone: "done" };
+  }
+}
+
+function formatFileSize(bytes: number) {
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+function QueueRow({ entry, onRetry, onRemove }: { entry: QueueEntry; onRetry: () => void; onRemove: () => void }) {
+  const status = entryStatus(entry);
+  const failedLocally = entry.clientPhase === "failed";
+  const error = entry.clientError ?? entry.serverError;
   return (
-    <div className="flex flex-col gap-0.5 rounded-md px-2 py-1.5 text-sm">
-      <div className="flex items-center gap-2">
-        <span className="min-w-0 flex-1 truncate">{entry.file.name}</span>
-        {entry.clientPhase === "uploading" && (
-          <span className="w-24 shrink-0">
-            <Progress value={entry.progress * 100} size="sm" />
-          </span>
-        )}
-        <StatusBadge label={label} isTerminalFail={isTerminalFail} isDone={isDone} />
-        {entry.clientPhase === "failed" && (
-          <>
-            <Button variant="ghost" size="icon-sm" onClick={onRetry} aria-label="Retry">
+    <li className="flex flex-col gap-1.5 px-3.5 py-3">
+      <div className="flex items-center gap-3">
+        <FileText className="size-4 shrink-0 text-muted-foreground" />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <span className="truncate text-sm">{entry.file.name}</span>
+          <span className="text-xs text-muted-foreground">{formatFileSize(entry.file.size)}</span>
+        </div>
+        <span
+          className={cn(
+            "inline-flex shrink-0 items-center gap-1.5 text-xs tabular-nums",
+            status.tone === "failed" ? "text-destructive" : status.tone === "done" ? "text-foreground" : "text-muted-foreground"
+          )}
+        >
+          {status.tone === "done" && <Check className="size-3.5 text-success" />}
+          {status.label}
+        </span>
+        {failedLocally && (
+          <div className="-mr-1.5 flex shrink-0 items-center">
+            <Button variant="ghost" size="icon-sm" onClick={onRetry} aria-label={`Retry ${entry.file.name}`}>
               <RotateCcw className="size-3.5" />
             </Button>
-            <Button variant="ghost" size="icon-sm" onClick={onRemove} aria-label="Remove">
-              <Trash2 className="size-3.5" />
+            <Button variant="ghost" size="icon-sm" onClick={onRemove} aria-label={`Remove ${entry.file.name}`}>
+              <X className="size-3.5" />
             </Button>
-          </>
+          </div>
         )}
       </div>
-      {entry.clientPhase === "failed" && entry.clientError && (
-        <p className="pl-0.5 text-xs text-destructive">{entry.clientError}</p>
+      {entry.clientPhase === "uploading" && (
+        <ProgressRule value={entry.progress} total={1} className="ml-7 w-auto" />
       )}
-    </div>
+      {status.tone === "failed" && error && <p className="pl-7 text-xs text-destructive">{error}</p>}
+    </li>
   );
 }
 
-function ChecklistPanel({ checklist }: { checklist: PublicChecklist | null }) {
-  // Received first, so the client sees progress before what's left. Hooks
-  // must run unconditionally, so this computes even when checklist is
-  // null/empty (harmless empty-array work) - the early returns below it.
+// What the firm asked for, most actionable first: anything to resend, then
+// what's still needed, then what has arrived.
+function ChecklistPanel({ checklist }: { checklist: PublicChecklist }) {
   const items = useMemo(
     () =>
-      [...(checklist?.items ?? [])].sort((a, b) => {
-        const rank = (s: string) => (s === "received" ? 0 : s === "wrong" ? 1 : 2);
+      [...checklist.items].sort((a, b) => {
+        const rank = (s: string) => (s === "wrong" ? 0 : s === "missing" ? 1 : 2);
         return rank(a.status) - rank(b.status);
       }),
     [checklist]
   );
+  const remaining = checklist.total - checklist.received;
 
-  if (checklist === null || checklist.total === 0) {
-    return null;
-  }
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-border/60 bg-muted/20 p-4">
-      <div className="flex items-center justify-between gap-2">
-        <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-          Documents requested from you
-        </h2>
-        <span className="shrink-0 text-xs text-muted-foreground">
-          {checklist.received} of {checklist.total} received
-        </span>
+    <section aria-label="Requested documents" className="flex flex-col gap-4 rounded-xl bg-card p-5 ring-1 ring-foreground/10 sm:p-6 lg:sticky lg:top-6">
+      <div className="flex flex-col gap-2">
+        <div className="flex items-baseline justify-between gap-3">
+          <h2 className="text-[0.9375rem] font-medium tracking-tight">Requested documents</h2>
+          <span className="text-xs text-muted-foreground tabular-nums">
+            {checklist.received} of {checklist.total}
+          </span>
+        </div>
+        <ProgressRule value={checklist.received} total={checklist.total} className="w-full" />
+        <p className="text-xs text-muted-foreground">
+          {remaining === 0 ? "Everything has been received. Thank you." : `${remaining} still needed.`}
+        </p>
       </div>
-      <Progress value={(checklist.received / checklist.total) * 100} size="sm" />
-      <ul className="flex flex-col gap-1.5">
-        {items.map((item, i) => (
-          <li key={i} className="flex items-start gap-2 text-sm">
-            {item.status === "received" ? (
-              <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-accent" />
-            ) : (
-              <Circle className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-            )}
-            <span
-              className={cn(
-                "flex flex-col",
-                item.status === "received" && "text-muted-foreground line-through decoration-muted-foreground/50"
-              )}
-            >
-              <span>
-                {item.doc_type_needed}
-                {item.status === "wrong" && (
-                  <span className="ml-1.5 text-xs text-warning-foreground no-underline">(replacement needed)</span>
+      <ul className="flex flex-col divide-y divide-border/60">
+        {items.map((item, i) => {
+          const received = item.status === "received";
+          const wrong = item.status === "wrong";
+          return (
+            <li key={i} className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
+              <span
+                aria-hidden
+                className={cn(
+                  "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full",
+                  received ? "bg-success/10 text-success" : wrong ? "ring-1 ring-warning" : "ring-1 ring-foreground/25"
                 )}
+              >
+                {received && <Check className="size-3" />}
               </span>
-              {item.description && (
-                <span className="text-xs font-normal text-muted-foreground no-underline">{item.description}</span>
-              )}
-            </span>
-          </li>
-        ))}
+              <div className="flex min-w-0 flex-col gap-0.5">
+                <span className={cn("text-sm", received && "text-muted-foreground")}>{item.doc_type_needed}</span>
+                {wrong ? (
+                  <span className="text-xs text-warning-foreground">Please send this again. The last file didn&apos;t match.</span>
+                ) : received ? (
+                  <span className="text-xs text-muted-foreground">Received</span>
+                ) : (
+                  item.description && <span className="text-xs text-pretty text-muted-foreground">{item.description}</span>
+                )}
+              </div>
+            </li>
+          );
+        })}
       </ul>
-    </div>
+    </section>
   );
 }
 
-function StatusBadge({
-  label,
-  isTerminalFail,
-  isDone,
-}: {
-  label: string;
-  isTerminalFail: boolean;
-  isDone: boolean;
-}) {
-  if (isTerminalFail) {
-    return (
-      <span className="inline-flex shrink-0 items-center gap-1 text-xs text-destructive">
-        <XCircle className="size-3.5" /> Failed
-      </span>
-    );
-  }
-  if (isDone) {
-    return (
-      <span className="inline-flex shrink-0 items-center gap-1 text-xs text-accent">
-        <CheckCircle2 className="size-3.5" /> Done
-      </span>
-    );
-  }
+// The firm's page, not Compozor's: the firm name leads, Compozor signs off
+// quietly in the footer.
+function PublicShell({ firm, children }: { firm: string | null; children: React.ReactNode }) {
   return (
-    <span className="shrink-0 text-xs text-muted-foreground capitalize">
-      {label.replace(/_/g, " ")}
-    </span>
-  );
-}
-
-function PublicShell({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex min-h-full w-full flex-col items-center gap-4 bg-background px-4 py-10 sm:py-16">
-      <div className="flex w-full max-w-xl flex-col gap-6 rounded-2xl bg-card p-6 ring-1 ring-foreground/10 sm:p-8">
-        {children}
-      </div>
-      <p className="text-xs text-muted-foreground">
-        By uploading, you agree to Compozor&apos;s{" "}
-        <Link href="/privacy" className="underline underline-offset-2 hover:text-foreground">
-          Privacy Policy
-        </Link>
-        .
-      </p>
+    <div className="flex min-h-dvh w-full flex-col bg-background">
+      <header className="border-b border-border/60">
+        <div className="mx-auto flex h-14 w-full max-w-5xl items-center justify-between gap-4 px-5 sm:px-8">
+          <span className="truncate text-sm font-medium">{firm ?? ""}</span>
+          <span className="inline-flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+            <Lock className="size-3.5" />
+            Secure upload
+          </span>
+        </div>
+      </header>
+      <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-10 px-5 py-10 sm:px-8 sm:py-16">{children}</main>
+      <footer className="border-t border-border/60">
+        <div className="mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-3 px-5 py-5 text-xs text-muted-foreground sm:px-8">
+          <span className="inline-flex items-center gap-2">
+            Powered by
+            <Image src="/compozor-wordmark.png" alt="Compozor" width={789} height={140} className="h-3.5 w-auto opacity-70" />
+          </span>
+          <span className={cn(!firm && "hidden")}>
+            By uploading, you agree to the{" "}
+            <Link href="/privacy" className="underline underline-offset-2 hover:text-foreground">
+              Privacy Policy
+            </Link>
+            .
+          </span>
+        </div>
+      </footer>
     </div>
   );
 }
