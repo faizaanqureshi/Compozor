@@ -240,7 +240,7 @@ Before writing new UI:
    `tabs`, `textarea`, `tooltip`. If one of these does what you need, use it
    — don't hand-roll a competing button/card/badge.
 2. **Check `components/` (feature layer) second** for existing
-   product-specific pieces (e.g. `cost-bar-chart.tsx`, `email-draft-editor.tsx`,
+   product-specific pieces (e.g. `usage-dashboard.tsx`, `email-draft-editor.tsx`,
    `agent-activity-disclosure.tsx`) before building a near-duplicate.
 3. **Compose before extending.** Prefer combining existing primitives
    (`Card` + `Badge` + `Button`) over adding new variants to a primitive.
