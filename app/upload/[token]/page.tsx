@@ -555,7 +555,7 @@ function ChecklistPanel({ checklist }: { checklist: PublicChecklist | null }) {
               <span>
                 {item.doc_type_needed}
                 {item.status === "wrong" && (
-                  <span className="ml-1.5 text-xs text-accent no-underline">(replacement needed)</span>
+                  <span className="ml-1.5 text-xs text-warning-foreground no-underline">(replacement needed)</span>
                 )}
               </span>
               {item.description && (

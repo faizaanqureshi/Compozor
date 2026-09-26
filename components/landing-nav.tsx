@@ -3,18 +3,18 @@
 import depth from "@/components/landing-depth.module.css";
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import styles from "@/components/landing-motion.module.css";
 import glass from "@/components/landing-glass.module.css";
 import { Menu, ArrowRight } from "lucide-react";
 import { Show } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  Sheet,
+  SheetContent,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 
 const links = [
   { href: "/#how-it-works", label: "How it works" },
@@ -24,6 +24,8 @@ const links = [
 
 export function LandingNav() {
   const headerRef = useRef<HTMLElement>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const closeMenu = () => setMenuOpen(false);
 
   useEffect(() => {
     const header = headerRef.current;
@@ -50,18 +52,18 @@ export function LandingNav() {
   return (
     <header
       ref={headerRef}
-      className={`${styles.header} fixed inset-x-0 top-4 z-50 flex justify-center px-4 sm:top-5 sm:px-6`}
+      className={`${styles.header} fixed inset-x-0 top-0 z-50 flex justify-center sm:top-5 sm:px-6`}
     >
       <nav
         aria-label="Main navigation"
-        className={`${styles.nav} ${glass.light} flex w-full items-center justify-between gap-2 rounded-full px-3 sm:gap-4 sm:px-6`}
+        className={`${styles.nav} ${glass.light} flex w-full items-center justify-between gap-2 px-5 sm:gap-4 sm:rounded-full sm:px-6`}
       >
         <Link href="/" aria-label="Compozor home" className="shrink-0">
           <Image
-            src="/compozor-logo-dark.png"
+            src="/compozor-wordmark.png"
             alt="Compozor"
-            width={795}
-            height={214}
+            width={789}
+            height={140}
             priority
             className={`${styles.logo} w-auto`}
           />
@@ -95,46 +97,84 @@ export function LandingNav() {
           <Button
             nativeButton={false}
             render={<Link href="/demo" />}
-            className={`${depth.primaryAction} h-11 bg-marketing-forest px-3 text-xs text-sidebar-foreground hover:bg-marketing-forest/90 sm:h-9 sm:px-4 sm:text-sm`}
+            className={`${depth.primaryAction} h-9 bg-marketing-forest px-4 text-sm text-sidebar-foreground hover:bg-marketing-forest/90 max-sm:hidden`}
           >
             Book a demo
           </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger
+          <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
+            <SheetTrigger
               render={
-                <Button variant="ghost" size="icon" className="size-11 lg:hidden" />
+                <Button variant="ghost" size="icon" className="size-11 max-sm:-mr-2.5 lg:hidden" />
               }
             >
               <Menu />
               <span className="sr-only">Open menu</span>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className={`${styles.menu} ${glass.light} w-60 [&_[role=menuitem]]:min-h-11 [&_[role=menuitem]]:px-3`}>
-              {links.map((link) => (
-                <DropdownMenuItem
-                  key={link.href}
-                  render={<a href={link.href} />}
+            </SheetTrigger>
+            <SheetContent
+              side="top"
+              className="marketing-page data-[side=top]:h-dvh gap-0 border-0 bg-background px-5 pt-3 pb-8 shadow-none sm:px-10 [&>[data-slot=sheet-close]]:top-3 [&>[data-slot=sheet-close]]:right-2.5 [&>[data-slot=sheet-close]]:size-11 sm:[&>[data-slot=sheet-close]]:right-8"
+            >
+              <SheetTitle className="flex h-11 items-center">
+                <Image
+                  src="/compozor-wordmark.png"
+                  alt="Compozor"
+                  width={789}
+                  height={140}
+                  className="h-5 w-auto"
+                />
+              </SheetTitle>
+              <nav aria-label="Menu" className="mt-10 flex flex-col">
+                {links.map((link) => (
+                  <a
+                    key={link.href}
+                    href={link.href}
+                    onClick={closeMenu}
+                    className="flex min-h-16 items-center justify-between border-b border-border text-2xl font-light tracking-tight"
+                  >
+                    {link.label}
+                    <ArrowRight className="size-5 text-muted-foreground" aria-hidden />
+                  </a>
+                ))}
+              </nav>
+              <div className="mt-auto flex flex-col gap-3">
+                <Button
+                  nativeButton={false}
+                  render={<Link href="/demo" onClick={closeMenu} />}
+                  size="lg"
+                  className="h-12 bg-marketing-forest text-base text-sidebar-foreground hover:bg-marketing-forest/90"
                 >
-                  {link.label}
-                </DropdownMenuItem>
-              ))}
-              <DropdownMenuItem render={<Link href="/demo" />}>
-                Book a demo
-              </DropdownMenuItem>
-              <DropdownMenuItem render={<Link href="/waitlist" />}>
-                Join the waitlist
-              </DropdownMenuItem>
-              <Show when="signed-out">
-                <DropdownMenuItem className="sm:hidden" render={<Link href="/sign-in" />}>
-                  Sign in
-                </DropdownMenuItem>
-              </Show>
-              <Show when="signed-in">
-                <DropdownMenuItem className="sm:hidden" render={<Link href="/clients" />}>
-                  Dashboard
-                </DropdownMenuItem>
-              </Show>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                  Book a demo
+                </Button>
+                <Button
+                  nativeButton={false}
+                  render={<Link href="/waitlist" onClick={closeMenu} />}
+                  variant="outline"
+                  size="lg"
+                  className="h-12 text-base"
+                >
+                  Join the waitlist
+                </Button>
+                <Show when="signed-out">
+                  <Link
+                    href="/sign-in"
+                    onClick={closeMenu}
+                    className="flex min-h-11 items-center justify-center text-sm text-muted-foreground"
+                  >
+                    Sign in
+                  </Link>
+                </Show>
+                <Show when="signed-in">
+                  <Link
+                    href="/clients"
+                    onClick={closeMenu}
+                    className="flex min-h-11 items-center justify-center gap-1.5 text-sm"
+                  >
+                    Dashboard <ArrowRight className="size-3.5" aria-hidden />
+                  </Link>
+                </Show>
+              </div>
+            </SheetContent>
+          </Sheet>
         </div>
       </nav>
     </header>

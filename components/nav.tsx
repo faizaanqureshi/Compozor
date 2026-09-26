@@ -29,6 +29,7 @@ import { getMyOrganization } from "@/lib/api";
 import { organizationKey } from "@/lib/swr-keys";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { isAdminEmail } from "@/lib/admin";
 import { useMobileNav } from "@/components/mobile-nav-context";
@@ -101,15 +102,15 @@ export function Nav() {
       )}
       <aside
         className={cn(
-          "dark fixed inset-y-0 left-0 z-50 flex h-screen w-72 shrink-0 flex-col gap-6 border-r border-sidebar-border bg-sidebar p-6 text-sidebar-foreground transition-transform duration-200 md:sticky md:top-0 md:w-[4.5rem] md:translate-x-0 md:p-3 md:transition-[width]",
+          "dark fixed inset-y-0 left-0 z-50 flex h-screen w-72 shrink-0 flex-col gap-10 border-r border-sidebar-border bg-sidebar px-4 py-6 text-sidebar-foreground transition-transform duration-200 md:sticky md:top-0 md:w-20 md:translate-x-0 md:px-3 md:transition-[width]",
           mobileOpen ? "translate-x-0" : "-translate-x-full",
-          collapsed ? "xl:w-[4.5rem] xl:p-3" : "xl:w-72 xl:p-6"
+          collapsed ? "xl:w-20 xl:px-3" : "xl:w-72 xl:px-4"
         )}
       >
       <div
         className={cn(
-          "flex items-center gap-2 justify-between px-1 md:justify-center md:px-0",
-          !collapsed && "xl:justify-between xl:px-1"
+          "flex min-h-11 items-center gap-2 justify-between px-3 md:justify-center md:px-0",
+          !collapsed && "xl:justify-between xl:px-3"
         )}
       >
         <Link
@@ -117,31 +118,31 @@ export function Nav() {
           className={cn("shrink-0 md:hidden", !collapsed && "xl:inline-block")}
         >
           <Image
-            src="/compozor-logo.png"
+            src="/compozor-wordmark-light.png"
             alt="Compozor"
-            width={795}
-            height={214}
+            width={789}
+            height={140}
             priority
-            className="h-7 w-auto"
+            className="h-6 w-auto"
           />
         </Link>
         <Link
           href="/"
-          className="relative hidden size-7 shrink-0 overflow-hidden rounded-md md:block xl:hidden"
+          className={cn("hidden shrink-0 md:block", !collapsed && "xl:hidden")}
         >
           <Image
-            src="/android-chrome-192x192.png"
+            src="/compozor-mark-light.png"
             alt="Compozor"
-            fill
-            sizes="28px"
+            width={135}
+            height={135}
             priority
-            className="object-contain"
+            className="size-8"
           />
         </Link>
         <Button
           variant="ghost"
-          size="icon-sm"
-          className="shrink-0 text-sidebar-foreground/50 hover:bg-sidebar-foreground/8 hover:text-sidebar-foreground md:hidden"
+          size="icon"
+          className="size-11 shrink-0 text-sidebar-foreground/70 hover:bg-sidebar-foreground/8 hover:text-sidebar-foreground md:hidden"
           onClick={() => setMobileOpen(false)}
         >
           <X />
@@ -149,10 +150,10 @@ export function Nav() {
         </Button>
         <Button
           variant="ghost"
-          size="icon-sm"
+          size="icon"
           className={cn(
-            "hidden shrink-0 text-sidebar-foreground/50 hover:bg-sidebar-foreground/8 hover:text-sidebar-foreground xl:inline-flex",
-            !collapsed && "ml-auto"
+            "hidden shrink-0 text-sidebar-foreground/70 hover:bg-sidebar-foreground/8 hover:text-sidebar-foreground xl:inline-flex",
+            collapsed ? "xl:absolute xl:top-6 xl:-right-4 xl:size-8 xl:rounded-full xl:border xl:border-sidebar-border xl:bg-sidebar" : "-mr-2 ml-auto"
           )}
           onClick={() => setCollapsed((c) => !c)}
         >
@@ -161,47 +162,61 @@ export function Nav() {
         </Button>
       </div>
 
-      <nav className="flex flex-1 flex-col gap-0.5">
+      <nav className="flex flex-1 flex-col gap-1.5">
         {visibleLinks.map((link) => {
           const Icon = link.icon;
           const active = pathname.startsWith(link.href);
           return (
-            <Link
-              key={link.href}
-              href={link.href}
-              title={link.label}
-              data-tour-nav={link.tourId}
-              className={cn(
-                "flex items-center gap-3 rounded-md px-2.5 py-1.5 text-sm transition-colors",
-                "md:justify-center md:px-0",
-                !collapsed && "xl:justify-start xl:px-2.5",
-                active
-                  ? "bg-sidebar-foreground/[0.06] font-medium text-sidebar-foreground"
-                  : "text-sidebar-foreground/55 hover:text-sidebar-foreground/70"
-              )}
-            >
-              <Icon
-                className={cn(
-                  "size-[15px] shrink-0 md:size-[18px]",
-                  !collapsed && "xl:size-[15px]",
-                  active ? "text-sidebar-foreground/80" : "text-sidebar-foreground/40"
-                )}
-              />
-              <span className={cn("truncate md:hidden", !collapsed && "xl:inline")}>
+            <Tooltip key={link.href}>
+              <TooltipTrigger
+                render={
+                  <Link
+                    href={link.href}
+                    aria-label={link.label}
+                    data-tour-nav={link.tourId}
+                    className={cn(
+                      "flex min-h-11 items-center gap-3.5 rounded-lg px-3 text-[0.9375rem] transition-colors",
+                      "md:size-14 md:min-h-0 md:justify-center md:self-center md:px-0",
+                      !collapsed && "xl:h-11 xl:w-auto xl:justify-start xl:self-stretch xl:px-3",
+                      active
+                        ? "bg-sidebar-foreground/10 text-sidebar-foreground"
+                        : "text-sidebar-foreground/75 hover:bg-sidebar-foreground/5 hover:text-sidebar-foreground"
+                    )}
+                  />
+                }
+              >
+                <Icon
+                  strokeWidth={1.5}
+                  className={cn(
+                    "size-5 shrink-0 md:size-6",
+                    !collapsed && "xl:size-5",
+                    active ? "text-sidebar-foreground" : "text-sidebar-foreground/70"
+                  )}
+                />
+                <span className={cn("truncate md:hidden", !collapsed && "xl:inline")}>
+                  {link.label}
+                </span>
+              </TooltipTrigger>
+              {/* Labels are hidden only on the collapsed rail; tooltips stand in there. */}
+              <TooltipContent
+                side="right"
+                sideOffset={10}
+                className={cn("max-md:hidden", !collapsed && "xl:hidden")}
+              >
                 {link.label}
-              </span>
-            </Link>
+              </TooltipContent>
+            </Tooltip>
           );
         })}
       </nav>
 
-      <div className="flex flex-col gap-2 border-t border-sidebar-foreground/10 pt-4">
+      <div className="flex flex-col gap-2 border-t border-sidebar-foreground/10 pt-5">
         <Show when="signed-out">
           <SignInButton fallbackRedirectUrl="/clients">
             <Button
               variant="ghost"
               size="sm"
-              className="w-full justify-start text-sidebar-foreground/60 hover:bg-sidebar-foreground/8 hover:text-sidebar-foreground"
+              className="w-full justify-start text-sidebar-foreground/75 hover:bg-sidebar-foreground/8 hover:text-sidebar-foreground"
             >
               Sign in
             </Button>
@@ -218,11 +233,11 @@ export function Nav() {
         <Show when="signed-in">
           <div
             className={cn(
-              "flex items-center gap-2 md:flex-col md:gap-3",
-              !collapsed && "xl:flex-row xl:gap-2"
+              "flex items-center gap-3 px-1 md:flex-col md:gap-3 md:px-0",
+              !collapsed && "xl:flex-row xl:gap-3 xl:px-1"
             )}
           >
-            <Avatar size="sm" className="shrink-0">
+            <Avatar className="shrink-0">
               <AvatarImage src={user?.imageUrl} alt={user?.fullName ?? "User"} />
               <AvatarFallback>
                 {(user?.firstName?.[0] ?? user?.primaryEmailAddress?.emailAddress?.[0] ?? "U").toUpperCase()}
@@ -235,27 +250,27 @@ export function Nav() {
               )}
             >
               <span
-                className="truncate text-sm font-medium text-sidebar-foreground/80"
+                className="truncate text-sm font-medium text-sidebar-foreground"
                 title={orgLabel ? `${displayName} · ${orgLabel}` : displayName}
               >
                 {displayName}
                 {orgLabel && (
                   <>
                     {" "}
-                    <span aria-hidden className="text-sidebar-foreground/40">·</span>{" "}
+                    <span aria-hidden className="text-sidebar-foreground/50">·</span>{" "}
                     {orgLabel}
                   </>
                 )}
               </span>
-              <span className="truncate text-xs text-sidebar-foreground/65">
+              <span className="mt-0.5 truncate text-xs text-sidebar-foreground/70">
                 {user?.primaryEmailAddress?.emailAddress}
               </span>
             </div>
             <SignOutButton>
               <Button
                 variant="ghost"
-                size="icon-sm"
-                className="shrink-0 text-sidebar-foreground/45 hover:bg-sidebar-foreground/8 hover:text-sidebar-foreground"
+                size="icon"
+                className="size-10 shrink-0 text-sidebar-foreground/70 hover:bg-sidebar-foreground/8 hover:text-sidebar-foreground"
               >
                 <LogOut />
                 <span className="sr-only">Sign out</span>

@@ -8,6 +8,7 @@
     --color-marketing-forest: var(--marketing-forest);
     --color-marketing-sage: var(--marketing-sage);
     --color-marketing-brass: var(--marketing-brass);
+    --color-aurora-glow: var(--aurora-glow);
     --font-heading: var(--font-sans);
     --font-sans: var(--font-sans);
     --color-sidebar-ring: var(--sidebar-ring);
@@ -28,6 +29,8 @@
     --color-border: var(--border);
     --color-destructive: var(--destructive);
     --color-success-foreground: var(--success-foreground);
+    --color-warning: var(--warning);
+    --color-warning-foreground: var(--warning-foreground);
     --color-success: var(--success);
     --color-accent-foreground: var(--accent-foreground);
     --color-accent: var(--accent);
@@ -57,29 +60,32 @@
     --marketing-forest: oklch(0.27 0.038 170);
     --marketing-sage: oklch(0.91 0.022 160);
     --marketing-brass: oklch(0.72 0.108 83);
-    /* Old-money palette anchored on the brand mark, #122023 (deep teal-charcoal),
-       paired with warm ivory/champagne neutrals and a brass-gold accent -
-       evergreen/navy + brass is the classic "old money" combination. */
-    --background: oklch(0.9593 0.0143 84.58); /* #F6F1E7 warm ivory */
+    --aurora-glow: var(--marketing-sage);
+    /* #122023 on white. Neutrals carry a faint cool sage tint; colour is
+       reserved for signals: teal accent (highlights/selection), yellow
+       warning, red destructive, green success. */
+    --background: oklch(1 0 0); /* #FFFFFF */
     --foreground: oklch(0.2322 0.0201 212.57); /* #122023 brand */
-    --card: oklch(0.9874 0.0107 95.16); /* #FDFBF3 warm white */
+    --card: oklch(1 0 0);
     --card-foreground: oklch(0.2322 0.0201 212.57);
-    --popover: oklch(0.9874 0.0107 95.16);
+    --popover: oklch(1 0 0);
     --popover-foreground: oklch(0.2322 0.0201 212.57);
     --primary: oklch(0.2322 0.0201 212.57); /* #122023 brand */
-    --primary-foreground: oklch(0.9593 0.0143 84.58);
-    --secondary: oklch(0.8947 0.0319 91.04); /* #E4DCC5 pale camel */
-    --secondary-foreground: oklch(0.3219 0.0233 77.80); /* #3A3226 dark brown */
-    --muted: oklch(0.9168 0.0239 88.24); /* #EAE3D2 soft sand */
-    --muted-foreground: oklch(0.5000 0.0219 93.85); /* #676355 warm grey - darkened from #6E6A5C for AA text contrast (4.5:1) on --muted */
-    --accent: oklch(0.6290 0.1095 82.85); /* #A9822F brass gold */
-    --accent-foreground: oklch(0.1969 0.0216 75.83); /* #1B140A near-black brown */
-    --destructive: oklch(0.4033 0.1126 26.26); /* #7A2A26 oxblood */
+    --primary-foreground: oklch(1 0 0);
+    --secondary: oklch(0.945 0.009 180); /* #E9EFEE pale sage-grey */
+    --secondary-foreground: oklch(0.2322 0.0201 212.57);
+    --muted: oklch(0.968 0.006 180); /* #F2F6F5 */
+    --muted-foreground: oklch(0.50 0.018 200); /* cool grey, AA on --muted */
+    --accent: oklch(0.48 0.06 195); /* #2D6A6C brand teal - highlights, selection */
+    --accent-foreground: oklch(1 0 0);
+    --destructive: oklch(0.53 0.18 27); /* #BC3A2F red - issues, failures, escalations */
     --success: oklch(0.4300 0.0850 152); /* muted evergreen - completed/success only */
-    --success-foreground: oklch(0.9593 0.0143 84.58);
-    --border: oklch(0.8830 0.0295 89.59); /* #E0D8C3 warm sand */
-    --input: oklch(0.8830 0.0295 89.59);
-    --ring: oklch(0.6290 0.1095 82.85); /* brass gold */
+    --success-foreground: oklch(1 0 0);
+    --warning: oklch(0.83 0.15 88); /* #EDBE2E yellow - warning fills and dots */
+    --warning-foreground: oklch(0.47 0.10 70); /* #7F5A0C deep amber - warning text */
+    --border: oklch(0.91 0.007 200); /* #E1E7E8 cool hairline */
+    --input: oklch(0.91 0.007 200);
+    --ring: oklch(0.2322 0.0201 212.57);
     --chart-1: oklch(0.2322 0.0201 212.57); /* #122023 brand */
     --chart-2: oklch(0.3854 0.0345 178.87); /* #2F4A44 forest teal */
     --chart-3: oklch(0.5237 0.0219 93.85); /* #6E6A5C warm grey */
@@ -87,13 +93,13 @@
     --chart-5: oklch(0.8386 0.0533 89.04); /* #D8C9A3 champagne */
     --radius: 0.625rem;
     --sidebar: oklch(0.2322 0.0201 212.57); /* #122023 brand */
-    --sidebar-foreground: oklch(0.9261 0.0226 87.15); /* #EDE6D6 warm ivory */
-    --sidebar-primary: oklch(0.7280 0.1380 89.73); /* #C9A227 brass gold */
-    --sidebar-primary-foreground: oklch(0.1969 0.0216 75.83);
+    --sidebar-foreground: oklch(0.985 0 0);
+    --sidebar-primary: oklch(1 0 0);
+    --sidebar-primary-foreground: oklch(0.2322 0.0201 212.57);
     --sidebar-accent: oklch(0.2765 0.0205 206.39); /* #1C2B2D */
-    --sidebar-accent-foreground: oklch(0.9261 0.0226 87.15);
+    --sidebar-accent-foreground: oklch(0.985 0 0);
     --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.7280 0.1380 89.73);
+    --sidebar-ring: oklch(1 0 0);
 }
 
 .dark {
@@ -114,6 +120,8 @@
     --destructive: oklch(0.6700 0.1288 27.24); /* #D97469 oxblood - further brightened from #A5453D for AA text contrast (4.5:1) on both dark bg and card */
     --success: oklch(0.6400 0.1050 152); /* muted evergreen, brightened for dark bg */
     --success-foreground: oklch(0.1969 0.0216 75.83);
+    --warning: oklch(0.80 0.14 88);
+    --warning-foreground: oklch(0.85 0.13 88);
     --border: oklch(1 0 0 / 10%);
     --input: oklch(1 0 0 / 12%);
     --ring: oklch(0.7280 0.1380 89.73); /* brass gold */
@@ -197,9 +205,14 @@
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
-/* Stronger body-copy contrast is scoped to marketing, not the app. */
+/* Marketing pages share the app palette, with #122023 for the evergreen
+   marketing surfaces, a quieter slate-sage accent for hairlines, and stronger
+   body-copy contrast. Also applied to portalled marketing UI such as the
+   mobile menu. Charts keep the --chart-* series for colour. */
 .marketing-page {
-  --muted-foreground: oklch(0.42 0.018 170);
+  --marketing-forest: oklch(0.2322 0.0201 212.57); /* #122023 brand */
+  --muted-foreground: oklch(0.42 0.018 200);
+  --accent: oklch(0.55 0.03 195); /* #5E7472 slate sage - hairline accents */
 }
 .dark .marketing-page {
   --muted-foreground: oklch(0.78 0.022 87);

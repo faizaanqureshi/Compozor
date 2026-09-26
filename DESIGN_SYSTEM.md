@@ -87,14 +87,16 @@ semantics):
 
 | Token | Role |
 |---|---|
-| `background` / `foreground` | Warm ivory page bg / brand deep-teal-charcoal text |
-| `card` / `card-foreground` | Slightly lifted warm white surface |
+| `background` / `foreground` | White page bg / brand #122023 text |
+| `card` / `card-foreground` | White surface, separated by hairlines rather than tint |
 | `primary` | Brand deep teal-charcoal (dark mode: brass gold) — the main call-to-action color |
-| `secondary` | Pale camel — low-emphasis surfaces/buttons |
-| `muted` / `muted-foreground` | Soft sand background / warm grey text — de-emphasized content |
-| `accent` | Brass gold — sparing use, for a highlight that should feel earned (active nav state, a key metric, a special affordance) |
-| `destructive` | Oxblood — errors, deletions, escalations only |
-| `border` / `input` | Warm sand hairlines |
+| `secondary` | Pale sage-grey — low-emphasis surfaces/buttons |
+| `muted` / `muted-foreground` | Faint sage background / cool grey text — de-emphasized content |
+| `accent` | Brand teal — highlights and selection (selected cards, positive statuses, links). Not a warning colour |
+| `warning` / `warning-foreground` | Yellow fill (dots, pill backgrounds, rings) / deep amber text — warnings only |
+| `destructive` | Red — issues: errors, failures, deletions, escalations |
+| `success` | Muted evergreen — completed/on track |
+| `border` / `input` | Cool grey hairlines |
 | `sidebar*` | The nav rail always uses the dark brand palette regardless of light/dark mode — it's a fixed "always dark" surface, by design |
 
 If a new token is genuinely needed (e.g. a new chart series), add it beside
@@ -177,16 +179,19 @@ preference:
    word, before reaching for color.
 2. **Weight/size** — a slightly heavier label or a small dot indicator beats
    a colored pill for low-stakes emphasis.
-3. **`accent` (brass)** — "needs attention, not broken" (e.g. drafts pending
-   review, a connection nearing reauth).
-4. **`destructive` (oxblood)** — "broken / failed / needs immediate human
+3. **`warning` (yellow)** — "needs attention, not broken" (e.g. due soon,
+   drafts pending review, missing documents, a disagreeing fact). Use
+   `bg-warning` for dots/fills and `text-warning-foreground` for text; the
+   pill pattern is `bg-warning/20 text-warning-foreground` (Badge
+   `variant="warning"`).
+4. **`destructive` (red)** — issues: "broken / failed / needs immediate human
    action" (e.g. `needs_human_attention`, `needs_reauth`, escalations). This
    is the strongest visual signal in the system — use it only for genuine
    escalation states, never for routine information, or it stops meaning
    anything.
 
-Never invent a new ad-hoc severity color (a random red/orange/yellow) outside
-`accent`/`destructive`. If two distinct severities are genuinely needed
+Never invent a new ad-hoc severity color (a raw `amber-500`/`red-600`) outside
+`warning`/`destructive`, and don't use `accent` to signal a warning. If two distinct severities are genuinely needed
 beyond these two, that's a design decision to raise explicitly, not a
 default `bg-orange-500` to reach for silently.
 
@@ -284,6 +289,28 @@ Before writing new UI:
       technically compliant but still looks flat, cluttered, or awkward —
       that needs an eyes-on look, ideally at mobile, `md`, and `xl`+.
 
+## Palette: #122023 on white (September 26, 2026)
+
+The whole product (app and marketing) now uses #122023 on white; the
+ivory/brass/camel palette is retired, and the §2 table reflects the current
+tokens. Gold is no longer a brand colour; charts keep the `--chart-*` series
+(brass and champagne included) so data reads in colour. The nav rail uses
+`public/compozor-wordmark-light.png`; light surfaces use
+`public/compozor-wordmark.png`.
+
+### Marketing notes
+
+Supersedes the ivory/brass/champagne references in the marketing notes below.
+Marketing pages (home, its mobile menu, sign-in, sign-up, waitlist) wrap their
+content in `.marketing-page`, which only adds marketing-specific tweaks:
+#122023 for `marketing-forest`, a quieter slate-sage `accent` for hairlines,
+and stronger body-copy contrast. Charts keep
+the full `--chart-*` palette (brass and champagne included) so the data reads
+in colour; outside charts there is no gold on marketing surfaces: the closing
+CTA is white on #122023, the aurora's second glow uses `--aurora-glow` (sage), and the work-sample frame uses
+`textures/work-sample-stone.webp`. Portalled marketing UI must carry the
+`.marketing-page` class itself.
+
 ## Marketing contrast refinement (September 21, 2026)
 
 The homepage uses the user-approved Harvey-inspired direction: a larger product
@@ -357,8 +384,24 @@ to the green hero texture. Keep the material confined to the space around solid
 paper; never behind text or charts. Use `landing-work-sample.module.css` with the
 same increased-contrast, reduced-transparency, and print fallbacks as the hero.
 
-On phones, keep the floating navigation compact with a visible demo action and
-sign-in/dashboard access inside the menu. Give mobile navigation and report tabs
+On phones (<640px), the navigation is a flush full-width bar (logo + menu
+only), clear over the hero and settling into glass with a hairline once
+scrolled. The hero carries the single "Book a demo" action; don't repeat it in
+the bar. The menu opens full-screen with large section links and the demo,
+waitlist, and sign-in/dashboard actions at the bottom. The phone hero is
+headline, one paragraph, one CTA, then the preview; the waitlist and secondary
+links live in the menu and closing section. Keep phone sections to title,
+short copy, and visual: supporting asides (side paragraphs, notes, "also
+possible" lines, optional disclosures) are hidden below `sm`, but fictional-data
+labels always stay visible. The phone hero preview keeps the header, checklist,
+and workflow output; the reminder row and workflow steps are hidden. On phones
+the "How it works" tabs unroll into a scrolling Collect → Check → Prepare
+sequence, each step showing its outcome with the shared `*Example` card bodies
+from `landing-story.tsx`. Wider screens keep the interactive tabs; edit the
+shared bodies so both stay in sync. Phone section titles are all Denton.
+Report/practice cards drop decorative micro-labels and footers on phones but
+keep their fictional-data labels. The nav uses `public/compozor-wordmark.png`
+(lowercase sans lockup, #122023, cropped from the brand export). Give mobile navigation and report tabs
 44px tap targets. Shorten section spacing without shrinking body copy. Present
 the sample report before its supporting material below the desktop breakpoint;
 on phones, show the expense total above the secondary metrics rather than

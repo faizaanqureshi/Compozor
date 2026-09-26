@@ -75,6 +75,177 @@ function ExampleFile({
   );
 }
 
+function CollectExample({ reply }: { reply: boolean }) {
+  return (
+    <>
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <Mail className="size-3.5" aria-hidden />
+        Compozor → Avery · on your firm’s behalf
+      </div>
+      <h4 className="mt-4 text-base">
+        A quick reminder for August
+      </h4>
+      <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+        Hi Avery, we’re ready to prepare your monthly report.
+        Please send your August bank statement and expense
+        receipts. You can reply here or use your upload link.
+      </p>
+      {reply ? (
+        <div
+          className="mt-6 border-l-2 border-accent bg-card p-4"
+          aria-live="polite"
+        >
+          <p className="text-xs text-muted-foreground">
+            Avery → Your firm
+          </p>
+          <p className="mt-2 text-sm">
+            Here you go. Let me know if you need anything else.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <span className="rounded-md border border-border px-3 py-2 text-xs">
+              Statement_July.pdf
+            </span>
+            <span className="rounded-md border border-border px-3 py-2 text-xs">
+              8 receipts
+            </span>
+          </div>
+        </div>
+      ) : (
+        <p className="mt-6 border-t border-border pt-4 text-xs text-muted-foreground">
+          Follow-ups use the reminder schedule you set.
+        </p>
+      )}
+    </>
+  );
+}
+
+function CheckExample({ corrected }: { corrected: boolean }) {
+  return (
+    <>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs uppercase tracking-widest">
+          Document checks
+        </p>
+        <span
+          className={cn(
+            "text-xs",
+            corrected ? "text-success" : "text-destructive",
+          )}
+        >
+          {corrected
+            ? "Ready for the workflow"
+            : "A correction is needed"}
+        </span>
+      </div>
+      <ExampleFile
+        name="Expense receipts"
+        detail="8 files · matched to the checklist"
+        complete
+      />
+      <ExampleFile
+        name="Bank statement"
+        detail={
+          corrected
+            ? "August 2026 · correct reporting period"
+            : "Expected August 2026 · received July 2026"
+        }
+        complete={corrected}
+      />
+      {!corrected && (
+        <div
+          className="mt-4 rounded-lg border border-border bg-card p-4"
+          aria-live="polite"
+        >
+          <p className="text-xs text-muted-foreground">
+            Compozor → Avery · correction explained
+          </p>
+          <p className="mt-2 text-sm leading-relaxed">
+            Thanks, Avery. The statement covers July. Could you
+            send the August statement so we can prepare the
+            right report?
+          </p>
+        </div>
+      )}
+      {corrected && (
+        <p className="mt-5 text-sm text-success" role="status">
+          Compozor checked the August statement. Both requirements
+          are satisfied; the automatic workflow can begin.
+        </p>
+      )}
+    </>
+  );
+}
+
+function PrepareExample({ report }: { report: boolean }) {
+  return (
+    <>
+      <div className="flex items-center gap-3">
+        <FileSpreadsheet
+          className="size-5 text-marketing-forest dark:text-marketing-brass"
+          aria-hidden
+        />
+        <div>
+          <h4 className="text-base">Monthly expense report</h4>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Statement + receipts + your work sample
+          </p>
+        </div>
+      </div>
+      {report ? (
+        <div className="mt-6" aria-live="polite">
+          <div className="space-y-3">
+            {[
+              "Client information extracted",
+              "Report prepared using your sample",
+              "Output checks and review notes attached",
+            ].map((line) => (
+              <p
+                key={line}
+                className="flex items-center gap-2 text-xs"
+              >
+                <Check
+                  className="size-3.5 text-success"
+                  aria-hidden
+                />
+                {line}
+              </p>
+            ))}
+          </div>
+          <div className="mt-6 rounded-lg border border-border bg-card p-5">
+            <p className="text-[0.625rem] uppercase tracking-widest text-muted-foreground">
+              Illustrative output
+            </p>
+            <p className="mt-2 text-lg">
+              August expense summary
+            </p>
+            <div className="mt-4 flex items-baseline justify-between border-t border-border pt-4">
+              <span className="text-xs text-muted-foreground">
+                Total expenses
+              </span>
+              <span className="text-2xl font-light tabular-nums">
+                $1,340.00
+              </span>
+            </div>
+            <p className="mt-3 text-xs text-muted-foreground">
+              Workbook prepared for your team’s review
+            </p>
+          </div>
+        </div>
+      ) : (
+        <>
+          <p className="mt-6 text-sm leading-relaxed text-muted-foreground">
+            “Group expenses by category, calculate totals, and
+            prepare the monthly summary in our workbook format.”
+          </p>
+          <p className="mt-5 border-t border-border pt-4 text-xs text-muted-foreground">
+            Start manually, or automatically after collection.
+          </p>
+        </>
+      )}
+    </>
+  );
+}
+
 export function LandingStory() {
   const sectionRef = useRef<HTMLElement>(null);
   const [step, setStep] = useState("overview");
@@ -119,7 +290,7 @@ export function LandingStory() {
     <section
       id="how-it-works"
       ref={sectionRef}
-      className="scroll-mt-24 border-t border-border bg-card py-14 sm:py-28"
+      className="scroll-mt-24 border-t border-border bg-card py-16 sm:py-28"
     >
       <div className="mx-auto max-w-7xl px-6 sm:px-10">
         <div data-reveal="focus" className="flex flex-col justify-between gap-6 md:flex-row md:items-end">
@@ -133,16 +304,52 @@ export function LandingStory() {
               to the finished work.
             </h2>
           </div>
-          <p className="max-w-xs text-sm leading-relaxed text-muted-foreground">
+          <p className="max-w-xs text-sm leading-relaxed text-muted-foreground max-sm:hidden">
             One connected process, from client conversation to prepared work.
             Explore what Compozor handles along the way.
+          </p>
+        </div>
+        {/* Phones scroll rather than tap, so the walkthrough unrolls into a
+            sequence showing each step's outcome. Wider screens use the tabs. */}
+        <div className="mt-10 sm:hidden">
+          <div data-reveal>
+            <h3 className="text-2xl font-light tracking-tight">
+              {steps[0].heading}
+            </h3>
+            <p className="mt-4 text-base leading-relaxed text-muted-foreground">
+              {steps[0].description}
+            </p>
+          </div>
+          <ol className="mt-12 space-y-14">
+            {steps.slice(1).map((item, i) => (
+              <li key={item.id} data-reveal className="border-t border-border pt-6">
+                <p className="text-xs uppercase tracking-widest text-muted-foreground">
+                  0{i + 1} · {item.title}
+                </p>
+                <h3 className="mt-3 text-2xl font-light tracking-tight">
+                  {item.heading}
+                </h3>
+                <p className="mt-3 text-base leading-relaxed text-muted-foreground">
+                  {item.description}
+                </p>
+                <div className="mt-6 rounded-xl border border-border bg-background p-5">
+                  {item.id === "collect" && <CollectExample reply />}
+                  {item.id === "check" && <CheckExample corrected={false} />}
+                  {item.id === "prepare" && <PrepareExample report />}
+                </div>
+              </li>
+            ))}
+          </ol>
+          <p className="mt-6 text-xs leading-relaxed text-muted-foreground">
+            Fictional example with automation enabled. No emails are sent or
+            workflows run here.
           </p>
         </div>
         <Tabs
           data-reveal
           value={step}
           onValueChange={(v) => setStep(String(v))}
-          className="mt-7 gap-6 sm:mt-12 sm:gap-10"
+          className="mt-12 gap-10 max-sm:hidden"
         >
           <TabsList
             variant="line"
@@ -230,43 +437,7 @@ export function LandingStory() {
                       )}
                       {item.id === "collect" && (
                         <>
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <Mail className="size-3.5" aria-hidden />
-                            Compozor → Avery · on your firm’s behalf
-                          </div>
-                          <h4 className="mt-4 text-base">
-                            A quick reminder for August
-                          </h4>
-                          <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-                            Hi Avery, we’re ready to prepare your monthly report.
-                            Please send your August bank statement and expense
-                            receipts. You can reply here or use your upload link.
-                          </p>
-                          {reply ? (
-                            <div
-                              className="mt-6 border-l-2 border-accent bg-card p-4"
-                              aria-live="polite"
-                            >
-                              <p className="text-xs text-muted-foreground">
-                                Avery → Your firm
-                              </p>
-                              <p className="mt-2 text-sm">
-                                Here you go. Let me know if you need anything else.
-                              </p>
-                              <div className="mt-4 flex flex-wrap gap-2">
-                                <span className="rounded-md border border-border px-3 py-2 text-xs">
-                                  Statement_July.pdf
-                                </span>
-                                <span className="rounded-md border border-border px-3 py-2 text-xs">
-                                  8 receipts
-                                </span>
-                              </div>
-                            </div>
-                          ) : (
-                            <p className="mt-6 border-t border-border pt-4 text-xs text-muted-foreground">
-                              Follow-ups use the reminder schedule you set.
-                            </p>
-                          )}
+                          <CollectExample reply={reply} />
                           <Button
                             className="mt-6 gap-3"
                             onClick={() =>
@@ -282,56 +453,7 @@ export function LandingStory() {
                       )}
                       {item.id === "check" && (
                         <>
-                          <div className="flex items-center justify-between gap-3">
-                            <p className="text-xs uppercase tracking-widest">
-                              Document checks
-                            </p>
-                            <span
-                              className={cn(
-                                "text-xs",
-                                corrected ? "text-success" : "text-destructive",
-                              )}
-                            >
-                              {corrected
-                                ? "Ready for the workflow"
-                                : "A correction is needed"}
-                            </span>
-                          </div>
-                          <ExampleFile
-                            name="Expense receipts"
-                            detail="8 files · matched to the checklist"
-                            complete
-                          />
-                          <ExampleFile
-                            name="Bank statement"
-                            detail={
-                              corrected
-                                ? "August 2026 · correct reporting period"
-                                : "Expected August 2026 · received July 2026"
-                            }
-                            complete={corrected}
-                          />
-                          {!corrected && (
-                            <div
-                              className="mt-4 rounded-lg border border-border bg-card p-4"
-                              aria-live="polite"
-                            >
-                              <p className="text-xs text-muted-foreground">
-                                Compozor → Avery · correction explained
-                              </p>
-                              <p className="mt-2 text-sm leading-relaxed">
-                                Thanks, Avery. The statement covers July. Could you
-                                send the August statement so we can prepare the
-                                right report?
-                              </p>
-                            </div>
-                          )}
-                          {corrected && (
-                            <p className="mt-5 text-sm text-success" role="status">
-                              Compozor checked the August statement. Both requirements
-                              are satisfied; the automatic workflow can begin.
-                            </p>
-                          )}
+                          <CheckExample corrected={corrected} />
                           <Button
                             className="mt-6 gap-3"
                             onClick={() => {
@@ -352,69 +474,7 @@ export function LandingStory() {
                       )}
                       {item.id === "prepare" && (
                         <>
-                          <div className="flex items-center gap-3">
-                            <FileSpreadsheet
-                              className="size-5 text-marketing-forest dark:text-marketing-brass"
-                              aria-hidden
-                            />
-                            <div>
-                              <h4 className="text-base">Monthly expense report</h4>
-                              <p className="mt-1 text-xs text-muted-foreground">
-                                Statement + receipts + your work sample
-                              </p>
-                            </div>
-                          </div>
-                          {report ? (
-                            <div className="mt-6" aria-live="polite">
-                              <div className="space-y-3">
-                                {[
-                                  "Client information extracted",
-                                  "Report prepared using your sample",
-                                  "Output checks and review notes attached",
-                                ].map((line) => (
-                                  <p
-                                    key={line}
-                                    className="flex items-center gap-2 text-xs"
-                                  >
-                                    <Check
-                                      className="size-3.5 text-success"
-                                      aria-hidden
-                                    />
-                                    {line}
-                                  </p>
-                                ))}
-                              </div>
-                              <div className="mt-6 rounded-lg border border-border bg-card p-5">
-                                <p className="text-[0.625rem] uppercase tracking-widest text-muted-foreground">
-                                  Illustrative output
-                                </p>
-                                <p className="mt-2 text-lg">
-                                  August expense summary
-                                </p>
-                                <div className="mt-4 flex items-baseline justify-between border-t border-border pt-4">
-                                  <span className="text-xs text-muted-foreground">
-                                    Total expenses
-                                  </span>
-                                  <span className="text-2xl font-light tabular-nums">
-                                    $1,340.00
-                                  </span>
-                                </div>
-                                <p className="mt-3 text-xs text-muted-foreground">
-                                  Workbook prepared for your team’s review
-                                </p>
-                              </div>
-                            </div>
-                          ) : (
-                            <>
-                              <p className="mt-6 text-sm leading-relaxed text-muted-foreground">
-                                “Group expenses by category, calculate totals, and
-                                prepare the monthly summary in our workbook format.”
-                              </p>
-                              <p className="mt-5 border-t border-border pt-4 text-xs text-muted-foreground">
-                                Start manually, or automatically after collection.
-                              </p>
-                            </>
-                          )}
+                          <PrepareExample report={report} />
                           {report ? (
                             <Button
                               nativeButton={false}

@@ -17,24 +17,26 @@ interface AuroraBackgroundProps {
 export function AuroraBackground({ variant = "hero" }: AuroraBackgroundProps) {
   const isPanel = variant === "panel";
 
+  // Blob sizes scale down on phones: at full size they cover a narrow
+  // viewport edge to edge and tint the whole hero instead of its corners.
   return (
     <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden" aria-hidden>
       <GridPattern width={48} height={48} maskVariant={variant} />
       <div
         className={cn(
-          "motion-safe:animate-[aurora-drift-a_28s_ease-in-out_infinite] absolute size-[38rem] rounded-full bg-secondary/40 blur-3xl",
+          "motion-safe:animate-[aurora-drift-a_28s_ease-in-out_infinite] absolute size-[16rem] rounded-full bg-secondary/40 blur-3xl sm:size-[38rem]",
           isPanel ? "top-[-10%] left-[-10%]" : "top-[-15%] left-[-10%]"
         )}
       />
       <div
         className={cn(
-          "motion-safe:animate-[aurora-drift-b_34s_ease-in-out_infinite] absolute size-[34rem] rounded-full bg-accent/25 blur-3xl",
+          "motion-safe:animate-[aurora-drift-b_34s_ease-in-out_infinite] absolute size-[14rem] rounded-full bg-aurora-glow/15 blur-3xl sm:size-[34rem] sm:bg-aurora-glow/25",
           isPanel ? "top-[-5%] right-[-15%]" : "top-[-10%] right-[-15%]"
         )}
       />
       <div
         className={cn(
-          "motion-safe:animate-[aurora-drift-c_40s_ease-in-out_infinite] absolute size-[44rem] rounded-full bg-muted-foreground/10 blur-3xl",
+          "motion-safe:animate-[aurora-drift-c_40s_ease-in-out_infinite] absolute size-[20rem] rounded-full bg-muted-foreground/10 blur-3xl sm:size-[44rem]",
           isPanel ? "bottom-[-15%] left-[20%]" : "bottom-[-20%] left-[15%]"
         )}
       />

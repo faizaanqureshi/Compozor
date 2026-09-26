@@ -1106,7 +1106,7 @@ function EscalationReasonDisclosure({ reason, resolved }: { reason: string; reso
           "flex items-center gap-1.5 text-xs font-medium transition-colors",
           resolved
             ? "text-muted-foreground hover:text-foreground"
-            : "text-amber-600 hover:text-amber-700 dark:text-amber-500 dark:hover:text-amber-400"
+            : "text-warning-foreground hover:text-warning-foreground/80"
         )}
       >
         <ChevronDown className={cn("size-3 transition-transform", open && "rotate-180")} />

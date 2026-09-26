@@ -68,7 +68,7 @@ export function LandingPractices() {
   return (
     <section
       id="for-firms"
-      className="mx-auto max-w-7xl scroll-mt-24 px-6 py-14 sm:px-10 sm:py-28"
+      className="mx-auto max-w-7xl scroll-mt-24 px-6 py-16 sm:px-10 sm:py-28"
     >
       <div
         data-reveal="focus"
@@ -84,7 +84,7 @@ export function LandingPractices() {
             The care stays.
           </h2>
         </div>
-        <p className="max-w-sm text-sm leading-relaxed text-muted-foreground">
+        <p className="max-w-sm text-sm leading-relaxed text-muted-foreground max-sm:hidden">
           An expense analysis. A carefully ordered case file. A clearer picture
           of income. Explore what the work could look like in your practice.
         </p>
@@ -198,7 +198,7 @@ export function LandingPractices() {
                               </p>
                             </div>
                           </div>
-                          <div className="mt-7 border-t border-border pt-5">
+                          <div className="mt-7 border-t border-border pt-5 max-sm:hidden">
                             <p className="text-[0.625rem] uppercase tracking-widest text-muted-foreground">
                               Included in the workbook
                             </p>
@@ -216,10 +216,10 @@ export function LandingPractices() {
                     </div>
                     <footer className="flex flex-wrap justify-between gap-2 border-t border-border px-5 py-4 text-[0.625rem] text-muted-foreground sm:px-8">
                       <span>Illustrative document · fictional information</span>
-                      <span>Prepared for professional review</span>
+                      <span className="max-sm:hidden">Prepared for professional review</span>
                     </footer>
                   </article>
-                  <p className="mt-5 text-xs leading-relaxed text-muted-foreground">
+                  <p className="mt-5 text-xs leading-relaxed text-muted-foreground max-sm:hidden">
                     Also possible: {p.other}.
                   </p>
                 </div>

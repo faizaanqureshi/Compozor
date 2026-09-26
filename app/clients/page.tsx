@@ -72,7 +72,7 @@ type Sort = { key: SortKey; direction: "asc" | "desc" };
 
 const toneClasses: Record<WorkflowTone, string> = {
   success: "bg-success",
-  warning: "bg-amber-500",
+  warning: "bg-warning",
   attention: "bg-destructive",
   neutral: "bg-muted-foreground/40",
 };
@@ -127,7 +127,7 @@ function describeActivity(entry: EmailLogEntry) {
 
   const Icon = needsAttention ? AlertTriangle : isOutbound ? Check : Mail;
   const iconTone = needsAttention
-    ? "bg-amber-500/10 text-amber-600 dark:text-amber-500"
+    ? "bg-warning/20 text-warning-foreground"
     : isOutbound
       ? "bg-accent/15 text-accent"
       : "bg-muted text-muted-foreground";

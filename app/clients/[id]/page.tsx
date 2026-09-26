@@ -136,8 +136,8 @@ function SectionCard({
 
 const statusPillClasses: Record<ChecklistItemStatus, string> = {
   received: "bg-accent/15 text-accent",
-  missing: "bg-amber-500/20 text-amber-900 dark:bg-amber-500/15 dark:text-amber-300",
-  wrong: "bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-400",
+  missing: "bg-warning/20 text-warning-foreground",
+  wrong: "bg-destructive/10 text-destructive",
 };
 
 const statusLabels: Record<ChecklistItemStatus, string> = {
@@ -698,7 +698,7 @@ function ChecklistCard({
             <div className="flex items-center gap-2">
               <span>{checklist.total} total</span>
               {actionRequired > 0 && (
-                <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-500/15 dark:text-amber-300">
+                <span className="rounded-full bg-warning/20 px-2 py-0.5 text-xs font-medium text-warning-foreground">
                   {actionRequired} action required
                 </span>
               )}
@@ -1171,10 +1171,10 @@ function ChecklistItemActions({
 }
 
 const commitmentPillClasses: Record<CommitmentStatus, string> = {
-  pending: "bg-amber-500/20 text-amber-900 dark:bg-amber-500/15 dark:text-amber-300",
+  pending: "bg-warning/20 text-warning-foreground",
   fulfilled: "bg-accent/15 text-accent",
   cancelled: "bg-muted text-muted-foreground",
-  escalated: "bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-400",
+  escalated: "bg-destructive/10 text-destructive",
 };
 
 const commitmentLabels: Record<CommitmentStatus, string> = {
@@ -1198,7 +1198,7 @@ function CommitmentPill({ status }: { status: CommitmentStatus }) {
 }
 
 const meetingPillClasses: Record<MeetingRequestStatus, string> = {
-  proposed: "bg-amber-500/20 text-amber-900 dark:bg-amber-500/15 dark:text-amber-300",
+  proposed: "bg-warning/20 text-warning-foreground",
   confirmed: "bg-accent/15 text-accent",
   expired: "bg-muted text-muted-foreground",
   cancelled: "bg-muted text-muted-foreground",
@@ -1353,7 +1353,7 @@ function WaitingOnCard({
                 <td
                   className={cn(
                     "py-2 pr-4",
-                    overdue ? "font-medium text-red-600 dark:text-red-400" : "text-muted-foreground"
+                    overdue ? "font-medium text-destructive" : "text-muted-foreground"
                   )}
                 >
                   {c.expected_by ?? "no date given"}
@@ -1608,7 +1608,7 @@ function ThreadsList({ threads }: { threads: EmailThread[] | null }) {
                       <Linkify text={m.content} />
                     </p>
                     {m.escalation_reason && (
-                      <p className="mt-1 text-xs text-amber-600 dark:text-amber-500">
+                      <p className="mt-1 text-xs text-warning-foreground">
                         {m.escalation_reason}
                       </p>
                     )}

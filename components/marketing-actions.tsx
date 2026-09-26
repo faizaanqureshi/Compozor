@@ -8,9 +8,12 @@ import glass from "@/components/landing-glass.module.css";
 export function MarketingActions({
   className,
   inverse = false,
+  primaryOnly = false,
 }: {
   className?: string;
   inverse?: boolean;
+  /** On phones, show only the primary action; the waitlist stays in the menu. */
+  primaryOnly?: boolean;
 }) {
   return (
     <div
@@ -24,7 +27,7 @@ export function MarketingActions({
           "h-11 gap-4 px-5",
           depth.primaryAction,
           inverse
-            ? "bg-marketing-brass text-sidebar hover:bg-marketing-brass/90"
+            ? "bg-sidebar-foreground text-sidebar hover:bg-sidebar-foreground/90"
             : "bg-marketing-forest text-sidebar-foreground hover:bg-marketing-forest/90",
         )}
       >
@@ -33,7 +36,8 @@ export function MarketingActions({
       <Link
         href="/waitlist"
         className={cn(
-          "inline-flex min-h-11 items-center rounded-sm py-2 text-sm underline-offset-4 transition-colors hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring",
+          "min-h-11 items-center rounded-sm py-2 text-sm underline-offset-4 transition-colors hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring",
+          primaryOnly ? "hidden sm:inline-flex" : "inline-flex",
           inverse && glass.dark,
           inverse && glass.action,
         )}

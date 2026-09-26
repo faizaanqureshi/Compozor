@@ -14,7 +14,7 @@ export default async function SignUpPage({
   const origin = `${requestHeaders.get("x-forwarded-proto") ?? "https"}://${requestHeaders.get("host")}`;
 
   return (
-    <div className="fixed inset-0 isolate overflow-hidden bg-background">
+    <div className="marketing-page fixed inset-0 isolate overflow-hidden bg-background">
       <AuroraBackground />
       <div className="relative flex h-full items-center justify-center px-4">
         <SignUpConsentGate forceRedirectUrl={postAuthRedirect(redirect_url, origin)} />

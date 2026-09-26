@@ -27,7 +27,7 @@
   background-image:
     radial-gradient(
       ellipse 75% 60% at 90% 5%,
-      color-mix(in oklab, var(--marketing-brass) 7%, transparent),
+      color-mix(in oklab, var(--sidebar-foreground) 5%, transparent),
       transparent 75%
     ),
     linear-gradient(

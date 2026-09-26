@@ -1,4 +1,4 @@
-/* The gold material frames the finished work; all content stays on solid paper. */
+/* A cool stone material frames the finished work; all content stays on solid paper. */
 .reportStage {
   position: relative;
   isolation: isolate;
@@ -11,7 +11,7 @@
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  background: url("/textures/work-sample-gold.webp") center / cover no-repeat;
+  background: url("/textures/work-sample-stone.webp") center / cover no-repeat;
   opacity: 0.7;
 }
 

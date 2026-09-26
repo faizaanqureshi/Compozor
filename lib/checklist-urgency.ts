@@ -29,10 +29,10 @@ export function computeTier(item: ChecklistItem, today: Date): { tier: Tier; day
 export const TIER_RANK: Record<Tier, number> = { overdue: 0, due_soon: 1, on_track: 2 };
 
 // Reuses the app's existing semantic tokens (DESIGN_SYSTEM.md §6) rather than
-// inventing a new severity color: destructive = broken/critical, accent =
+// inventing a new severity color: destructive = broken/critical, warning =
 // needs attention, success = the calm default.
 export const TIER_META: Record<Tier, { label: string; dot: string; text: string }> = {
   overdue: { label: "Overdue", dot: "bg-destructive", text: "text-destructive" },
-  due_soon: { label: "Due soon", dot: "bg-accent", text: "text-accent" },
+  due_soon: { label: "Due soon", dot: "bg-warning", text: "text-warning-foreground" },
   on_track: { label: "On track", dot: "bg-success", text: "text-muted-foreground" },
 };

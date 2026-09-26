@@ -725,13 +725,13 @@ function ConnectionsSection({
                 <span className="break-all text-sm font-medium">{conn.email}</span>
                 <span className="text-xs text-muted-foreground">{conn.provider === "outlook" ? "Outlook" : "Google"}</span>
                 {conn.needsReauth ? (
-                  <span className="inline-flex items-center gap-1.5 text-xs font-medium text-accent">
-                    <span className="size-1.5 rounded-full bg-accent" />
+                  <span className="inline-flex items-center gap-1.5 text-xs font-medium text-destructive">
+                    <span className="size-1.5 rounded-full bg-destructive" />
                     needs reauth
                   </span>
                 ) : (
-                  <span className="inline-flex items-center gap-1.5 text-xs font-medium text-accent">
-                    <span className="size-1.5 rounded-full bg-accent" />
+                  <span className="inline-flex items-center gap-1.5 text-xs font-medium text-success">
+                    <span className="size-1.5 rounded-full bg-success" />
                     connected
                   </span>
                 )}

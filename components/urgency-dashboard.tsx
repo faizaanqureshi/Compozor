@@ -260,7 +260,7 @@ export function UrgencyDashboard({
         <StatTile
           label="Due within 3 days"
           value={stats.dueSoon}
-          tone="accent"
+          tone="warning"
           active={filterTier === "due_soon"}
           onClick={() => toggleFilter("due_soon")}
         />
@@ -379,7 +379,7 @@ function StatTile({
 }: {
   label: string;
   value: number;
-  tone?: "destructive" | "accent" | "success";
+  tone?: "destructive" | "warning" | "success";
   active?: boolean;
   icon?: LucideIcon;
   onClick?: () => void;
@@ -396,7 +396,7 @@ function StatTile({
         className={cn(
           "text-2xl font-light tracking-tight tabular-nums sm:text-3xl",
           tone === "destructive" && "text-destructive",
-          tone === "accent" && "text-accent",
+          tone === "warning" && "text-warning-foreground",
           tone === "success" && "text-success"
         )}
       >
@@ -408,8 +408,8 @@ function StatTile({
   const toneRing =
     tone === "destructive"
       ? "bg-destructive/[0.06] ring-destructive/40"
-      : tone === "accent"
-        ? "bg-accent/[0.06] ring-accent/40"
+      : tone === "warning"
+        ? "bg-warning/[0.08] ring-warning/60"
         : tone === "success"
           ? "bg-success/[0.06] ring-success/40"
           : "";
@@ -618,7 +618,7 @@ function ClientGroupRow({
                 )}
                 {row.item.wrong_attempt_count > 0 && (
                   <span
-                    className="text-accent"
+                    className="text-destructive"
                     title={
                       row.item.last_wrong_doc_type
                         ? `Last wrong submission: ${row.item.last_wrong_doc_type}`
@@ -663,7 +663,7 @@ function UrgencyPieChart({
 
   const data: { label: string; count: number; color: string }[] = [
     { label: "Overdue", count: overdue, color: "var(--color-destructive)" },
-    { label: "Due soon", count: dueSoon, color: "var(--color-accent)" },
+    { label: "Due soon", count: dueSoon, color: "var(--color-warning)" },
     { label: "On track", count: onTrack, color: "var(--color-success)" },
   ].filter((d) => d.count > 0);
 

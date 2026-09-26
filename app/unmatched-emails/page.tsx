@@ -68,7 +68,7 @@ const categoryMeta: Record<
   other: {
     label: "Unclear",
     Icon: HelpCircle,
-    classes: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
+    classes: "bg-warning/20 text-warning-foreground",
   },
 };
 

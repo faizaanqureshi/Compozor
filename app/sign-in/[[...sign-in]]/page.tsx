@@ -15,7 +15,7 @@ export default async function SignInPage({
   const origin = `${requestHeaders.get("x-forwarded-proto") ?? "https"}://${requestHeaders.get("host")}`;
 
   return (
-    <div className="fixed inset-0 isolate overflow-hidden bg-background">
+    <div className="marketing-page fixed inset-0 isolate overflow-hidden bg-background">
       <AuroraBackground />
       <div className="relative flex h-full items-center justify-center">
         <SignIn

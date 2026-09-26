@@ -22,7 +22,7 @@ export async function generateMetadata({
 
 export default function WaitlistPage() {
   return (
-    <div className="relative isolate flex min-h-svh flex-col">
+    <div className="marketing-page relative isolate flex min-h-svh flex-col bg-background">
       <AuroraBackground />
       <LandingNav />
       <main className="mx-auto grid w-full max-w-6xl flex-1 items-center gap-12 px-6 pt-40 pb-20 sm:px-10 md:grid-cols-2 md:gap-16">

@@ -101,7 +101,7 @@ export function LandingWorkSample() {
                 “Summarize expenses by category. Show the spending trend, retain
                 our format, and include source references and review notes.”
               </blockquote>
-              <div className="mt-6 space-y-2 text-[0.6875rem] sm:text-[0.625rem] text-muted-foreground">
+              <div className="mt-6 space-y-2 text-[0.625rem] text-muted-foreground max-sm:hidden">
                 <p className="flex items-center gap-2">
                   <Check className="size-3" aria-hidden />
                   Client data supplies the facts
@@ -131,10 +131,10 @@ export function LandingWorkSample() {
                       </span>
                     </header>
                     <div className="my-6">
-                      <p className="text-[0.6875rem] sm:text-[0.625rem] uppercase tracking-widest text-muted-foreground">
+                      <p className="text-[0.625rem] uppercase tracking-widest text-muted-foreground max-sm:hidden">
                         Monthly financial overview
                       </p>
-                      <h3 className="mt-2 text-2xl font-light tracking-tight sm:text-3xl">
+                      <h3 className="text-2xl font-light tracking-tight sm:mt-2 sm:text-3xl">
                         Expense statement
                       </h3>
                       <p className="mt-2 text-xs text-muted-foreground">
@@ -249,7 +249,7 @@ export function LandingWorkSample() {
                         </div>
                       </>
                     )}
-                    <footer className="mt-5 flex flex-wrap justify-between gap-2 border-t border-border pt-4 text-[0.6875rem] sm:text-[0.625rem] text-muted-foreground">
+                    <footer className="mt-5 flex flex-wrap justify-between gap-2 border-t border-border pt-4 text-[0.625rem] text-muted-foreground max-sm:hidden">
                       <span>Prepared for professional review</span>
                       <span>01 / Monthly overview</span>
                     </footer>

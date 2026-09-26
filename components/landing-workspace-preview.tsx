@@ -21,16 +21,16 @@ import { buttonVariants } from "@/components/ui/button";
 /** Static product illustration. Controls are visual details, not live app actions. */
 export function LandingWorkspacePreview() {
   return (
-    <figure data-reveal className="mx-auto mt-8 w-full max-w-[112rem] px-3 sm:mt-16 sm:px-5 lg:px-6">
+    <figure data-reveal className="mx-auto mt-10 w-full max-w-[112rem] px-6 sm:mt-16 sm:px-5 lg:px-6">
       <div className={`${depth.stage} ${styles.stage} overflow-hidden rounded-xl bg-marketing-forest`}>
         <div className={`${depth.workspace} ${styles.workspace} relative z-10 grid overflow-hidden rounded-lg border border-sidebar-foreground/20 bg-card md:grid-cols-[150px_1fr] lg:grid-cols-[175px_1fr]`}>
           <div className="hidden flex-col bg-sidebar px-4 py-6 text-sidebar-foreground md:flex">
             <Image
-              src="/compozor-logo-dark.png"
+              src="/compozor-wordmark-light.png"
               alt="Compozor"
-              width={795}
-              height={214}
-              className="mb-10 h-auto w-28 brightness-0 invert"
+              width={789}
+              height={140}
+              className="mb-10 h-auto w-28"
             />
             <div className="space-y-1">
               {[
@@ -63,7 +63,7 @@ export function LandingWorkspacePreview() {
               </span>
             </div>
             <div className="flex flex-1 flex-col p-4 sm:p-7 lg:py-9">
-              <div className="mb-7 flex flex-wrap items-center lg:mb-10 justify-between gap-3">
+              <div className="mb-5 flex flex-wrap items-center justify-between gap-3 sm:mb-7 lg:mb-10">
                 <div>
                   <h2 className="text-xl font-normal tracking-tight sm:text-2xl">
                     Avery Williams
@@ -76,12 +76,12 @@ export function LandingWorkspacePreview() {
                   <Badge variant="success" className="h-6 gap-1.5">
                     <Check aria-hidden /> Ready for review
                   </Badge>
-                  <span className={buttonVariants({ variant: "outline", size: "sm" })}>
+                  <span className={`${buttonVariants({ variant: "outline", size: "sm" })} max-sm:hidden`}>
                     <Plus aria-hidden /> Assign package
                   </span>
                 </div>
               </div>
-              <div className="grid flex-1 gap-7 lg:grid-cols-[0.9fr_1.1fr]">
+              <div className="grid flex-1 gap-5 sm:gap-7 lg:grid-cols-[0.9fr_1.1fr]">
                 <div className="lg:flex lg:flex-col">
                   <div className="mb-3 flex items-center justify-between gap-3">
                     <p className="text-[0.6875rem] uppercase tracking-widest text-muted-foreground">
@@ -110,7 +110,7 @@ export function LandingWorkspacePreview() {
                       <Ellipsis className="ml-auto size-4 shrink-0 text-muted-foreground" aria-hidden />
                     </div>
                   ))}
-                  <div className="mt-4 flex gap-2 text-xs leading-relaxed lg:mt-auto lg:pt-5 text-muted-foreground">
+                  <div className="mt-4 flex gap-2 text-xs leading-relaxed max-sm:hidden lg:mt-auto lg:pt-5 text-muted-foreground">
                     <Mail
                       className="mt-0.5 size-3.5 shrink-0 text-marketing-forest"
                       aria-hidden
@@ -119,7 +119,7 @@ export function LandingWorkspacePreview() {
                       Compozor requested the correct period, checked the replacement, and started the workflow.
                     </span>
                   </div>
-                  <div className="mt-4 flex flex-wrap items-center gap-3">
+                  <div className="mt-4 flex flex-wrap items-center gap-3 max-sm:hidden">
                     <span className={buttonVariants({ variant: "outline", size: "xs" })}>
                       <Mail aria-hidden /> Send reminder
                     </span>
@@ -135,15 +135,15 @@ export function LandingWorkspacePreview() {
                   </div>
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <p className="text-base tracking-tight">Monthly expense report</p>
-                    <span className={buttonVariants({ variant: "outline", size: "xs" })}>
+                    <span className={`${buttonVariants({ variant: "outline", size: "xs" })} max-sm:hidden`}>
                       <RotateCcw aria-hidden /> Rerun
                     </span>
                   </div>
-                  <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+                  <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground max-sm:hidden">
                     <FileText className="size-3.5" aria-hidden /> Guided by your
                     work sample
                   </div>
-                  <ul className="mt-5 space-y-2.5 text-xs lg:flex lg:flex-1 lg:flex-col lg:justify-center lg:gap-4 lg:space-y-0 lg:py-5">
+                  <ul className="mt-5 space-y-2.5 text-xs max-sm:hidden lg:flex lg:flex-1 lg:flex-col lg:justify-center lg:gap-4 lg:space-y-0 lg:py-5">
                     {[
                       "Started after requirements were met",
                       "Report prepared in your format",
@@ -175,8 +175,8 @@ export function LandingWorkspacePreview() {
           </div>
         </div>
       </div>
-      <figcaption className="mt-4 flex flex-wrap justify-between gap-2 px-3 text-xs leading-relaxed sm:px-0 text-muted-foreground">
-        <span>Every conversation, document, and next step in context.</span>
+      <figcaption className="mt-4 flex flex-wrap justify-between gap-2 text-xs leading-relaxed text-muted-foreground">
+        <span className="max-sm:hidden">Every conversation, document, and next step in context.</span>
         <span>Static product preview · Fictional client data</span>
       </figcaption>
     </figure>

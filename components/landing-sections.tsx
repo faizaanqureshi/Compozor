@@ -9,7 +9,7 @@ export function LandingSections() {
     <>
       <section
         id="workflows"
-        className="scroll-mt-24 border-y border-border/60 bg-muted/40 py-14 text-foreground sm:py-28"
+        className="scroll-mt-24 border-y border-border/60 bg-muted/40 py-16 text-foreground sm:py-28"
       >
         <div className="mx-auto max-w-7xl px-6 sm:px-10">
           <div
@@ -44,13 +44,13 @@ export function LandingSections() {
         </div>
       </section>
       <LandingPractices />
-      <section className="border-y border-border bg-marketing-brass/5 py-14 sm:py-28">
+      <section className="border-y border-border bg-muted/60 py-16 sm:py-28">
         <div className="mx-auto grid max-w-7xl gap-8 px-6 sm:gap-12 sm:px-10 md:grid-cols-2 md:gap-24">
           <div data-reveal="focus">
             <p className="text-xs uppercase tracking-widest text-marketing-forest dark:text-marketing-brass">
               Trust & control
             </p>
-            <h2 className="mt-5 text-3xl leading-tight font-light tracking-tight sm:text-4xl">
+            <h2 className="mt-5 text-4xl leading-tight font-thin tracking-tight [font-family:var(--font-denton)] sm:text-4xl sm:font-light sm:[font-family:inherit]">
               Automation,
               <br />
               on your terms.
@@ -98,9 +98,9 @@ export function LandingSections() {
 export function LandingClosing() {
   return (
     <section className={`${depth.ambient} bg-sidebar text-sidebar-foreground`}>
-      <div className="mx-auto grid max-w-5xl items-start gap-8 px-6 py-14 sm:px-10 sm:py-24 md:grid-cols-[1fr_160px] md:gap-16">
+      <div className="mx-auto grid max-w-5xl items-start gap-8 px-6 py-20 sm:px-10 sm:py-24 md:grid-cols-[1fr_160px] md:gap-16">
         <div data-reveal="focus">
-          <p className="text-xs uppercase tracking-widest text-marketing-brass">
+          <p className="text-xs uppercase tracking-widest text-sidebar-foreground/70">
             An invitation to work differently
           </p>
           <h2 className="mt-5 max-w-2xl text-5xl leading-tight font-thin tracking-tight text-balance sm:text-6xl [font-family:var(--font-denton)]">
@@ -124,7 +124,7 @@ export function LandingClosing() {
           width={512}
           height={512}
           unoptimized
-          className="order-first size-20 object-contain md:order-last md:mt-14 md:size-40"
+          className="order-first size-20 object-contain max-sm:hidden md:order-last md:mt-14 md:size-40"
         />
       </div>
     </section>

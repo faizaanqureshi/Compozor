@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 
 type Check = {
   userId: string;
-  pathname: string;
   attempt: number;
   completed?: boolean;
   error?: string;
@@ -18,13 +17,16 @@ type Check = {
 
 // The database decides completion. Never reuse a browser-wide completion flag
 // across accounts or let a pending product tour bypass unfinished setup.
+// Completion is re-checked on every navigation, but the last result for the
+// same account keeps the shell mounted meanwhile; blanking it per pathname
+// unmounted the nav on every click (a visible flash and lost nav state).
 export function OnboardingGate({ children }: { children: React.ReactNode }) {
   const { isLoaded, isSignedIn, userId } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const [check, setCheck] = useState<Check | null>(null);
   const [attempt, setAttempt] = useState(0);
-  const current = check?.userId === userId && check?.pathname === pathname && check?.attempt === attempt
+  const current = check?.userId === userId && check?.attempt === attempt
     ? check : null;
 
   useEffect(() => {
@@ -36,9 +38,9 @@ export function OnboardingGate({ children }: { children: React.ReactNode }) {
     }
     let cancelled = false;
     getMyOrganization().then((org) => {
-      if (!cancelled) setCheck({ userId, pathname, attempt, completed: !!org.onboarding_completed_at });
+      if (!cancelled) setCheck({ userId, attempt, completed: !!org.onboarding_completed_at });
     }).catch((error) => {
-      if (!cancelled) setCheck({ userId, pathname, attempt, error: error instanceof Error ? error.message : "Unable to load your account." });
+      if (!cancelled) setCheck({ userId, attempt, error: error instanceof Error ? error.message : "Unable to load your account." });
     });
     return () => { cancelled = true; };
   }, [isLoaded, isSignedIn, userId, pathname, attempt, router]);

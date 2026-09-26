@@ -143,7 +143,7 @@ export default function AdminPage() {
       {fetchError && <p className="text-sm text-destructive">{fetchError}</p>}
 
       {!isLoading && totals.unpriced > 0 && (
-        <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/[0.06] px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
+        <div className="flex items-center gap-2 rounded-lg border border-warning/50 bg-warning/10 px-4 py-3 text-sm text-warning-foreground">
           <AlertTriangle className="size-4 shrink-0" />
           <span>
             {totals.unpriced} call{totals.unpriced === 1 ? "" : "s"} used a model with no
@@ -267,7 +267,7 @@ function OrganizationRow({
           {org.unpriced_call_count > 0 && (
             <span
               title={`${org.unpriced_call_count} call(s) with no pricing entry - actual spend is higher`}
-              className="size-1.5 rounded-full bg-amber-500"
+              className="size-1.5 rounded-full bg-warning"
             />
           )}
         </span>

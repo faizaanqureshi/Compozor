@@ -34,12 +34,12 @@ export function MobileTopBar() {
       </Button>
       <Link href="/" className="shrink-0">
         <Image
-          src="/compozor-logo-dark.png"
+          src="/compozor-wordmark.png"
           alt="Compozor"
-          width={795}
-          height={214}
+          width={789}
+          height={140}
           priority
-          className="h-7 w-auto"
+          className="h-5.5 w-auto"
         />
       </Link>
     </div>
