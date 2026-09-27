@@ -998,8 +998,10 @@ export const createClientFromUnmatchedInboundEmail = (
 
 // ---------- Gmail / inbox connections ----------
 
+// Credentials let the API set the one-use consent cookie that its OAuth
+// callback checks, binding the grant to this browser and organization.
 export const getGmailConnectUrl = () =>
-  request<{ authorization_url: string }>("/organizations/me/gmail/connect");
+  request<{ authorization_url: string }>("/organizations/me/gmail/connect", { credentials: "include" });
 
 export const getOutlookConnectUrl = () =>
   request<{ authorization_url: string }>("/organizations/me/outlook/connect", { credentials: "include" });
