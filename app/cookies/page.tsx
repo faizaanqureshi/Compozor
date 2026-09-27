@@ -6,7 +6,7 @@ export const metadata = publicPageMetadata("/cookies");
 
 export default function CookiePolicyPage() {
   return (
-    <LegalPageShell title="Cookie Policy" lastUpdated="September 21, 2026">
+    <LegalPageShell title="Cookie Policy" lastUpdated="September 27, 2026">
       <LegalSection heading="1. What cookies are">
         <p>
           Cookies are small pieces of data stored in your browser. They can
@@ -17,12 +17,18 @@ export default function CookiePolicyPage() {
 
       <LegalSection heading="2. Cookies we use today">
         <p>
-          Compozor currently uses only <strong className="text-foreground">strictly
-          necessary cookies</strong> — specifically, the session cookie set
-          by our authentication provider, Clerk, which keeps you signed in
-          while using the app. We do not currently use any advertising,
-          marketing, or analytics cookies, and we don&apos;t currently run
-          any behavioral tracking or third-party ad scripts on this site.
+          Compozor uses only <strong className="text-foreground">strictly
+          necessary cookies and browser storage</strong>:
+        </p>
+        <ul className="ml-5 list-disc space-y-1">
+          <li><strong className="text-foreground">Sign-in cookies</strong> set by our authentication provider, Clerk, which keep you signed in and protect your session.</li>
+          <li><strong className="text-foreground">Mailbox connection cookies</strong> (<code className="rounded bg-muted px-1 py-0.5 text-xs">gmail_oauth_state</code>, <code className="rounded bg-muted px-1 py-0.5 text-xs">outlook_oauth_state</code>) set for up to 10 minutes only while you connect a Gmail or Outlook mailbox, so that only your browser can complete the connection.</li>
+          <li><strong className="text-foreground">Browser storage</strong> that remembers your progress through the product tour and an in-progress client import.</li>
+        </ul>
+        <p>
+          We do not use any advertising, marketing, or analytics cookies, and
+          we don&apos;t run any behavioral tracking or third-party ad scripts
+          on this site.
         </p>
       </LegalSection>
 
@@ -41,9 +47,9 @@ export default function CookiePolicyPage() {
       <LegalSection heading="4. Your choices">
         <p>
           Most browsers let you block or delete cookies through their
-          settings. Because our only current cookie is the sign-in session
-          cookie, blocking it will prevent you from staying signed in to
-          Compozor.
+          settings. Because our cookies are needed for signing in and
+          connecting a mailbox, blocking them will prevent those from
+          working.
         </p>
         <p>
           Compozor honors the Global Privacy Control (GPC) signal as an
@@ -68,8 +74,8 @@ export default function CookiePolicyPage() {
       <LegalSection heading="6. Contact us">
         <p>
           Questions about this policy can be sent to{" "}
-          <a href="mailto:info@compozor.com" className="text-foreground underline underline-offset-2">
-            info@compozor.com
+          <a href="mailto:support@compozor.com" className="text-foreground underline underline-offset-2">
+            support@compozor.com
           </a>
           .
         </p>

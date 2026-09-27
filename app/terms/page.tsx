@@ -6,7 +6,7 @@ export const metadata = publicPageMetadata("/terms");
 
 export default function TermsPage() {
   return (
-    <LegalPageShell title="Terms &amp; Conditions" lastUpdated="September 21, 2026">
+    <LegalPageShell title="Terms &amp; Conditions" lastUpdated="September 27, 2026">
       <LegalSection heading="1. Acceptance of these terms">
         <p>
           These Terms &amp; Conditions (&quot;Terms&quot;) govern access to
@@ -20,12 +20,14 @@ export default function TermsPage() {
 
       <LegalSection heading="2. Description of the service">
         <p>
-          Compozor connects to a firm&apos;s inbox (e.g., Gmail) and
-          document-upload links, uses automated and AI-assisted processing
-          to classify and match incoming client documents and messages
-          against a checklist the firm configures, and can draft and, at
-          the firm&apos;s chosen automation level, automatically send
-          replies to the firm&apos;s clients.
+          Compozor connects to a firm&apos;s inbox and calendar (Gmail or
+          Microsoft 365) and to document-upload links. It uses automated and
+          AI-assisted processing to check and match incoming client documents
+          and messages against a checklist the firm configures, drafts
+          replies that the firm approves or, at the firm&apos;s chosen
+          automation level, sends automatically, schedules meetings, and runs
+          workflows the firm defines to prepare work (such as reports and
+          spreadsheets) from its clients&apos; documents.
         </p>
       </LegalSection>
 
@@ -36,7 +38,8 @@ export default function TermsPage() {
           connect the firm&apos;s mailbox and to submit the firm&apos;s
           client data for processing by Compozor. You&apos;re responsible
           for keeping your account credentials secure and for all activity
-          under your account.
+          under your account, including by anyone at your firm you allow to
+          use it.
         </p>
       </LegalSection>
 
@@ -57,10 +60,11 @@ export default function TermsPage() {
           notice, or consent from your own clients before submitting their
           information to Compozor, and for your own compliance with any law
           or professional obligation that applies to your practice —
-          including, where applicable, the Gramm-Leach-Bliley Act, state
-          privacy laws, and professional confidentiality rules for your
-          field (e.g., attorney-client confidentiality, accountant
-          practitioner obligations). Compozor is a tool that helps you meet
+          including, where applicable, PIPEDA and provincial privacy laws
+          (such as Québec&apos;s Law 25), your law society&apos;s or
+          professional body&apos;s rules on confidentiality and cloud
+          services, and, for US firms, the Gramm-Leach-Bliley Act and state
+          privacy laws. Compozor is a tool that helps you meet
           those obligations more efficiently; it doesn&apos;t take on your
           professional or regulatory responsibilities for you.
         </p>
@@ -69,9 +73,10 @@ export default function TermsPage() {
       <LegalSection heading="5. AI-generated content is not professional advice">
         <p>
           Compozor uses AI (including third-party models such as OpenAI&apos;s)
-          to classify documents and to draft — and, depending on your
-          automation settings, to send — communications to your clients. AI
-          output can be inaccurate or inappropriate for a given situation.{" "}
+          to check documents, to prepare work from them, and to draft — and,
+          depending on your automation settings, to send — communications to
+          your clients. AI output can be inaccurate or inappropriate for a
+          given situation.{" "}
           <strong className="text-foreground">
             AI-generated content is not legal, tax, accounting, financial,
             or immigration advice, and Compozor is not a substitute for
@@ -79,14 +84,16 @@ export default function TermsPage() {
           </strong>
         </p>
         <p>
-          You are solely responsible for reviewing and approving any
-          AI-drafted communication before it&apos;s relied upon, and for
-          everything that is sent to your clients under your firm&apos;s
-          name — regardless of whether a human at your firm reviewed a
-          specific message before it went out.
+          You are solely responsible for reviewing any AI-drafted
+          communication or prepared work before it&apos;s relied upon or
+          delivered, and for everything that is sent to your clients under
+          your firm&apos;s name — regardless of whether a human at your firm
+          reviewed a specific message before it went out.
         </p>
         <p>
-          Compozor supports multiple automation levels, up to fully
+          By default, replies Compozor drafts to your clients&apos; messages
+          wait for your approval; reminders and follow-ups that you turn on
+          are sent automatically. Compozor also supports higher automation levels, up to fully
           automatic sending with no per-message human review. Choosing a
           higher automation level is your deliberate decision. If you
           enable automatic sending, you accept full responsibility for the
@@ -108,7 +115,8 @@ export default function TermsPage() {
       <LegalSection heading="7. Third-party services">
         <p>
           Compozor depends on third-party services — including Google,
-          OpenAI, Clerk, and Cloudflare — to operate. We aren&apos;t
+          Microsoft, OpenAI, Railway, Cloudflare, Vercel, and Clerk — to
+          operate. We aren&apos;t
           responsible for outages, changes, or limitations in those
           services that are outside our control.
         </p>
@@ -126,10 +134,11 @@ export default function TermsPage() {
 
       <LegalSection heading="9. Term &amp; termination">
         <p>
-          Either party may terminate access to the service at any time.
-          Following termination, your data will be available for export
-          for a limited period, after which it will be deleted in
-          accordance with our{" "}
+          Either party may terminate access to the service at any time. You
+          can disconnect your mailbox at any time in Compozor or in your
+          Google or Microsoft account settings. Following termination, your
+          data will be available for export for a limited period, after which
+          it will be deleted in accordance with our{" "}
           <Link href="/privacy" className="text-foreground underline underline-offset-2">
             Privacy Policy
           </Link>
@@ -190,8 +199,8 @@ export default function TermsPage() {
       <LegalSection heading="15. Contact us">
         <p>
           Questions about these Terms can be sent to{" "}
-          <a href="mailto:info@compozor.com" className="text-foreground underline underline-offset-2">
-            info@compozor.com
+          <a href="mailto:support@compozor.com" className="text-foreground underline underline-offset-2">
+            support@compozor.com
           </a>
           .
         </p>
