@@ -22,6 +22,38 @@ const links = [
   { href: "/#for-firms", label: "For firms" },
 ];
 
+// The wordmark's four tiles and its name, each clipped from the same image
+// (so it loads once). When the nav contracts on scroll, the tiles turn one
+// after another and the name folds into the mark; both reverse at the top.
+// Clips follow the gaps in compozor-wordmark.png (789x140): the tiles meet
+// at 9% across and 49% down, the mark ends at 17.6%, and the name starts at 19%.
+const LOGO_TILES = [
+  { clip: "inset(0 91% 51% 0)", origin: "4.5% 24.5%" },
+  { clip: "inset(0 82.4% 51% 9%)", origin: "13.3% 24.5%" },
+  { clip: "inset(49% 82.4% 0 9%)", origin: "13.3% 74.5%" },
+  { clip: "inset(49% 91% 0 0)", origin: "4.5% 74.5%" },
+];
+
+function LandingLogo() {
+  const image = { src: "/compozor-wordmark.png", width: 789, height: 140 };
+  return (
+    <span className={styles.logo}>
+      <Image {...image} alt="Compozor" priority className={styles.logoName} />
+      {LOGO_TILES.map((tile, i) => (
+        <Image
+          key={i}
+          {...image}
+          alt=""
+          aria-hidden
+          loading="eager"
+          className={styles.logoTile}
+          style={{ clipPath: tile.clip, transformOrigin: tile.origin, "--tile": i } as React.CSSProperties}
+        />
+      ))}
+    </span>
+  );
+}
+
 export function LandingNav() {
   const headerRef = useRef<HTMLElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -59,14 +91,7 @@ export function LandingNav() {
         className={`${styles.nav} ${glass.light} flex w-full items-center justify-between gap-2 px-5 sm:gap-4 sm:rounded-full sm:px-6`}
       >
         <Link href="/" aria-label="Compozor home" className="shrink-0">
-          <Image
-            src="/compozor-wordmark.png"
-            alt="Compozor"
-            width={789}
-            height={140}
-            priority
-            className={`${styles.logo} w-auto`}
-          />
+          <LandingLogo />
         </Link>
         <div className="hidden items-center gap-7 lg:flex">
           {links.map((link) => (
