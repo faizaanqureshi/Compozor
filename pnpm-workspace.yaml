@@ -1,3 +1,7 @@
 allowBuilds:
   sharp: true
   unrs-resolver: true
+# Security floors for transitive build-time dependencies of next (pnpm audit).
+overrides:
+  browserslist: ">=4.28.7"
+  baseline-browser-mapping: ">=2.11.0"
