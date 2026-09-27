@@ -119,7 +119,7 @@ export function LandingClosing() {
         </div>
         <Image
           data-reveal="later"
-          src="/android-chrome-512x512.png"
+          src="/compozor-mark-white.png"
           alt=""
           width={512}
           height={512}
