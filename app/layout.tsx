@@ -37,11 +37,11 @@ export const metadata: Metadata = {
   robots: { index: false, follow: true },
   manifest: "/site.webmanifest",
   icons: {
-    // icon.svg follows the browser's color scheme: the brand mark on light
-    // chrome, the mark on its own dark tile on dark chrome. The ICO/PNG
-    // fallbacks (Safari, shortcut tiles) always use the tile, which stays
-    // legible on any surface. The ICO must not claim sizes "any", or
-    // Chrome prefers it over the SVG.
+    // Every icon is the white mark on its own brand tile, legible on any
+    // tab strip or shortcut tile. (A color-scheme-aware SVG followed the OS
+    // setting, not Chrome's theme, and vanished on dark themes over a light
+    // OS.) The ICO must not claim sizes "any", or Chrome prefers it over
+    // the SVG.
     icon: [
       { url: "/favicon.ico", sizes: "32x32" },
       { url: "/icon.svg", type: "image/svg+xml" },
