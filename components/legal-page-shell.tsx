@@ -1,5 +1,4 @@
-import Link from "next/link";
-import { ArrowLeftIcon } from "lucide-react";
+import { LegalBackLink } from "@/components/legal-back-link";
 
 // Shared shell for the public legal pages (/privacy, /terms, /cookies) -
 // plain, restrained, readable prose rather than marketing chrome, per
@@ -19,13 +18,7 @@ export function LegalPageShell({
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-10 px-4 py-16 sm:py-20">
       <div className="flex flex-col gap-3">
-        <Link
-          href="/"
-          className="flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeftIcon className="size-3.5" />
-          Back to Compozor
-        </Link>
+        <LegalBackLink>Back to Compozor</LegalBackLink>
         <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
           {title}
         </h1>
