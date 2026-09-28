@@ -14,7 +14,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PortalQuestionnaires } from "@/components/portal-questionnaires";
 import { ProgressRule } from "@/components/stat-strip";
+import type { PortalReadiness, PortalState } from "@/lib/client-portal-api";
+import { portalView } from "@/lib/portal-view";
 import { cn } from "@/lib/utils";
 import {
   MAX_UPLOAD_BATCH_BYTES,
@@ -22,6 +25,7 @@ import {
   PublicChecklist,
   PublicUploadApiError,
   UploadItemStatusOut,
+  UploadLinkInfo,
   completeUploadItem,
   createUploadBatch,
   finalizeUploadBatch,
@@ -86,9 +90,12 @@ export default function PublicUploadPage({
 }) {
   const { token } = use(params);
 
-  const [linkInfo, setLinkInfo] = useState<
-    { client_name: string; organization_name: string } | null | { error: string }
-  >(null);
+  const [linkInfo, setLinkInfo] = useState<UploadLinkInfo | null | { error: string }>(null);
+  // Server-calculated portal readiness: the bootstrap from the link, then
+  // verified portal state. Upload permission is never decided here.
+  const [readiness, setReadiness] = useState<PortalReadiness | null>(null);
+  // A questionnaire is open and takes the full width.
+  const [questionnaireOpen, setQuestionnaireOpen] = useState(false);
   const [checklist, setChecklist] = useState<PublicChecklist | null>(null);
   const [queue, setQueue] = useState<QueueEntry[]>([]);
   const [finalized, setFinalized] = useState(false);
@@ -98,9 +105,12 @@ export default function PublicUploadPage({
   const batchIdRef = useRef<number | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  useEffect(() => {
+  const loadLinkInfo = useCallback(() => {
     getUploadLinkInfo(token)
-      .then(setLinkInfo)
+      .then((info) => {
+        setLinkInfo(info);
+        setReadiness(info.portal ?? null);
+      })
       .catch((e) =>
         setLinkInfo({
           error:
@@ -110,6 +120,17 @@ export default function PublicUploadPage({
         })
       );
   }, [token]);
+
+  useEffect(() => {
+    loadLinkInfo();
+  }, [loadLinkInfo]);
+
+  const onPortalState = useCallback((state: PortalState) => {
+    setReadiness(state.readiness);
+    setChecklist(state.checklist);
+  }, []);
+
+  const onLinkInvalid = useCallback((message: string) => setLinkInfo({ error: message }), []);
 
   const refreshChecklist = useCallback(() => {
     getPublicChecklist(token).then(setChecklist).catch(() => {});
@@ -162,9 +183,12 @@ export default function PublicUploadPage({
           clientError:
             e instanceof PublicUploadApiError ? e.message : "Upload failed. Please retry.",
         });
+        // The server refuses new uploads while a required questionnaire is
+        // outstanding; re-read the portal state instead of guessing.
+        if (e instanceof PublicUploadApiError && e.status === 403) loadLinkInfo();
       }
     },
-    [token, updateEntry]
+    [token, updateEntry, loadLinkInfo]
   );
 
   const startPolling = useCallback(
@@ -227,7 +251,21 @@ export default function PublicUploadPage({
       }
       if (accepted.length === 0) return;
 
-      const id = await ensureBatch();
+      let id: number;
+      try {
+        id = await ensureBatch();
+      } catch (e) {
+        const message = e instanceof PublicUploadApiError ? e.message : "Upload failed. Please retry.";
+        setQueue((prev) => [
+          ...prev,
+          ...accepted.map((file, i) => ({
+            key: `${Date.now()}-err-${i}-${file.name}`, file, itemId: null, clientPhase: "failed" as const,
+            progress: 0, clientError: message, serverStatus: null, serverError: null,
+          })),
+        ]);
+        if (e instanceof PublicUploadApiError && e.status === 403) loadLinkInfo();
+        return;
+      }
       const entries: QueueEntry[] = accepted.map((file, i) => ({
         key: `${Date.now()}-ok-${i}-${file.name}`,
         file,
@@ -241,7 +279,7 @@ export default function PublicUploadPage({
       setQueue((prev) => [...prev, ...entries]);
       await runWithConcurrency(entries, UPLOAD_CONCURRENCY, (entry) => uploadOne(entry, id));
     },
-    [ensureBatch, uploadOne, queue]
+    [ensureBatch, uploadOne, queue, loadLinkInfo]
   );
 
   const retryOne = useCallback(
@@ -322,21 +360,34 @@ export default function PublicUploadPage({
   }
 
   const hasChecklist = checklist !== null && checklist.total > 0;
+  const view = portalView(readiness);
+  const questionnaireState = readiness?.questionnaire_state ?? "none";
+  // Required questionnaires come before documents; optional ones follow them.
+  const questionnairesFirst = questionnaireState === "required_outstanding" || questionnaireState === "required_complete";
+  const loaded = linkInfo !== null;
 
   return (
     <PublicShell firm={firm}>
       <div className="flex flex-col gap-4">
         <p className="flex items-center gap-3 text-[0.6875rem] tracking-widest text-muted-foreground uppercase">
           <span aria-hidden className="h-px w-7 bg-accent" />
-          Document request
+          Client portal
         </p>
         {linkInfo ? (
           <>
             <h1 className="text-[2.5rem] leading-[1.05] font-thin tracking-tight text-balance [font-family:var(--font-denton)] sm:text-5xl lg:text-6xl">
-              {firstName ? `${firstName}, share your documents with ${firm}.` : `Share your documents with ${firm}.`}
+              {view.requiredFirst
+                ? firstName
+                  ? `${firstName}, a few questions before your documents.`
+                  : "A few questions before your documents."
+                : firstName
+                  ? `${firstName}, share your documents with ${firm}.`
+                  : `Share your documents with ${firm}.`}
             </h1>
             <p className="max-w-xl text-[0.9375rem] leading-relaxed text-pretty text-foreground/80">
-              {`Upload everything below in one go. Files go straight to ${firm} over an encrypted connection, and you'll see each one checked off as it's received.`}
+              {view.requiredFirst
+                ? `${firm} needs some answers first. They decide which documents to request, and you can save and come back at any time. Your secure upload opens as soon as you submit.`
+                : `Upload everything below in one go. Files go straight to ${firm} over an encrypted connection, and you'll see each one checked off as it's received.`}
             </p>
           </>
         ) : (
@@ -347,129 +398,164 @@ export default function PublicUploadPage({
         )}
       </div>
 
-      <div
-        className={cn(
-          "grid grid-cols-[minmax(0,1fr)] items-start gap-6",
-          hasChecklist && "lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] lg:gap-8"
-        )}
-      >
-        {hasChecklist && <ChecklistPanel checklist={checklist} />}
+      {loaded && view.showQuestionnaires && (
+        <div className={cn("min-w-0", !questionnairesFirst && "order-last")}>
+          <PortalQuestionnaires
+            token={token}
+            questionnaireState={questionnaireState}
+            organizationName={firm ?? undefined}
+            onState={onPortalState}
+            onLinkInvalid={onLinkInvalid}
+            onFocusChange={setQuestionnaireOpen}
+            onNoQuestionnaires={loadLinkInfo}
+          />
+        </div>
+      )}
 
+      {loaded && !questionnaireOpen && !view.showUploader && (
         <section
           aria-label="Upload files"
+          className="flex w-full flex-col items-start gap-3 rounded-xl bg-card p-5 ring-1 ring-foreground/10 sm:p-6"
+        >
+          <span className="flex size-10 items-center justify-center rounded-full bg-muted text-foreground/70">
+            <Lock className="size-4" />
+          </span>
+          <h2 className="text-[0.9375rem] font-medium tracking-tight">Document upload opens after the questionnaire</h2>
+          <p className="text-sm text-pretty text-muted-foreground">
+            Your answers decide which documents {firm ?? "your firm"} needs. Once you submit, your document checklist and
+            secure upload appear here.
+          </p>
+        </section>
+      )}
+
+      {/* Hidden rather than unmounted while a questionnaire is open, so an
+          in-progress upload queue survives opening an optional questionnaire. */}
+      {loaded && view.showUploader && (
+        <div
           className={cn(
-            "flex min-w-0 flex-col gap-5 rounded-xl bg-card p-5 ring-1 ring-foreground/10 sm:p-6",
-            !hasChecklist && "mx-auto w-full max-w-2xl"
+            "grid grid-cols-[minmax(0,1fr)] items-start gap-6",
+            hasChecklist && "lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] lg:gap-8",
+            questionnaireOpen && "hidden"
           )}
         >
-          {finalized ? (
-            <div className="flex animate-fade-in flex-col items-start gap-3">
-              <span className="flex size-9 items-center justify-center rounded-full bg-success/10 text-success">
-                <Check className="size-4" />
-              </span>
-              <h2 className="text-xl font-light tracking-tight">Sent to {firm ?? "your firm"}.</h2>
-              <p className="text-sm text-pretty text-muted-foreground">
-                Your files are being checked against the request{hasChecklist ? " and will be ticked off as they're matched" : ""}.
-                You can close this page, or add anything you missed.
-              </p>
-              <Button variant="outline" onClick={onUploadMore}>
-                Upload more files
-              </Button>
-            </div>
-          ) : (
-            <>
-              <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <h2 className="text-[0.9375rem] font-medium tracking-tight">Your files</h2>
-                <span className="text-xs text-muted-foreground">
-                  Up to {formatBytes(MAX_UPLOAD_FILE_BYTES)} each · {formatBytes(MAX_UPLOAD_BATCH_BYTES)} in total
+          {hasChecklist && <ChecklistPanel checklist={checklist} />}
+
+          <section
+            aria-label="Upload files"
+            className={cn(
+              "flex min-w-0 flex-col gap-5 rounded-xl bg-card p-5 ring-1 ring-foreground/10 sm:p-6",
+              !hasChecklist && "mx-auto w-full max-w-2xl"
+            )}
+          >
+            {finalized ? (
+              <div className="flex animate-fade-in flex-col items-start gap-3">
+                <span className="flex size-9 items-center justify-center rounded-full bg-success/10 text-success">
+                  <Check className="size-4" />
                 </span>
+                <h2 className="text-xl font-light tracking-tight">Sent to {firm ?? "your firm"}.</h2>
+                <p className="text-sm text-pretty text-muted-foreground">
+                  Your files are being checked against the request{hasChecklist ? " and will be ticked off as they're matched" : ""}.
+                  You can close this page, or add anything you missed.
+                </p>
+                <Button variant="outline" onClick={onUploadMore}>
+                  Upload more files
+                </Button>
               </div>
-              <div
-                role="button"
-                tabIndex={0}
-                aria-label="Choose files to upload"
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  setDragOver(true);
-                }}
-                onDragLeave={() => setDragOver(false)}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  setDragOver(false);
-                  addFiles(Array.from(e.dataTransfer.files ?? []));
-                }}
-                onClick={() => fileInputRef.current?.click()}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    fileInputRef.current?.click();
-                  }
-                }}
-                className={cn(
-                  "flex cursor-pointer flex-col items-center justify-center gap-3 rounded-lg border border-dashed px-6 text-center transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
-                  queue.length > 0 ? "py-8" : "py-14",
-                  dragOver ? "border-foreground/50 bg-muted/60" : "border-foreground/20 hover:border-foreground/35 hover:bg-muted/30"
-                )}
-              >
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  accept={ACCEPT}
-                  className="hidden"
-                  onChange={(e) => {
-                    addFiles(Array.from(e.target.files ?? []));
-                    e.target.value = "";
-                  }}
-                />
-                <span className="flex size-10 items-center justify-center rounded-full bg-muted text-foreground/70">
-                  <Upload className="size-4" />
-                </span>
-                <div className="flex flex-col gap-1">
-                  <p className="text-sm">
-                    <span className="font-medium">Choose files</span>
-                    <span className="text-muted-foreground"> or drag them here</span>
-                  </p>
-                  <p className="text-xs text-muted-foreground">PDFs, photos, spreadsheets and documents. Add as many as you need.</p>
+            ) : (
+              <>
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <h2 className="text-[0.9375rem] font-medium tracking-tight">Your files</h2>
+                  <span className="text-xs text-muted-foreground">
+                    Up to {formatBytes(MAX_UPLOAD_FILE_BYTES)} each · {formatBytes(MAX_UPLOAD_BATCH_BYTES)} in total
+                  </span>
                 </div>
-              </div>
-            </>
-          )}
+                <div
+                  role="button"
+                  tabIndex={0}
+                  aria-label="Choose files to upload"
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setDragOver(true);
+                  }}
+                  onDragLeave={() => setDragOver(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setDragOver(false);
+                    addFiles(Array.from(e.dataTransfer.files ?? []));
+                  }}
+                  onClick={() => fileInputRef.current?.click()}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      fileInputRef.current?.click();
+                    }
+                  }}
+                  className={cn(
+                    "flex cursor-pointer flex-col items-center justify-center gap-3 rounded-lg border border-dashed px-6 text-center transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+                    queue.length > 0 ? "py-8" : "py-14",
+                    dragOver ? "border-foreground/50 bg-muted/60" : "border-foreground/20 hover:border-foreground/35 hover:bg-muted/30"
+                  )}
+                >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    accept={ACCEPT}
+                    className="hidden"
+                    onChange={(e) => {
+                      addFiles(Array.from(e.target.files ?? []));
+                      e.target.value = "";
+                    }}
+                  />
+                  <span className="flex size-10 items-center justify-center rounded-full bg-muted text-foreground/70">
+                    <Upload className="size-4" />
+                  </span>
+                  <div className="flex flex-col gap-1">
+                    <p className="text-sm">
+                      <span className="font-medium">Choose files</span>
+                      <span className="text-muted-foreground"> or drag them here</span>
+                    </p>
+                    <p className="text-xs text-muted-foreground">PDFs, photos, spreadsheets and documents. Add as many as you need.</p>
+                  </div>
+                </div>
+              </>
+            )}
 
-          {queue.length > 0 && (
-            <div className="flex flex-col gap-3">
-              <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-                <span className="tabular-nums">
-                  {uploadedCount} of {queue.length} uploaded
-                  {failedCount > 0 && <span className="text-destructive"> · {failedCount} failed</span>}
+            {queue.length > 0 && (
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                  <span className="tabular-nums">
+                    {uploadedCount} of {queue.length} uploaded
+                    {failedCount > 0 && <span className="text-destructive"> · {failedCount} failed</span>}
+                  </span>
+                </div>
+                <ProgressRule value={uploadedCount} total={queue.length} className="w-full" />
+                <ul className="flex max-h-96 flex-col divide-y divide-border/60 overflow-y-auto rounded-lg ring-1 ring-foreground/10">
+                  {queue.map((entry) => (
+                    <QueueRow key={entry.key} entry={entry} onRetry={() => retryOne(entry)} onRemove={() => removeOne(entry)} />
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {!finalized && queue.length > 0 && (
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-4">
+                <span className={cn("text-xs", hasUnresolvedFailures && !isUploading ? "text-destructive" : "text-muted-foreground")}>
+                  {isUploading
+                    ? "Keep this page open until uploading finishes."
+                    : hasUnresolvedFailures
+                      ? "Retry or remove the files that failed before sending."
+                      : "Everything's uploaded. Send when you're ready."}
                 </span>
+                <Button disabled={!canCompleteUpload} onClick={() => setConfirmOpen(true)}>
+                  {isUploading && <Loader2 className="animate-spin" />}
+                  {isUploading ? "Uploading…" : `Send to ${firm ?? "your firm"}`}
+                </Button>
               </div>
-              <ProgressRule value={uploadedCount} total={queue.length} className="w-full" />
-              <ul className="flex max-h-96 flex-col divide-y divide-border/60 overflow-y-auto rounded-lg ring-1 ring-foreground/10">
-                {queue.map((entry) => (
-                  <QueueRow key={entry.key} entry={entry} onRetry={() => retryOne(entry)} onRemove={() => removeOne(entry)} />
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {!finalized && queue.length > 0 && (
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-4">
-              <span className={cn("text-xs", hasUnresolvedFailures && !isUploading ? "text-destructive" : "text-muted-foreground")}>
-                {isUploading
-                  ? "Keep this page open until uploading finishes."
-                  : hasUnresolvedFailures
-                    ? "Retry or remove the files that failed before sending."
-                    : "Everything's uploaded. Send when you're ready."}
-              </span>
-              <Button disabled={!canCompleteUpload} onClick={() => setConfirmOpen(true)}>
-                {isUploading && <Loader2 className="animate-spin" />}
-                {isUploading ? "Uploading…" : `Send to ${firm ?? "your firm"}`}
-              </Button>
-            </div>
-          )}
-        </section>
-      </div>
+            )}
+          </section>
+        </div>
+      )}
 
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent>

@@ -20,6 +20,7 @@ export const clientMeetingsKey = (clientId: number) => ["client-meetings", clien
 export const workflowsKey = () => ["workflows"] as const;
 
 export const packagesKey = () => ["packages"] as const;
+export const questionnairesKey = (includeArchived = false) => ["questionnaires", includeArchived] as const;
 
 // Client detail page sections. Cached so reopening a client renders the last
 // known state immediately and revalidates in the background.
@@ -31,6 +32,8 @@ export const clientMemoryNotesKey = (clientId: number) => ["client-memory-notes"
 export const clientCommitmentsKey = (clientId: number) => ["client-commitments", clientId] as const;
 // Written by the page's live workflow refresher (SSE + polling), not fetched by SWR.
 export const clientWorkflowSnapshotKey = (clientId: number) => ["client-workflow-snapshot", clientId] as const;
+export const clientQuestionnairesKey = (clientId: number) => ["client-questionnaires", clientId] as const;
+export const clientQuestionnaireReviewsKey = (clientId: number) => ["client-questionnaire-reviews", clientId] as const;
 
 export const unmatchedEmailsKey = (filters?: {
   review_status?: InboundEmailReviewStatus;

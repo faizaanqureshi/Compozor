@@ -228,3 +228,26 @@ test("resend confirmation is structured and never enabled on a normal Send", asy
     globalThis.window = originalWindow;
   }
 });
+
+test('questionnaire PDF uses authenticated, explicit, uncached access', async () => withBrowser(
+  { loaded: true, session: { getToken: async () => 'staff-token' } }, '/clients/7', async () => {
+    const api = await import('../lib/api.ts');
+    const originalFetch = globalThis.fetch;
+    const calls = [];
+    globalThis.fetch = async (url, init) => {
+      const request = new Request(url, init);
+      calls.push(request);
+      assert.equal(new URL(url).pathname, '/clients/7/questionnaire-assignments/4/submissions/9/pdf');
+      assert.equal(request.headers.get('authorization'), 'Bearer staff-token');
+      if (request.method === 'POST') return Response.json({ submission_id: 9, status: 'pending' });
+      assert.equal(request.headers.get('X-Confirm-Sensitive-Access'), 'true');
+      assert.equal(init.cache, 'no-store');
+      return new Response(new Blob(['%PDF-fixture'], { type: 'application/pdf' }));
+    };
+    try {
+      assert.equal((await api.requestQuestionnairePdf(7, 4, 9)).status, 'pending');
+      assert.equal(await (await api.downloadQuestionnairePdf(7, 4, 9)).text(), '%PDF-fixture');
+      assert.deepEqual(calls.map((call) => call.method), ['POST', 'GET']);
+    } finally { globalThis.fetch = originalFetch; }
+  },
+));

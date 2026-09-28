@@ -85,6 +85,8 @@ import {
   runQueuedWorkflowRun,
   sendChecklistItemReminder,
   sendChecklistReminder,
+  sendEmailLogEntry,
+  createQuestionnairePortalEmail,
   subscribeToEmailLogStream,
   unassignPackageFromClient,
   unassignWorkflowFromClient,
@@ -107,6 +109,8 @@ import {
   documentCategoryOptions,
   filterDocumentsByCategory,
 } from "@/lib/document-categories";
+import { ClientQuestionnairesCard } from "@/components/client-questionnaires-card";
+import { QuestionnairePdfAccess } from "@/components/questionnaire-pdf-access";
 import { ChecklistItemFormDialog } from "@/components/checklist-item-form-dialog";
 import {
   Accordion,
@@ -296,7 +300,6 @@ export default function ClientDetailPage({
         client={client}
         onChange={refresh}
         onAssignPackage={() => setAssignPackageOpen(true)}
-        onDeleted={() => router.push("/clients")}
       />
 
       <ClientSummary
@@ -329,6 +332,8 @@ export default function ClientDetailPage({
             onEditPackage={() => setAssignPackageOpen(true)}
           />
 
+          <ClientQuestionnairesCard clientId={clientId} />
+
           <WorkflowRunsCard
             clientId={clientId}
             runs={workflowRuns}
@@ -351,9 +356,11 @@ export default function ClientDetailPage({
         {/* Grid on tablets (cards top-aligned), a full-width column beside the main content on xl. */}
         <aside className="grid min-w-0 items-start gap-6 md:grid-cols-2 xl:flex xl:flex-col xl:items-stretch">
           <ClientDetailsCard
+            clientId={clientId}
             client={client}
             checklist={checklist}
-            onManagePackages={() => setAssignPackageOpen(true)}
+            onChange={refresh}
+            onDeleted={() => router.push("/clients")}
           />
 
           <WaitingOnCard
@@ -384,13 +391,11 @@ function ClientHeader({
   client,
   onChange,
   onAssignPackage,
-  onDeleted,
 }: {
   clientId: number;
   client: ClientDetail | null;
   onChange: () => void;
   onAssignPackage: () => void;
-  onDeleted: () => void;
 }) {
   const [sending, setSending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -445,10 +450,7 @@ function ClientHeader({
           </div>
           <div className="flex flex-col items-start gap-2 lg:items-end">
             <div className="flex flex-wrap items-center gap-1.5">
-              <EditClientButton client={client} onUpdated={onChange} />
-              <DeleteClientButton clientId={clientId} clientName={client.name} onDeleted={onDeleted} />
-              <span aria-hidden className="mx-1 h-5 w-px bg-border" />
-              <PackageFormDialog onSaved={onChange} variant="ghost" />
+              <PackageFormDialog onSaved={onChange} variant="outline" />
               <Button variant="outline" onClick={onAssignPackage}>
                 <Plus />
                 Assign package
@@ -582,13 +584,17 @@ function ClientSummary({
 }
 
 function ClientDetailsCard({
+  clientId,
   client,
   checklist,
-  onManagePackages,
+  onChange,
+  onDeleted,
 }: {
+  clientId: number;
   client: ClientDetail | null;
   checklist: ChecklistSummary | null;
-  onManagePackages: () => void;
+  onChange: () => void;
+  onDeleted: () => void;
 }) {
   const packageNames = Array.from(
     new Set((checklist?.items ?? []).map((i) => i.package_name).filter((n): n is string => Boolean(n)))
@@ -632,9 +638,12 @@ function ClientDetailsCard({
     <Panel
       title="Details"
       action={
-        <Button variant="ghost" size="sm" onClick={onManagePackages}>
-          Manage packages
-        </Button>
+        client && (
+          <>
+            <EditClientButton client={client} onUpdated={onChange} />
+            <DeleteClientButton clientId={clientId} clientName={client.name} onDeleted={onDeleted} />
+          </>
+        )
       }
     >
       {client === null ? (
@@ -1889,7 +1898,7 @@ function DocumentVaultCard({
           {documents && documents.length > 0 && (
             <Button variant="ghost" size="sm" disabled={downloading} onClick={onDownloadZip}>
               {downloading ? <Loader2 className="animate-spin" /> : <Download />}
-              {downloading ? "Zipping…" : "Download all"}
+              {downloading ? "Zipping…" : "Download uploads"}
             </Button>
           )}
           <Button variant="outline" size="sm" disabled={submitting} onClick={() => fileInputRef.current?.click()}>
@@ -1987,14 +1996,14 @@ function DocumentVaultCard({
                     <div className="text-xs font-normal text-muted-foreground">{doc.classified_type}</div>
                   )}
                   <div className="mt-2 md:hidden">
-                    <DocumentValidationResult metadata={doc.extracted_metadata} collected={item?.status === "received"} />
+                    {doc.source_channel === "generated_questionnaire" ? "Internal record" : <DocumentValidationResult metadata={doc.extracted_metadata} collected={item?.status === "received"} />}
                   </div>
                 </td>
                 <td className="hidden py-2 pr-4 text-muted-foreground md:table-cell">
                   {sourceChannelLabel(doc.source_channel)}
                 </td>
                 <td className="hidden py-2 pr-4 md:table-cell">
-                  <DocumentValidationResult metadata={doc.extracted_metadata} collected={item?.status === "received"} />
+                  {doc.source_channel === "generated_questionnaire" ? "Internal record" : <DocumentValidationResult metadata={doc.extracted_metadata} collected={item?.status === "received"} />}
                 </td>
                 <td className="hidden py-2 pr-4 text-right text-muted-foreground md:table-cell">
                   {doc.year ?? "—"}
@@ -2021,6 +2030,7 @@ const SOURCE_CHANNEL_LABELS: Record<string, string> = {
   manual_upload: "Manual upload",
   email: "Email",
   upload_link: "Upload link",
+  generated_questionnaire: "Questionnaire",
 };
 
 function sourceChannelLabel(source: string | null): string {
@@ -2111,6 +2121,13 @@ function DocumentActions({
     }
   };
 
+  if (doc.source_channel === "generated_questionnaire") {
+    return doc.questionnaire_submission_id && doc.questionnaire_assignment_id
+      ? <QuestionnairePdfAccess clientId={clientId} assignmentId={doc.questionnaire_assignment_id}
+          submissionId={doc.questionnaire_submission_id}
+          snapshot={{ submission_id: doc.questionnaire_submission_id, document_id: doc.id, status: "ready", attempt_count: 1, failure_code: null, generated_at: doc.received_at, retrospective: false }} />
+      : <span className="text-xs text-muted-foreground">Unavailable</span>;
+  }
   return (
     <div className="flex items-center justify-end gap-2">
       {error && <p className="text-xs text-destructive">{error}</p>}
@@ -2217,6 +2234,7 @@ function UploadLinkCard({ clientId }: { clientId: number }) {
   const [events, setEvents] = useState<UploadLinkEvent[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(() => {
@@ -2259,6 +2277,21 @@ function UploadLinkCard({ clientId }: { clientId: number }) {
     }
   };
 
+  const onSendPortal = async () => {
+    setBusy(true);
+    setError(null);
+    setSent(false);
+    try {
+      const draft = await createQuestionnairePortalEmail(clientId);
+      await sendEmailLogEntry(clientId, draft.id);
+      setSent(true);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <Panel
       title="Upload link"
@@ -2281,6 +2314,10 @@ function UploadLinkCard({ clientId }: { clientId: number }) {
                   {copied ? <CheckCircle2 className="text-accent" /> : <Copy />}
                   {copied ? "Copied" : "Copy"}
                 </Button>
+                <Button size="sm" disabled={busy} onClick={onSendPortal}>
+                  {busy ? <Loader2 className="animate-spin" /> : <Mail />}
+                  Send
+                </Button>
               </div>
               <p className="text-xs text-muted-foreground">
                 Expires {formatShortDate(link.expires_at, true)}
@@ -2297,6 +2334,7 @@ function UploadLinkCard({ clientId }: { clientId: number }) {
             <p className="text-sm text-muted-foreground">No upload link has been created yet.</p>
           )}
 
+          {sent && <p className="text-sm text-accent">Portal link sent. It is recorded in the Email Log.</p>}
           {error && <p className="text-sm text-destructive">{error}</p>}
 
 

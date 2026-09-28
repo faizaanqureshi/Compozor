@@ -12,7 +12,7 @@ import {
   updatePackage,
 } from "@/lib/api";
 import { organizationKey } from "@/lib/swr-keys";
-import { exampleDocTypeFor } from "@/lib/practice-types";
+import { exampleDocTypeFor, examplePackageNameFor } from "@/lib/practice-types";
 import { Button, buttonVariants } from "@/components/ui/button";
 import type { VariantProps } from "class-variance-authority";
 import { Input } from "@/components/ui/input";
@@ -140,7 +140,7 @@ export function PackageFormDialog({
               <Input
                 id="package-name"
                 required
-                placeholder="Standard T1 Personal Tax Return"
+                placeholder={examplePackageNameFor(org?.practice_type)}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
               />
