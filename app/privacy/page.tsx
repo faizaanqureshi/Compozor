@@ -183,9 +183,7 @@ export default function PrivacyPolicyPage() {
           other applicable laws. Compozor processes that information only on
           the firm&apos;s behalf, as its service provider. Firms in the
           United States subject to the Gramm-Leach-Bliley Act and the FTC
-          Safeguards Rule may rely on this section, together with a
-          data-processing or security addendum available on request, to
-          document our role.
+          Safeguards Rule may rely on this section to document our role.
         </p>
       </LegalSection>
 

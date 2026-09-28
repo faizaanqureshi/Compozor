@@ -137,9 +137,10 @@ export default function TermsPage() {
         <p>
           Either party may terminate access to the service at any time. You
           can disconnect your mailbox at any time in Compozor or in your
-          Google or Microsoft account settings. Following termination, your
-          data will be available for export for a limited period, after which
-          it will be deleted in accordance with our{" "}
+          Google or Microsoft account settings. You can download your
+          clients&apos; documents from Compozor at any time before your access
+          ends. Following termination, your data will be deleted in
+          accordance with our{" "}
           <Link href="/privacy" className="text-foreground underline underline-offset-2">
             Privacy Policy
           </Link>
