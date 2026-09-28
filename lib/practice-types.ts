@@ -1,6 +1,7 @@
 // Single source of truth for the practice-type presets, their default
 // practice_description seeds, and example document-type text for the
-// checklist/package "doc type" placeholders. Used by onboarding
+// checklist/package "doc type" placeholders and the package-name
+// placeholder. Used by onboarding
 // (app/onboarding/page.tsx), Settings' Organization section
 // (app/settings/page.tsx), and the two "Add requirement" style form
 // placeholders so none of them drift into separate lists - see
@@ -18,9 +19,13 @@ export type PracticeCategory = {
   label: string;
   seed: string;
   exampleDocTypes: string;
+  // Placeholder for a new package's name; mirrors one of the starter
+  // packages in the backend's package_seeds.py for this practice type.
+  examplePackageName: string;
 };
 
 const DEFAULT_EXAMPLE_DOC_TYPES = "e.g. T4, T4A, T5, NOA, bank_statement, qbo_export, receipt";
+const DEFAULT_EXAMPLE_PACKAGE_NAME = "New Client Onboarding";
 
 export const PRACTICE_CATEGORIES: PracticeCategory[] = [
   {
@@ -28,30 +33,35 @@ export const PRACTICE_CATEGORIES: PracticeCategory[] = [
     label: "Accounting",
     seed: "an accounting firm helping clients gather tax documents",
     exampleDocTypes: DEFAULT_EXAMPLE_DOC_TYPES,
+    examplePackageName: "Standard T1 Personal Tax Return",
   },
   {
     value: "immigration",
     label: "Immigration Consultant",
     seed: "an immigration consulting firm helping clients gather application documents",
     exampleDocTypes: "e.g. Passport, IELTS, ECA Report, Police Clearance, Letter of Acceptance",
+    examplePackageName: "Express Entry / Permanent Residency",
   },
   {
     value: "law",
     label: "Law Firm",
     seed: "a law firm helping clients gather documents for real estate closings and family law matters",
     exampleDocTypes: "e.g. Government ID, Agreement of Purchase and Sale, Mortgage Commitment Letter, NOA",
+    examplePackageName: "Real Estate Purchase (Buyer)",
   },
   {
     value: "mortgage",
     label: "Mortgage Broker",
     seed: "a mortgage brokerage helping clients gather loan application documents",
     exampleDocTypes: "e.g. Pay Stub, Letter of Employment, 90-Day Bank History, NOA, T1 General",
+    examplePackageName: "Standard T4 Employee Purchase",
   },
   {
     value: "other",
     label: "Other",
     seed: "",
     exampleDocTypes: DEFAULT_EXAMPLE_DOC_TYPES,
+    examplePackageName: DEFAULT_EXAMPLE_PACKAGE_NAME,
   },
 ];
 
@@ -77,4 +87,11 @@ export function exampleDocTypesFor(practiceType: string | null | undefined): str
 export function exampleDocTypeFor(practiceType: string | null | undefined): string {
   const withoutPrefix = exampleDocTypesFor(practiceType).replace(/^e\.g\.\s*/i, "");
   return withoutPrefix.split(",")[0]?.trim() ?? withoutPrefix;
+}
+
+// For the new-package name placeholder - same fallback rules as
+// exampleDocTypesFor, but with a practice-neutral name so an "Other" or
+// custom practice type isn't shown a tax-specific suggestion.
+export function examplePackageNameFor(practiceType: string | null | undefined): string {
+  return practiceCategoryForLabel(practiceType)?.examplePackageName ?? DEFAULT_EXAMPLE_PACKAGE_NAME;
 }
