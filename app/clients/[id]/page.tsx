@@ -288,7 +288,6 @@ export default function ClientDetailPage({
         client={client}
         onChange={refresh}
         onAssignPackage={() => setAssignPackageOpen(true)}
-        onDeleted={() => router.push("/clients")}
       />
 
       <ClientSummary
@@ -343,9 +342,11 @@ export default function ClientDetailPage({
         {/* Grid on tablets (cards top-aligned), a full-width column beside the main content on xl. */}
         <aside className="grid min-w-0 items-start gap-6 md:grid-cols-2 xl:flex xl:flex-col xl:items-stretch">
           <ClientDetailsCard
+            clientId={clientId}
             client={client}
             checklist={checklist}
-            onManagePackages={() => setAssignPackageOpen(true)}
+            onChange={refresh}
+            onDeleted={() => router.push("/clients")}
           />
 
           <WaitingOnCard
@@ -376,13 +377,11 @@ function ClientHeader({
   client,
   onChange,
   onAssignPackage,
-  onDeleted,
 }: {
   clientId: number;
   client: ClientDetail | null;
   onChange: () => void;
   onAssignPackage: () => void;
-  onDeleted: () => void;
 }) {
   const [sending, setSending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -437,9 +436,6 @@ function ClientHeader({
           </div>
           <div className="flex flex-col items-start gap-2 lg:items-end">
             <div className="flex flex-wrap items-center gap-1.5">
-              <EditClientButton client={client} onUpdated={onChange} />
-              <DeleteClientButton clientId={clientId} clientName={client.name} onDeleted={onDeleted} />
-              <span aria-hidden className="mx-1 h-5 w-px bg-border" />
               <PackageFormDialog onSaved={onChange} variant="ghost" />
               <Button variant="outline" onClick={onAssignPackage}>
                 <Plus />
@@ -574,13 +570,17 @@ function ClientSummary({
 }
 
 function ClientDetailsCard({
+  clientId,
   client,
   checklist,
-  onManagePackages,
+  onChange,
+  onDeleted,
 }: {
+  clientId: number;
   client: ClientDetail | null;
   checklist: ChecklistSummary | null;
-  onManagePackages: () => void;
+  onChange: () => void;
+  onDeleted: () => void;
 }) {
   const packageNames = Array.from(
     new Set((checklist?.items ?? []).map((i) => i.package_name).filter((n): n is string => Boolean(n)))
@@ -624,9 +624,12 @@ function ClientDetailsCard({
     <Panel
       title="Details"
       action={
-        <Button variant="ghost" size="sm" onClick={onManagePackages}>
-          Manage packages
-        </Button>
+        client && (
+          <>
+            <EditClientButton client={client} onUpdated={onChange} />
+            <DeleteClientButton clientId={clientId} clientName={client.name} onDeleted={onDeleted} />
+          </>
+        )
       }
     >
       {client === null ? (
