@@ -6,7 +6,7 @@ export const metadata = publicPageMetadata("/cookies");
 
 export default function CookiePolicyPage() {
   return (
-    <LegalPageShell title="Cookie Policy" lastUpdated="September 27, 2026">
+    <LegalPageShell title="Cookie Policy" lastUpdated="September 28, 2026">
       <LegalSection heading="1. What cookies are">
         <p>
           Cookies are small pieces of data stored in your browser. They can
@@ -23,7 +23,8 @@ export default function CookiePolicyPage() {
         <ul className="ml-5 list-disc space-y-1">
           <li><strong className="text-foreground">Sign-in cookies</strong> set by our authentication provider, Clerk, which keep you signed in and protect your session.</li>
           <li><strong className="text-foreground">Mailbox connection cookies</strong> (<code className="rounded bg-muted px-1 py-0.5 text-xs">gmail_oauth_state</code>, <code className="rounded bg-muted px-1 py-0.5 text-xs">outlook_oauth_state</code>) set for up to 10 minutes only while you connect a Gmail or Outlook mailbox, so that only your browser can complete the connection.</li>
-          <li><strong className="text-foreground">Browser storage</strong> that remembers your progress through the product tour and an in-progress client import.</li>
+          <li><strong className="text-foreground">Client portal cookie</strong> (<code className="rounded bg-muted px-1 py-0.5 text-xs">compozor_portal_session</code>) set after a firm&apos;s client confirms their email with a one-time code. It keeps them signed in to the questionnaire portal for up to 4 hours, and ends after 30 minutes of inactivity.</li>
+          <li><strong className="text-foreground">Browser storage</strong> that remembers your progress through the product tour, an in-progress client import, and which questionnaire builder sections you have collapsed.</li>
         </ul>
         <p>
           We do not use any advertising, marketing, or analytics cookies, and

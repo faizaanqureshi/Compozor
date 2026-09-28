@@ -8,7 +8,7 @@ full before making the change. It is the source of truth for:
 
 - the brand posture (restrained, purposeful, "old-money" — not decorative)
 - semantic color tokens (never raw hex/arbitrary Tailwind colors)
-- typography (PP Neue Montreal for UI, Denton reserved for hero-scale display)
+- typography (Geist for UI, Fraunces reserved for hero-scale display)
 - spacing/radius/surface conventions
 - motion conventions (`animate-blur-in` / `animate-blur-in-sm`, no bouncy easing)
 - how urgency/status should be expressed (copy/structure → weight → accent → destructive)

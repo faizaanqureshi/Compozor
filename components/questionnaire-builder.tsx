@@ -768,7 +768,7 @@ export function QuestionnaireBuilder({ template, versions, onSaved, importMode, 
 
   return <div className="flex flex-col gap-6">
     <div className="flex flex-col gap-4">
-      <input aria-label="Questionnaire name" autoFocus={!template} className="w-full min-w-0 bg-transparent text-3xl leading-tight font-thin sm:text-4xl tracking-tight outline-none [font-family:var(--font-denton)] placeholder:text-muted-foreground/60 md:text-5xl" value={name} placeholder="Untitled questionnaire" onChange={(e) => setName(e.target.value)} />
+      <input aria-label="Questionnaire name" autoFocus={!template} className="w-full min-w-0 bg-transparent text-3xl leading-tight font-light sm:text-4xl tracking-tight outline-none [font-family:var(--font-display)] placeholder:text-muted-foreground/60 md:text-5xl" value={name} placeholder="Untitled questionnaire" onChange={(e) => setName(e.target.value)} />
       <Textarea aria-label="Questionnaire description" rows={1} className="min-h-9 max-w-3xl resize-none border-transparent bg-transparent px-0 text-sm text-muted-foreground shadow-none focus-visible:border-input focus-visible:px-2.5" value={description} placeholder="Add a description for your team (optional)" onChange={(e) => setDescription(e.target.value)} />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <span role="status" className={`text-xs ${status?.error ? "text-destructive" : "text-muted-foreground"}`}>{statusText}{importMode ? "" : latestVersion ? ` · Latest published: version ${latestVersion}` : " · Not published"}</span>

@@ -125,7 +125,7 @@ export default function UnmatchedEmailsPage() {
   return (
     <div className="flex h-[calc(100vh-6.5rem)] w-full flex-col gap-6 md:h-[calc(100vh-3rem)] xl:h-[calc(100vh-5rem)]">
       <div className="flex flex-col gap-1.5">
-        <h1 className="text-4xl leading-tight font-thin tracking-tight [font-family:var(--font-denton)] md:text-5xl">
+        <h1 className="text-4xl leading-tight font-light tracking-tight [font-family:var(--font-display)] md:text-5xl">
           Unmatched emails
         </h1>
         <p className="text-sm text-pretty text-muted-foreground">

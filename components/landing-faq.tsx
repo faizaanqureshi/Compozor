@@ -14,7 +14,7 @@ export function LandingFaq() {
     <section
       className={`${styles.faq} mx-auto grid max-w-7xl gap-8 px-6 py-16 sm:gap-10 sm:px-10 sm:py-28 md:grid-cols-[0.7fr_1fr] md:gap-24`}
     >
-      <h2 data-reveal="focus" className="text-4xl font-thin tracking-tight [font-family:var(--font-denton)] sm:text-3xl sm:font-light sm:[font-family:inherit]">
+      <h2 data-reveal="focus" className="text-4xl font-light tracking-tight [font-family:var(--font-display)] sm:text-3xl sm:font-light sm:[font-family:inherit]">
         A few things
         <br />
         you might be wondering.
