@@ -4,6 +4,16 @@ export function onboardingDestination(completed: boolean, pathname: string, sear
   return null;
 }
 
+// Onboarding is a full-screen, fixed-position page with no dashboard chrome
+// (nav, top bar and background already hide themselves there). The app shell
+// renders it without its animated page wrapper: that wrapper keeps a
+// filter/transform after its entrance animation, which makes it the
+// containing block for position: fixed and collapsed onboarding to zero
+// height - a blank page for every new account.
+export function isOnboardingPage(pathname: string | null): boolean {
+  return pathname === "/onboarding" || !!pathname?.startsWith("/onboarding/");
+}
+
 export function mailboxResult(search: string): { error?: string; success?: string } | null {
   const params = new URLSearchParams(search);
   const provider = params.has("outlook") ? "outlook" : "gmail";
