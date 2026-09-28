@@ -4,24 +4,24 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import useSWR from "swr";
 import { Eye, FileQuestion, Plus, RefreshCw, StopCircle } from "lucide-react";
 import { Panel } from "@/components/panel";
+import { AssignQuestionnaireDialog } from "@/components/assign-questionnaire-dialog";
+import { hasNewerVersion } from "@/lib/questionnaire-assignment";
 import { QuestionnairePdfAccess } from "@/components/questionnaire-pdf-access";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
-import { Switch } from "@/components/ui/switch";
 import {
-  ApiError, assignQuestionnaire, cancelQuestionnaireAssignment, getQuestionnaireSubmissions,
+  ApiError, cancelQuestionnaireAssignment, getQuestionnaireSubmissions,
   listClientQuestionnaireAssignments, listQuestionnaireReviewProposals, listQuestionnaireTemplates,
   listQuestionnaireVersions, resolveQuestionnaireReviewProposal, supersedeQuestionnaireAssignment,
   type QuestionnaireAssignment, type QuestionnaireAssignmentDetail, type QuestionnaireReviewProposal,
-  type QuestionnaireTemplate, type QuestionnaireVersion,
+  type QuestionnaireVersion,
 } from "@/lib/api";
 import { clientQuestionnaireReviewsKey, clientQuestionnairesKey, questionnairesKey } from "@/lib/swr-keys";
 import { QuestionnaireContext, formatAnswer, type QuestionDefinition, type QuestionnaireDefinition, type Scope } from "@/lib/questionnaire-logic";
 
-export function ClientQuestionnairesCard({ clientId }: { clientId: number }) {
+export function ClientQuestionnairesCard({ clientId, clientName }: { clientId: number; clientName?: string }) {
   const assignments = useSWR(clientQuestionnairesKey(clientId), () => listClientQuestionnaireAssignments(clientId));
   const reviews = useSWR(clientQuestionnaireReviewsKey(clientId), () => listQuestionnaireReviewProposals(clientId));
   const templates = useSWR(questionnairesKey(false), () => listQuestionnaireTemplates(false));
@@ -31,11 +31,12 @@ export function ClientQuestionnairesCard({ clientId }: { clientId: number }) {
   const refresh = () => { void assignments.mutate(); void reviews.mutate(); };
   return <>
     <Panel title="Questionnaires" meta={assignments.data ? `${assignments.data.length}` : undefined} loadError={assignments.error ? String(assignments.error) : null} action={<Button size="sm" variant="outline" onClick={() => setAssignOpen(true)}><Plus /> Assign</Button>}>
-      {!assignments.data ? <p className="text-sm text-muted-foreground">Loading questionnaires…</p> : assignments.data.length === 0 ? <p className="text-sm text-muted-foreground">No questionnaires assigned. Assignments are always explicit and optional by default.</p> : <ul className="divide-y divide-border/50">{assignments.data.map((a) => <li key={a.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="flex items-center gap-2 text-sm font-medium"><FileQuestion className="size-4" /> {a.questionnaire_name} <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-normal">v{a.version_number}</span></p><p className="mt-1 text-xs text-muted-foreground">{a.is_required ? "Required" : "Optional"} · {a.respondent_identifier} · {a.reporting_period_label || a.reporting_period_key} · {a.status.replaceAll("_", " ")}</p></div><div className="flex flex-wrap gap-1"><Button size="sm" variant="ghost" onClick={() => setViewing(a)}><Eye /> {a.status === "submitted" ? "View answers" : "Details"}</Button>{!['cancelled','superseded'].includes(a.status) && <><Button size="sm" variant="ghost" onClick={() => setSuperseding(a)}><RefreshCw /> Supersede</Button><Button size="sm" variant="ghost" className="text-destructive" onClick={() => setCancelling(a)}><StopCircle /> Cancel</Button></>}</div></li>)}</ul>}
+      {!assignments.data ? <p className="text-sm text-muted-foreground">Loading questionnaires…</p> : assignments.data.length === 0 ? <p className="text-sm text-muted-foreground">No questionnaires assigned. Assignments are always explicit and optional by default.</p> : <ul className="divide-y divide-border/50">{assignments.data.map((a) => <li key={a.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="flex items-center gap-2 text-sm font-medium"><FileQuestion className="size-4" /> {a.questionnaire_name}</p><p className="mt-1 text-xs text-muted-foreground">{assignmentDetails(a)}</p></div><div className="flex flex-wrap gap-1"><Button size="sm" variant="ghost" onClick={() => setViewing(a)}><Eye /> {a.status === "submitted" ? "View answers" : "Details"}</Button>{!['cancelled','superseded'].includes(a.status) && <>{hasNewerVersion(a, templates.data) && <Button size="sm" variant="ghost" onClick={() => setSuperseding(a)}><RefreshCw /> Update to latest</Button>}<Button size="sm" variant="ghost" className="text-destructive" onClick={() => setCancelling(a)}><StopCircle /> Cancel</Button></>}</div></li>)}</ul>}
     </Panel>
     {cancelling && <CancelAssignmentDialog clientId={clientId} assignment={cancelling} onClose={() => setCancelling(null)} onCancelled={refresh} />}
     {(reviews.data?.length ?? 0) > 0 && <Panel title="Questionnaire reviews" meta={`${reviews.data!.length} pending`}><div className="flex flex-col gap-3">{reviews.data!.map((review) => <ReviewRow key={review.id} review={review} clientId={clientId} onResolved={refresh} />)}</div></Panel>}
-    <AssignmentDialog clientId={clientId} templates={templates.data ?? []} open={assignOpen || !!superseding} onOpenChange={(open) => { if (!open) { setAssignOpen(false); setSuperseding(null); } }} superseding={superseding} onSaved={() => { setAssignOpen(false); setSuperseding(null); refresh(); }} />
+    <AssignQuestionnaireDialog open={assignOpen} onOpenChange={setAssignOpen} clients={{ ids: [clientId], label: clientName ? `For ${clientName}` : "For this client" }} onAssigned={refresh} />
+    {superseding && <UpdateToLatestDialog clientId={clientId} assignment={superseding} onClose={() => setSuperseding(null)} onUpdated={refresh} />}
     {viewing && <SubmissionDialog clientId={clientId} assignment={viewing} open onOpenChange={(open) => !open && setViewing(null)} />}
   </>;
 }
@@ -46,12 +47,32 @@ function ReviewRow({ review, clientId, onResolved }: { review: QuestionnaireRevi
   return <div className="rounded-lg border p-3"><p className="text-sm font-medium">{review.kind.replaceAll("_", " ")}: {details.expected?.doc_type_needed ?? "document requirement"}</p>{details.desired?.doc_type_needed && <p className="text-xs text-muted-foreground">Proposed: {details.desired.doc_type_needed}</p>}<div className="mt-2 flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => void resolve("keep")}>Keep current</Button>{review.kind === "withdraw" && <Button size="sm" onClick={() => void resolve("withdraw")}>Withdraw</Button>}{review.kind === "reactivate" && <Button size="sm" onClick={() => void resolve("reactivate")}>Reactivate</Button>}{review.kind === "legacy_overlap" && details.candidate_item_ids?.map((id) => <Button key={id} size="sm" onClick={() => void resolve("map_existing", id)}>Map to item #{id}</Button>)}</div>{error && <p className="mt-2 text-xs text-destructive">{error}</p>}</div>;
 }
 
-function AssignmentDialog({ clientId, templates, open, onOpenChange, superseding, onSaved }: { clientId: number; templates: QuestionnaireTemplate[]; open: boolean; onOpenChange: (open: boolean) => void; superseding: QuestionnaireAssignment | null; onSaved: () => void }) {
-  const [templateId, setTemplateId] = useState(templates[0]?.id ?? 0); const [versions, setVersions] = useState<QuestionnaireVersion[]>([]); const [versionId, setVersionId] = useState(0);
-  const [required, setRequired] = useState(superseding?.is_required ?? false); const [respondent, setRespondent] = useState(superseding?.respondent_identifier ?? "client"); const [period, setPeriod] = useState(superseding?.reporting_period_key ?? "unspecified"); const [periodLabel, setPeriodLabel] = useState(superseding?.reporting_period_label ?? ""); const [error, setError] = useState<string | null>(null);
-  const effectiveTemplateId = templateId || templates[0]?.id || 0;
-  useEffect(() => { if (!effectiveTemplateId) return; void listQuestionnaireVersions(effectiveTemplateId).then((items) => { setVersions(items); setVersionId(items.at(-1)?.id ?? 0); }); }, [effectiveTemplateId]);
-  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent><DialogHeader><DialogTitle>{superseding ? "Supersede assignment" : "Assign questionnaire"}</DialogTitle><DialogDescription>{superseding ? "The current assignment and its submissions remain in history. Generated checklist requirements are preserved until a later submitted amendment reconciles them." : "Choose a published version. No message is sent automatically; use the existing portal link and reminder controls after assigning."}</DialogDescription></DialogHeader><div className="grid gap-4 sm:grid-cols-2"><label className="flex flex-col gap-1"><Label>Questionnaire</Label><NativeSelect value={effectiveTemplateId} onChange={(e) => setTemplateId(Number(e.target.value))}><option value={0}>Select…</option>{templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</NativeSelect></label><label className="flex flex-col gap-1"><Label>Version</Label><NativeSelect value={versionId} onChange={(e) => setVersionId(Number(e.target.value))}><option value={0}>Select…</option>{versions.map((v) => <option key={v.id} value={v.id}>Version {v.version_number}</option>)}</NativeSelect></label><label className="flex flex-col gap-1"><Label>Respondent</Label><Input value={respondent} onChange={(e) => setRespondent(e.target.value)} /></label><label className="flex flex-col gap-1"><Label>Reporting period key</Label><Input value={period} onChange={(e) => setPeriod(e.target.value)} /></label><label className="flex flex-col gap-1 sm:col-span-2"><Label>Reporting period label</Label><Input value={periodLabel} onChange={(e) => setPeriodLabel(e.target.value)} /></label><label className="flex items-center gap-2 text-sm sm:col-span-2"><Switch checked={required} onCheckedChange={setRequired} /> Required before uploads</label>{error && <p className="text-sm text-destructive sm:col-span-2">{error}</p>}</div><DialogFooter><Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button><Button disabled={!versionId} onClick={async () => { const input = { version_id: versionId, is_required: required, respondent_identifier: respondent, reporting_period_key: period, reporting_period_label: periodLabel || null }; try { if (superseding) await supersedeQuestionnaireAssignment(clientId, superseding.id, input); else await assignQuestionnaire(clientId, input); onSaved(); } catch (e) { setError(e instanceof ApiError ? e.message : String(e)); } }}>{superseding ? "Supersede" : "Assign"}</Button></DialogFooter></DialogContent></Dialog>;
+// Defaults ("client", "unspecified") are internal and not worth showing.
+function assignmentDetails(a: QuestionnaireAssignment): string {
+  const period = a.reporting_period_label || (a.reporting_period_key !== "unspecified" ? a.reporting_period_key : null);
+  const status = a.status === "assigned" ? "Not started" : a.status.replaceAll("_", " ").replace(/^./, (c) => c.toUpperCase());
+  return [status, a.is_required ? "Required" : "Optional", a.respondent_identifier !== "client" ? a.respondent_identifier : null, period].filter(Boolean).join(" · ");
+}
+
+// Moves an open assignment onto the questionnaire's latest published version. The
+// old assignment and its submissions stay in history; respondent, period and
+// requiredness carry over. There is no version choice: it is always the latest.
+function UpdateToLatestDialog({ clientId, assignment, onClose, onUpdated }: { clientId: number; assignment: QuestionnaireAssignment; onClose: () => void; onUpdated: () => void }) {
+  const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null);
+  const confirm = async () => {
+    setBusy(true); setError(null);
+    try {
+      const latest = (await listQuestionnaireVersions(assignment.template_id)).reduce<QuestionnaireVersion | null>((max, v) => (!max || v.version_number > max.version_number ? v : max), null);
+      if (!latest || latest.id === assignment.version_id) { setError("This assignment already uses the latest published questionnaire."); return; }
+      await supersedeQuestionnaireAssignment(clientId, assignment.id, {
+        version_id: latest.id, is_required: assignment.is_required, respondent_identifier: assignment.respondent_identifier,
+        reporting_period_key: assignment.reporting_period_key, reporting_period_label: assignment.reporting_period_label,
+      });
+      onUpdated(); onClose();
+    } catch (e) { setError(e instanceof ApiError ? e.message : String(e)); }
+    finally { setBusy(false); }
+  };
+  return <Dialog open onOpenChange={(open) => !open && !busy && onClose()}><DialogContent><DialogHeader><DialogTitle>Update to the latest questionnaire?</DialogTitle><DialogDescription>{assignment.questionnaire_name} has been updated since it was assigned. The client will answer the latest published questionnaire; the current assignment and any submitted answers stay in history.</DialogDescription></DialogHeader>{error && <p className="text-sm text-destructive">{error}</p>}<DialogFooter><Button variant="outline" onClick={onClose} disabled={busy}>Keep current</Button><Button onClick={confirm} disabled={busy}>{busy ? "Updating…" : "Update"}</Button></DialogFooter></DialogContent></Dialog>;
 }
 
 function SubmissionDialog({ clientId, assignment, open, onOpenChange }: { clientId: number; assignment: QuestionnaireAssignment; open: boolean; onOpenChange: (open: boolean) => void }) {
