@@ -15,6 +15,7 @@ import {
   clientMemoryNotesKey,
   clientThreadsKey,
   clientWorkflowSnapshotKey,
+  organizationKey,
 } from "@/lib/swr-keys";
 import { useRouter } from "next/navigation";
 import {
@@ -65,6 +66,7 @@ import {
   downloadClientDocumentsZip,
   getClient,
   getClientUploadLink,
+  getMyOrganization,
   getEmailLogHtml,
   listChecklistItems,
   listClientCommitments,
@@ -101,6 +103,12 @@ import { ClientWorkflowActivity } from "@/components/client-workflow-activity";
 import { AssignWorkflowDialog } from "@/components/assign-workflow-dialog";
 import { PackageDocumentPicker } from "@/components/package-document-picker";
 import { PackageFormDialog } from "@/components/package-form-dialog";
+import { DocumentCategoryFilter } from "@/components/document-category-filter";
+import {
+  type DocumentCategoryId,
+  documentCategoryOptions,
+  filterDocumentsByCategory,
+} from "@/lib/document-categories";
 import { ClientQuestionnairesCard } from "@/components/client-questionnaires-card";
 import { QuestionnairePdfAccess } from "@/components/questionnaire-pdf-access";
 import { ChecklistItemFormDialog } from "@/components/checklist-item-form-dialog";
@@ -1790,7 +1798,27 @@ function DocumentVaultCard({
   const [result, setResult] = useState<DocumentUploadResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
+  const [categoryFilter, setCategoryFilter] = useState<Set<DocumentCategoryId>>(() => new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { data: org } = useSWR(organizationKey(), getMyOrganization);
+
+  // Presentation only: groups what the classifier already stored, and
+  // "Download uploads" still zips every file regardless of the filter.
+  const categoryOptions = useMemo(
+    () => documentCategoryOptions(documents ?? [], org?.practice_type),
+    [documents, org?.practice_type]
+  );
+  // A picked category whose last file was deleted drops out of the filter
+  // instead of leaving the table stuck on an option that's no longer listed.
+  const activeCategories = useMemo(
+    () => new Set([...categoryFilter].filter((id) => categoryOptions.some((o) => o.id === id))),
+    [categoryFilter, categoryOptions]
+  );
+  const visibleDocuments = useMemo(
+    () => (documents ? filterDocumentsByCategory(documents, activeCategories) : null),
+    [documents, activeCategories]
+  );
+  const filtering = activeCategories.size > 0;
 
   const onDownloadZip = async () => {
     setDownloading(true);
@@ -1850,10 +1878,23 @@ function DocumentVaultCard({
     )}
     <Panel
       title="Files"
-      meta={documents && documents.length > 0 ? `${documents.length} received` : undefined}
+      meta={
+        documents && documents.length > 0
+          ? filtering
+            ? `${visibleDocuments?.length ?? 0} of ${documents.length} received`
+            : `${documents.length} received`
+          : undefined
+      }
       loadError={loadError}
       action={
         <>
+          {documents && documents.length > 0 && (
+            <DocumentCategoryFilter
+              options={categoryOptions}
+              selected={activeCategories}
+              onChange={setCategoryFilter}
+            />
+          )}
           {documents && documents.length > 0 && (
             <Button variant="ghost" size="sm" disabled={downloading} onClick={onDownloadZip}>
               {downloading ? <Loader2 className="animate-spin" /> : <Download />}
@@ -1905,6 +1946,17 @@ function DocumentVaultCard({
         </div>
       ) : documents.length === 0 ? (
         <p className="text-sm text-muted-foreground">No files yet. Upload one, or drop it anywhere on this card.</p>
+      ) : visibleDocuments?.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          No files in the selected categories.{" "}
+          <button
+            type="button"
+            className="cursor-pointer text-foreground underline underline-offset-4"
+            onClick={() => setCategoryFilter(new Set())}
+          >
+            Show all files
+          </button>
+        </p>
       ) : (
       <div className="overflow-x-auto">
       <table
@@ -1931,7 +1983,7 @@ function DocumentVaultCard({
           </tr>
         </thead>
         <tbody>
-          {documents?.map((doc) => {
+          {visibleDocuments?.map((doc) => {
             const item =
               doc.checklist_item_id !== null
                 ? itemsById[doc.checklist_item_id]
