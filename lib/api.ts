@@ -1,5 +1,6 @@
 import { subscribeSSE } from "./sse";
 import { signInRedirect } from "./auth-redirects";
+import type { Answers, Condition, QuestionnaireDefinition } from "./questionnaire-logic";
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
@@ -1310,3 +1311,147 @@ export const updatePackageAssignmentDocuments = (
     `/packages/${packageId}/assignments/${clientId}`,
     json("PATCH", { document_ids: documentIds, deadline: deadline || undefined })
   );
+
+// ---------- Questionnaires ----------
+
+export type QuestionnaireAssignmentStatus = "assigned" | "in_progress" | "submitted" | "cancelled" | "superseded";
+export type ValueSource = {
+  kind: "assignment_reporting_period" | "assignment_respondent" | "question" | "fixed" | "repeat_entry_id";
+  question_id?: string | null;
+  value?: string | null;
+};
+export type DocumentRequirementOutput = {
+  output_key: string;
+  requirement_key: string;
+  doc_type_needed: string;
+  description?: string | null;
+  reporting_period?: ValueSource | null;
+  respondent?: ValueSource | null;
+  subject?: ValueSource | null;
+  instance_key?: ValueSource | null;
+};
+export type DocumentGenerationRule = {
+  id: string;
+  for_each?: string | null;
+  condition: Condition;
+  outputs: DocumentRequirementOutput[];
+};
+export type DocumentRuleSet = { format_version: "1"; rules: DocumentGenerationRule[] };
+
+export interface QuestionnaireTemplate {
+  id: number;
+  organization_id: number;
+  name: string;
+  description: string | null;
+  draft_definition: QuestionnaireDefinition;
+  draft_document_rules: DocumentGenerationRule[];
+  archived_at: string | null;
+  created_at: string;
+  updated_at: string;
+  latest_published_version: number | null;
+  version_count: number;
+}
+export interface QuestionnaireVersion {
+  id: number;
+  template_id: number;
+  version_number: number;
+  definition: QuestionnaireDefinition;
+  document_rules: DocumentGenerationRule[];
+  schema_format_version: string;
+  rule_format_version: string;
+  published_at: string;
+  published_by: string | null;
+}
+export interface QuestionnaireAssignment {
+  id: number;
+  organization_id: number;
+  client_id: number;
+  version_id: number;
+  is_required: boolean;
+  respondent_identifier: string;
+  reporting_period_key: string;
+  reporting_period_label: string | null;
+  reporting_period_start: string | null;
+  reporting_period_end: string | null;
+  status: QuestionnaireAssignmentStatus;
+  draft_revision: number;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+  questionnaire_name: string;
+  version_number: number;
+}
+export interface QuestionnaireSubmission {
+  id: number;
+  assignment_id: number;
+  version_id: number;
+  answers: Answers;
+  submission_number: number;
+  previous_submission_id: number | null;
+  submitted_at: string;
+  rule_evaluation_results: { requirements?: Record<string, unknown>[]; [key: string]: unknown };
+}
+export interface QuestionnaireAssignmentDetail extends QuestionnaireAssignment {
+  questionnaire_name: string;
+  version_number: number;
+  definition: QuestionnaireDefinition;
+  submissions: QuestionnaireSubmission[];
+}
+export interface QuestionnaireReviewProposal {
+  id: number;
+  client_id: number;
+  submission_id: number;
+  checklist_item_id: number | null;
+  kind: string;
+  status: string;
+  details: Record<string, unknown>;
+  resolved_by: string | null;
+  resolved_at: string | null;
+  created_at: string;
+}
+export type QuestionnaireAssignmentInput = {
+  version_id: number;
+  is_required?: boolean;
+  respondent_identifier?: string;
+  reporting_period_key?: string;
+  reporting_period_label?: string | null;
+  reporting_period_start?: string | null;
+  reporting_period_end?: string | null;
+};
+
+export const listQuestionnaireTemplates = (includeArchived = false) =>
+  request<QuestionnaireTemplate[]>(`/questionnaires/templates${includeArchived ? "?include_archived=true" : ""}`);
+export const createQuestionnaireTemplate = (input: { name: string; description?: string | null; draft_definition: QuestionnaireDefinition; draft_document_rules?: DocumentRuleSet }) =>
+  request<QuestionnaireTemplate>("/questionnaires/templates", json("POST", input));
+export const updateQuestionnaireTemplate = (id: number, input: { name?: string; description?: string | null; draft_definition?: QuestionnaireDefinition; draft_document_rules?: DocumentRuleSet }) =>
+  request<QuestionnaireTemplate>(`/questionnaires/templates/${id}`, json("PATCH", input));
+export const duplicateQuestionnaireTemplate = (id: number, name?: string) =>
+  request<QuestionnaireTemplate>(`/questionnaires/templates/${id}/duplicate`, json("POST", { name }));
+export const archiveQuestionnaireTemplate = (id: number) =>
+  request<void>(`/questionnaires/templates/${id}`, { method: "DELETE" });
+export const listQuestionnaireVersions = (id: number) =>
+  request<QuestionnaireVersion[]>(`/questionnaires/templates/${id}/versions`);
+export const publishQuestionnaireVersion = (id: number, documentRules: DocumentRuleSet) =>
+  request<QuestionnaireVersion>(`/questionnaires/templates/${id}/versions`, json("POST", { document_rules: documentRules }));
+export const previewQuestionnaire = (definition: QuestionnaireDefinition, documentRules: DocumentRuleSet, answers: Answers) =>
+  request<{ active_answers: Answers; requirements: Record<string, unknown>[] }>(
+    "/questionnaires/preview", json("POST", { definition, document_rules: documentRules, answers })
+  );
+export const listClientQuestionnaireAssignments = (clientId: number) =>
+  request<QuestionnaireAssignment[]>(`/clients/${clientId}/questionnaire-assignments`);
+export const assignQuestionnaire = (clientId: number, input: QuestionnaireAssignmentInput) =>
+  request<QuestionnaireAssignment>(`/clients/${clientId}/questionnaire-assignments`, json("POST", input));
+export const getQuestionnaireSubmissions = (clientId: number, assignmentId: number) =>
+  request<QuestionnaireAssignmentDetail>(`/clients/${clientId}/questionnaire-assignments/${assignmentId}/submissions`);
+export const cancelQuestionnaireAssignment = (clientId: number, assignmentId: number) =>
+  request<QuestionnaireAssignment>(`/clients/${clientId}/questionnaire-assignments/${assignmentId}/cancel`, { method: "POST" });
+export const supersedeQuestionnaireAssignment = (clientId: number, assignmentId: number, input: QuestionnaireAssignmentInput) =>
+  request<QuestionnaireAssignment>(`/clients/${clientId}/questionnaire-assignments/${assignmentId}/supersede`, json("POST", input));
+export const listQuestionnaireReviewProposals = (clientId: number) =>
+  request<QuestionnaireReviewProposal[]>(`/clients/${clientId}/questionnaire-review-proposals`);
+export const resolveQuestionnaireReviewProposal = (
+  clientId: number, proposalId: number, action: "keep" | "withdraw" | "reactivate" | "map_existing", targetItemId?: number
+) => request<void>(`/clients/${clientId}/questionnaire-review-proposals/${proposalId}/resolve`,
+  json("POST", { action, target_item_id: targetItemId }));
+export const createQuestionnairePortalEmail = (clientId: number) =>
+  request<EmailLogEntry>(`/clients/${clientId}/questionnaire-portal-email`, { method: "POST" });
