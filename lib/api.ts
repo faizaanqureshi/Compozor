@@ -1441,6 +1441,8 @@ export const duplicateQuestionnaireTemplate = (id: number, name?: string) =>
   request<QuestionnaireTemplate>(`/questionnaires/templates/${id}/duplicate`, json("POST", { name }));
 export const archiveQuestionnaireTemplate = (id: number) =>
   request<void>(`/questionnaires/templates/${id}`, { method: "DELETE" });
+export const getQuestionnaireTemplate = (id: number) =>
+  request<QuestionnaireTemplate>(`/questionnaires/templates/${id}`);
 export const listQuestionnaireVersions = (id: number) =>
   request<QuestionnaireVersion[]>(`/questionnaires/templates/${id}/versions`);
 export const publishQuestionnaireVersion = (id: number, documentRules: DocumentRuleSet) =>
