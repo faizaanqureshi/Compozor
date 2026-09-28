@@ -10,7 +10,7 @@ const CONTACT = "support@compozor.com";
 
 export default function PrivacyPolicyPage() {
   return (
-    <LegalPageShell title="Privacy Policy" lastUpdated="September 27, 2026">
+    <LegalPageShell title="Privacy Policy" lastUpdated="September 28, 2026">
       <LegalSection heading="1. Who this policy covers">
         <p>
           Compozor (&quot;Compozor,&quot; &quot;we,&quot; &quot;us&quot;),
@@ -35,8 +35,8 @@ export default function PrivacyPolicyPage() {
           <li>
             <strong className="text-foreground">Clients of a firm</strong> —
             the firm&apos;s own customers, who interact with Compozor only
-            indirectly: by emailing the firm or by uploading documents through
-            a link the firm sends them. For this group, the firm is the party
+            indirectly: by emailing the firm, or by uploading documents and
+            completing questionnaires through a link the firm sends them. For this group, the firm is the party
             responsible for their data (see &quot;Our role as a service
             provider,&quot; below) — questions about a specific firm&apos;s use
             of your information should go to that firm first.
@@ -99,6 +99,14 @@ export default function PrivacyPolicyPage() {
           firm has requested.
         </p>
         <p>
+          <strong className="text-foreground">Questionnaire answers.</strong>{" "}
+          When a firm asks a client to complete a questionnaire through its
+          Compozor client portal, we receive the client&apos;s answers,
+          including saved drafts, and keep a PDF copy of each submission for
+          the firm. Before showing a questionnaire, we email a one-time code
+          to the client&apos;s address on file to confirm it&apos;s them.
+        </p>
+        <p>
           <strong className="text-foreground">Work product.</strong> Reports,
           spreadsheets, and other files that Compozor prepares from those
           documents when a firm runs one of its workflows, along with a record
@@ -156,7 +164,7 @@ export default function PrivacyPolicyPage() {
           purposes:
         </p>
         <ul className="ml-5 list-disc space-y-1">
-          <li><strong className="text-foreground">OpenAI</strong> (United States) — reads email and document content to check and match documents, draft replies, and run workflows. OpenAI does not train its models on data sent through its API, and may keep it for up to 30 days to detect abuse before deleting it.</li>
+          <li><strong className="text-foreground">OpenAI</strong> (United States) — reads email and document content to check and match documents, draft replies, and run workflows. OpenAI does not train its models on data sent through its API, and keeps it for up to 30 days before deleting it.</li>
           <li><strong className="text-foreground">Railway</strong> (United States) — hosts Compozor&apos;s application servers and database.</li>
           <li><strong className="text-foreground">Cloudflare R2</strong> — stores uploaded documents and prepared files.</li>
           <li><strong className="text-foreground">Vercel</strong> — hosts the Compozor website. It does not store firm or client data.</li>
@@ -175,9 +183,7 @@ export default function PrivacyPolicyPage() {
           other applicable laws. Compozor processes that information only on
           the firm&apos;s behalf, as its service provider. Firms in the
           United States subject to the Gramm-Leach-Bliley Act and the FTC
-          Safeguards Rule may rely on this section, together with a
-          data-processing or security addendum available on request, to
-          document our role.
+          Safeguards Rule may rely on this section to document our role.
         </p>
       </LegalSection>
 

@@ -442,7 +442,7 @@ function ImportWorkspace({ initialJob, onChanged }: { initialJob: QuestionnaireI
     <div className={view === "review" ? "flex flex-col gap-6" : "hidden"}>
       <header className="flex flex-col gap-2">
         <p className="text-xs text-muted-foreground">Imported from {job.source_name}</p>
-        <h1 className="text-3xl leading-tight font-thin tracking-tight [font-family:var(--font-denton)] sm:text-4xl md:text-5xl">{draft.name || "Untitled questionnaire"}</h1>
+        <h1 className="text-3xl leading-tight font-light tracking-tight [font-family:var(--font-display)] sm:text-4xl md:text-5xl">{draft.name || "Untitled questionnaire"}</h1>
       </header>
 
       <section className="flex flex-col gap-4 rounded-2xl bg-card p-5 ring-1 ring-foreground/10">

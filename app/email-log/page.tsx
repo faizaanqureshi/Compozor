@@ -667,7 +667,7 @@ export default function EmailLogPage() {
 
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="flex flex-col gap-1.5">
-          <h1 className="text-4xl leading-tight font-thin tracking-tight [font-family:var(--font-denton)] md:text-5xl">
+          <h1 className="text-4xl leading-tight font-light tracking-tight [font-family:var(--font-display)] md:text-5xl">
             Email log
           </h1>
           <p className="text-sm text-muted-foreground">

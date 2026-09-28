@@ -6,7 +6,7 @@ export const metadata = publicPageMetadata("/terms");
 
 export default function TermsPage() {
   return (
-    <LegalPageShell title="Terms &amp; Conditions" lastUpdated="September 27, 2026">
+    <LegalPageShell title="Terms &amp; Conditions" lastUpdated="September 28, 2026">
       <LegalSection heading="1. Acceptance of these terms">
         <p>
           These Terms &amp; Conditions (&quot;Terms&quot;) govern access to
@@ -25,9 +25,10 @@ export default function TermsPage() {
           AI-assisted processing to check and match incoming client documents
           and messages against a checklist the firm configures, drafts
           replies that the firm approves or, at the firm&apos;s chosen
-          automation level, sends automatically, schedules meetings, and runs
-          workflows the firm defines to prepare work (such as reports and
-          spreadsheets) from its clients&apos; documents.
+          automation level, sends automatically, schedules meetings, collects
+          questionnaire answers from clients through a secure client portal,
+          and runs workflows the firm defines to prepare work (such as reports
+          and spreadsheets) from its clients&apos; documents.
         </p>
       </LegalSection>
 
@@ -115,7 +116,7 @@ export default function TermsPage() {
       <LegalSection heading="7. Third-party services">
         <p>
           Compozor depends on third-party services — including Google,
-          Microsoft, OpenAI, Railway, Cloudflare, Vercel, and Clerk — to
+          Microsoft, OpenAI, Railway, Cloudflare, Vercel, Clerk, and Sentry — to
           operate. We aren&apos;t
           responsible for outages, changes, or limitations in those
           services that are outside our control.
@@ -136,9 +137,10 @@ export default function TermsPage() {
         <p>
           Either party may terminate access to the service at any time. You
           can disconnect your mailbox at any time in Compozor or in your
-          Google or Microsoft account settings. Following termination, your
-          data will be available for export for a limited period, after which
-          it will be deleted in accordance with our{" "}
+          Google or Microsoft account settings. You can download your
+          clients&apos; documents from Compozor at any time before your access
+          ends. Following termination, your data will be deleted in
+          accordance with our{" "}
           <Link href="/privacy" className="text-foreground underline underline-offset-2">
             Privacy Policy
           </Link>

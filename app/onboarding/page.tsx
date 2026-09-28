@@ -294,7 +294,7 @@ export default function OnboardingPage() {
               {step ? (
                 <h1
                   key={meta.key}
-                  className="animate-blur-in-sm text-[2.5rem] leading-[1.05] font-thin tracking-tight text-balance [font-family:var(--font-denton)] sm:text-5xl lg:text-[3.5rem]"
+                  className="animate-blur-in-sm text-[2.5rem] leading-[1.05] font-light tracking-tight text-balance [font-family:var(--font-display)] sm:text-5xl lg:text-[3.5rem]"
                 >
                   {meta.title}
                 </h1>

@@ -20,7 +20,7 @@ export function LandingSections() {
               <p className="text-xs uppercase tracking-widest text-marketing-forest dark:text-marketing-brass">
                 Workflows & work samples
               </p>
-              <h2 className="mt-5 text-[2.625rem] leading-tight font-thin tracking-tight sm:text-6xl [font-family:var(--font-denton)]">
+              <h2 className="mt-5 text-[2.625rem] leading-tight font-light tracking-tight sm:text-6xl [font-family:var(--font-display)]">
                 Your instructions.
                 <br />
                 Your firm’s signature.
@@ -50,7 +50,7 @@ export function LandingSections() {
             <p className="text-xs uppercase tracking-widest text-marketing-forest dark:text-marketing-brass">
               Trust & control
             </p>
-            <h2 className="mt-5 text-4xl leading-tight font-thin tracking-tight [font-family:var(--font-denton)] sm:text-4xl sm:font-light sm:[font-family:inherit]">
+            <h2 className="mt-5 text-4xl leading-tight font-light tracking-tight [font-family:var(--font-display)] sm:text-4xl sm:font-light sm:[font-family:inherit]">
               Automation,
               <br />
               on your terms.
@@ -103,7 +103,7 @@ export function LandingClosing() {
           <p className="text-xs uppercase tracking-widest text-sidebar-foreground/70">
             An invitation to work differently
           </p>
-          <h2 className="mt-5 max-w-2xl text-5xl leading-tight font-thin tracking-tight text-balance sm:text-6xl [font-family:var(--font-denton)]">
+          <h2 className="mt-5 max-w-2xl text-5xl leading-tight font-light tracking-tight text-balance sm:text-6xl [font-family:var(--font-display)]">
             See how Compozor
             <br />
             fits your firm.

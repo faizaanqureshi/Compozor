@@ -225,7 +225,7 @@ export function ProductTour() {
         <span className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
           Step {stepIndex + 1} of {steps.length}
         </span>
-        <h3 className="text-3xl font-thin tracking-tight [font-family:var(--font-denton)]">{step.title}</h3>
+        <h3 className="text-3xl font-light tracking-tight [font-family:var(--font-display)]">{step.title}</h3>
         <p className="text-sm text-muted-foreground">{step.body}</p>
 
         <Button variant="ghost" onClick={onFinish} className="self-start">Skip tour</Button>

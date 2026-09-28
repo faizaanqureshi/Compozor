@@ -78,7 +78,7 @@ export function LandingPractices() {
           <p className="text-xs uppercase tracking-widest text-marketing-forest dark:text-marketing-brass">
             A few possibilities
           </p>
-          <h2 className="mt-5 text-4xl leading-tight font-thin tracking-tight sm:text-5xl [font-family:var(--font-denton)]">
+          <h2 className="mt-5 text-4xl leading-tight font-light tracking-tight sm:text-5xl [font-family:var(--font-display)]">
             The work changes.
             <br />
             The care stays.

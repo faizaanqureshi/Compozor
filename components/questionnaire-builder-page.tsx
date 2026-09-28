@@ -37,6 +37,6 @@ export function EditQuestionnairePage({ id }: { id: number }) {
   };
   if (error) return <Shell><p className="text-sm text-destructive">{error instanceof ApiError ? error.message : String(error)}</p></Shell>;
   if (!data) return <Shell><p className="text-sm text-muted-foreground">Loading questionnaire…</p></Shell>;
-  if (data.template.archived_at) return <Shell><div className="flex flex-col gap-2"><h1 className="text-4xl font-thin tracking-tight [font-family:var(--font-denton)]">{data.template.name}</h1><p className="text-sm text-muted-foreground">This questionnaire is archived and read-only. Duplicate it from the library to make changes.</p></div></Shell>;
+  if (data.template.archived_at) return <Shell><div className="flex flex-col gap-2"><h1 className="text-4xl font-light tracking-tight [font-family:var(--font-display)]">{data.template.name}</h1><p className="text-sm text-muted-foreground">This questionnaire is archived and read-only. Duplicate it from the library to make changes.</p></div></Shell>;
   return <Shell><QuestionnaireBuilder key={data.template.id} template={data.template} versions={data.versions} onSaved={onSaved} /></Shell>;
 }
