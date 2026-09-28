@@ -98,6 +98,7 @@ export function changeQuestionType(question: QuestionDefinition, type: QuestionT
     sensitivity: question.sensitivity,
     required: type === "information" ? false : question.required,
     options: keepOptions ? question.options : fresh.options,
+    input_format: type === "short_text" ? question.input_format ?? null : null,
   };
 }
 

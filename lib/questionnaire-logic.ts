@@ -54,6 +54,88 @@ export interface QuestionDefinition {
   entry_id_key?: string | null;
   min_items?: number | null;
   max_items?: number | null;
+  input_format?: InputFormat | null;
+}
+
+// ---- Answer formats (mirrors app/services/answer_formats.py) --------------------------------
+// A closed set of formats, validated identically on the server. A region is set
+// only when the questionnaire establishes the jurisdiction.
+
+export type FormatKind = "phone" | "email" | "postal_code" | "national_id";
+export interface InputFormat { kind: FormatKind; region?: "CA" | "US" | null }
+
+const digitsOf = (value: string) => value.replace(/\D/g, "");
+
+function luhn(digits: string): boolean {
+  let total = 0;
+  [...digits].reverse().forEach((ch, i) => {
+    let n = Number(ch);
+    if (i % 2) n = n * 2 > 9 ? n * 2 - 9 : n * 2;
+    total += n;
+  });
+  return total % 10 === 0;
+}
+
+/** A value-free problem description, or null when the answer fits the format. */
+export function formatIssue(format: InputFormat, raw: string): string | null {
+  const value = raw.trim();
+  if (!value) return null;
+  const region = format.region ?? null;
+  switch (format.kind) {
+    case "email":
+      return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value) ? null : "Enter a valid email address.";
+    case "phone": {
+      if (!/^[0-9+().\-\s]+(?:\s*(?:ext\.?|x)\s*\d{1,6})?$/i.test(value)) return "Enter a valid phone number.";
+      let digits = digitsOf(value.split(/\s*(?:ext\.?|x)\s*/i)[0]);
+      if (region) {
+        if (digits.length === 11 && digits.startsWith("1")) digits = digits.slice(1);
+        return digits.length === 10 && /[2-9]/.test(digits[0]) ? null : "Enter a 10-digit phone number.";
+      }
+      return digits.length >= 7 && digits.length <= 15 ? null : "Enter a valid phone number.";
+    }
+    case "postal_code":
+      if (region === "CA") return /^[A-Za-z]\d[A-Za-z][ -]?\d[A-Za-z]\d$/.test(value) ? null : "Enter a postal code like A1A 1A1.";
+      if (region === "US") return /^\d{5}(?:-\d{4})?$/.test(value) ? null : "Enter a 5-digit ZIP code.";
+      return /^[A-Za-z0-9][A-Za-z0-9 -]{1,9}$/.test(value) ? null : "Enter a valid postal code.";
+    case "national_id": {
+      const digits = digitsOf(value);
+      if (region === "CA") return /^[\d\s-]+$/.test(value) && digits.length === 9 && luhn(digits) ? null : "Enter a valid 9-digit Social Insurance Number.";
+      if (region === "US") {
+        const valid = /^[\d\s-]+$/.test(value) && digits.length === 9 && !["000", "666"].includes(digits.slice(0, 3)) && digits[0] !== "9"
+          && digits.slice(3, 5) !== "00" && digits.slice(5) !== "0000";
+        return valid ? null : "Enter a valid 9-digit Social Security Number.";
+      }
+      return /^[A-Za-z0-9][A-Za-z0-9 -]{3,24}$/.test(value) ? null : "Enter a valid identification number.";
+    }
+  }
+}
+
+/** Presentation hints for an input with a format: shown inside/near the field, never validation by themselves. */
+export function formatHint(format: InputFormat): { example: string; inputMode: "tel" | "email" | "numeric" | "text"; autoComplete: string } {
+  const region = format.region ?? null;
+  switch (format.kind) {
+    case "phone": return { example: region === "US" ? "212-555-0100" : region === "CA" ? "416-555-0199" : "", inputMode: "tel", autoComplete: "tel" };
+    case "email": return { example: "name@example.com", inputMode: "email", autoComplete: "email" };
+    case "postal_code": return { example: region === "CA" ? "A1A 1A1" : region === "US" ? "12345" : "", inputMode: region === "US" ? "numeric" : "text", autoComplete: "postal-code" };
+    case "national_id": return { example: region === "CA" ? "123-456-789" : region === "US" ? "123-45-6789" : "", inputMode: region ? "numeric" : "text", autoComplete: "off" };
+  }
+}
+
+/** Tidy a valid answer into its conventional form (only when it already fits the format). */
+export function normalizeFormatted(format: InputFormat, raw: string): string {
+  const value = raw.trim();
+  if (!value || formatIssue(format, value)) return raw;
+  const digits = digitsOf(value);
+  const region = format.region ?? null;
+  if (format.kind === "phone" && region && !/ext|x/i.test(value)) {
+    const local = digits.length === 11 ? digits.slice(1) : digits;
+    return `${local.slice(0, 3)}-${local.slice(3, 6)}-${local.slice(6)}`;
+  }
+  if (format.kind === "postal_code" && region === "CA") return `${value.replace(/[ -]/g, "").slice(0, 3)} ${value.replace(/[ -]/g, "").slice(3)}`.toUpperCase();
+  if (format.kind === "national_id" && region === "CA") return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
+  if (format.kind === "national_id" && region === "US") return `${digits.slice(0, 3)}-${digits.slice(3, 5)}-${digits.slice(5)}`;
+  if (format.kind === "email") return value;
+  return raw;
 }
 
 export interface QuestionnaireSection {
@@ -319,6 +401,10 @@ export function answerIssues(ctx: QuestionnaireContext): AnswerIssue[] {
         case "short_text":
         case "long_text":
           if (required && typeof value === "string" && !value.trim()) add("This question is required.");
+          if (q.input_format && typeof value === "string") {
+            const problem = formatIssue(q.input_format, value);
+            if (problem) add(problem);
+          }
           break;
         case "confirmation":
           if (required && value !== true) add("Please confirm to continue.");

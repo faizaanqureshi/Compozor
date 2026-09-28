@@ -7,10 +7,12 @@ const API_BASE_URL =
 export class ApiError extends Error {
   status: number;
   code?: string;
-  constructor(status: number, message: string, code?: string) {
+  reasons: string[];
+  constructor(status: number, message: string, code?: string, reasons: string[] = []) {
     super(message);
     this.status = status;
     this.code = code;
+    this.reasons = reasons;
   }
 }
 
@@ -19,7 +21,8 @@ async function responseError(res: Response): Promise<ApiError> {
   try {
     const body = await res.json();
     if (typeof body.detail?.message === "string") {
-      return new ApiError(res.status, body.detail.message, body.detail.code);
+      const reasons = Array.isArray(body.detail.reasons) ? body.detail.reasons.filter((r: unknown) => typeof r === "string") : [];
+      return new ApiError(res.status, body.detail.message, body.detail.code, reasons);
     }
     message = typeof body.detail === "string"
       ? body.detail
@@ -1439,6 +1442,88 @@ export const duplicateQuestionnaireTemplate = (id: number, name?: string) =>
   request<QuestionnaireTemplate>(`/questionnaires/templates/${id}/duplicate`, json("POST", { name }));
 export const archiveQuestionnaireTemplate = (id: number) =>
   request<void>(`/questionnaires/templates/${id}`, { method: "DELETE" });
+// ---------- Questionnaire template import (AI-assisted, review required) ----------
+
+export type ImportReviewStatus = "open" | "accepted" | "rejected" | "resolved";
+export interface ImportReviewTarget { section_id?: string | null; question_id?: string | null; rule_id?: string | null; condition?: "visible_when" | "required_when"; pending_condition?: "visible_when" | "required_when"; provisional?: boolean }
+export interface ImportSourceRef { unit_ids: string[]; label: string | null; quote: string | null }
+export interface ImportDocumentProposal { title: string; instructions: string | null; question_id: string | null; operator: string | null; value: unknown }
+export interface ImportReviewItem {
+  id: string;
+  kind: "question" | "section" | "condition" | "explicit_document" | "suggested_document" | "completeness" | "requiredness";
+  severity: "critical" | "warning";
+  title: string;
+  reason: string;
+  target: ImportReviewTarget;
+  targets?: ImportReviewTarget[];
+  source: ImportSourceRef | null;
+  origin: "extracted" | "inferred";
+  status: ImportReviewStatus;
+  proposal?: ImportDocumentProposal;
+  rule_id?: string | null;
+}
+export interface ImportTransformation {
+  id: string;
+  mode: "automatic" | "suggestion";
+  category: string;
+  title: string;
+  benefit: string;
+  reason: string;
+  evidence: string | null;
+  assumptions: string[];
+  status: "applied" | "pending" | "skipped" | "undone";
+  changes?: string[];
+  operations: { op: string; key: string | null; document?: { title: string; instructions: string | null; answer: string | null } | null }[];
+}
+export interface ImportSourceUnit { id: string; label: string; text: string; scanned: boolean }
+export interface QuestionnaireImportSummary {
+  id: number;
+  status: "processing" | "needs_review" | "created" | "failed" | "rejected_completed";
+  stage: "queued" | "interpreting" | "verifying" | "optimizing" | "preparing" | null;
+  source_kind: "pdf" | "docx";
+  source_name: string;
+  page_count: number;
+  error_message: string | null;
+  name: string | null;
+  created_template_id: number | null;
+  created_at: string;
+  updated_at: string;
+  expires_at: string;
+}
+export interface QuestionnaireImport extends QuestionnaireImportSummary {
+  description: string | null;
+  draft_definition: QuestionnaireDefinition | null;
+  draft_document_rules: DocumentGenerationRule[] | null;
+  review_items: ImportReviewItem[] | null;
+  question_sources: Record<string, ImportSourceRef> | null;
+  source_units: ImportSourceUnit[] | null;
+  faithful_definition: QuestionnaireDefinition | null;
+  transformations: ImportTransformation[] | null;
+}
+
+export const startQuestionnaireImport = (file: File, confirmBlank = false) => {
+  const body = new FormData();
+  body.append("file", file);
+  body.append("confirm_blank", confirmBlank ? "true" : "false");
+  return request<QuestionnaireImportSummary>("/questionnaires/imports", { method: "POST", body });
+};
+export const listQuestionnaireImports = () => request<QuestionnaireImportSummary[]>("/questionnaires/imports");
+export const getQuestionnaireImport = (id: number) => request<QuestionnaireImport>(`/questionnaires/imports/${id}`);
+export const updateQuestionnaireImport = (id: number, payload: {
+  name?: string;
+  description?: string | null;
+  draft_definition?: QuestionnaireDefinition;
+  draft_document_rules?: DocumentRuleSet;
+  review_items?: { id: string; status: ImportReviewStatus; rule_id?: string | null }[];
+}) => request<QuestionnaireImportSummary>(`/questionnaires/imports/${id}`, json("PATCH", payload));
+export const createQuestionnaireFromImport = (id: number, acknowledgeWarnings: boolean) =>
+  request<QuestionnaireTemplate>(`/questionnaires/imports/${id}/create`, json("POST", { acknowledge_warnings: acknowledgeWarnings }));
+export const actOnImportTransformation = (id: number, transformationId: string, action: "apply" | "undo" | "skip" | "restore",
+  options: { force?: boolean; edits?: Record<string, string | null> } = {}) =>
+  request<QuestionnaireImport>(`/questionnaires/imports/${id}/transformations/${transformationId}`, json("POST", { action, ...options }));
+export const discardQuestionnaireImport = (id: number) =>
+  request<void>(`/questionnaires/imports/${id}`, { method: "DELETE" });
+
 export const getQuestionnaireTemplate = (id: number) =>
   request<QuestionnaireTemplate>(`/questionnaires/templates/${id}`);
 export const listQuestionnaireVersions = (id: number) =>
