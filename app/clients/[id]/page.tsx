@@ -436,7 +436,7 @@ function ClientHeader({
           </div>
           <div className="flex flex-col items-start gap-2 lg:items-end">
             <div className="flex flex-wrap items-center gap-1.5">
-              <PackageFormDialog onSaved={onChange} variant="ghost" />
+              <PackageFormDialog onSaved={onChange} variant="outline" />
               <Button variant="outline" onClick={onAssignPackage}>
                 <Plus />
                 Assign package
