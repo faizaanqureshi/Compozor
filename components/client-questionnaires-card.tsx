@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import useSWR from "swr";
 import { Eye, FileQuestion, Plus, RefreshCw, StopCircle } from "lucide-react";
 import { Panel } from "@/components/panel";
+import { QuestionnairePdfAccess } from "@/components/questionnaire-pdf-access";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -55,9 +56,13 @@ function AssignmentDialog({ clientId, templates, open, onOpenChange, superseding
 
 function SubmissionDialog({ clientId, assignment, open, onOpenChange }: { clientId: number; assignment: QuestionnaireAssignment; open: boolean; onOpenChange: (open: boolean) => void }) {
   const [detail, setDetail] = useState<QuestionnaireAssignmentDetail | null>(null); const [error, setError] = useState<string | null>(null); const [submissionIndex, setSubmissionIndex] = useState(0);
-  useEffect(() => { void getQuestionnaireSubmissions(clientId, assignment.id).then(setDetail).catch((e) => setError(e instanceof ApiError ? e.message : String(e))); }, [clientId, assignment.id]);
+  const refresh = useCallback(() => { void getQuestionnaireSubmissions(clientId, assignment.id).then(setDetail).catch((e) => setError(e instanceof ApiError ? e.message : String(e))); }, [clientId, assignment.id]);
+  useEffect(() => { refresh(); }, [refresh]);
+  const hasPendingPdf = detail?.pdf_snapshots.some((snapshot) => snapshot.status === "pending") ?? false;
+  useEffect(() => { if (!hasPendingPdf) return; const timer = window.setInterval(refresh, 5000); return () => window.clearInterval(timer); }, [refresh, hasPendingPdf]);
   const submission = detail?.submissions[submissionIndex];
-  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl"><DialogHeader><DialogTitle>{detail?.questionnaire_name ?? assignment.questionnaire_name}</DialogTitle><DialogDescription>Published version {detail?.version_number ?? assignment.version_number} · {assignment.respondent_identifier} · {assignment.reporting_period_label || assignment.reporting_period_key}. Submitted answers are read-only.</DialogDescription></DialogHeader>{error ? <p className="text-sm text-destructive">{error}</p> : !detail ? <p className="text-sm text-muted-foreground">Decrypting submission…</p> : !submission ? <p className="text-sm text-muted-foreground">No submitted answers yet. Draft answers remain available only through the verified client portal.</p> : <div className="flex flex-col gap-5"><label className="flex max-w-xs flex-col gap-1"><Label>Submission history</Label><NativeSelect value={submissionIndex} onChange={(e) => setSubmissionIndex(Number(e.target.value))}>{detail.submissions.map((s, i) => <option key={s.id} value={i}>Submission {s.submission_number} · {new Date(s.submitted_at).toLocaleString()}</option>)}</NativeSelect></label><AnswerSections definition={detail.definition} answers={submission.answers} /></div>}<DialogFooter><Button variant="outline" onClick={() => onOpenChange(false)}>Close</Button></DialogFooter></DialogContent></Dialog>;
+  const snapshot = submission ? detail?.pdf_snapshots.find((item) => item.submission_id === submission.id) ?? null : null;
+  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl"><DialogHeader><DialogTitle>{detail?.questionnaire_name ?? assignment.questionnaire_name}</DialogTitle><DialogDescription>Published version {detail?.version_number ?? assignment.version_number} · {assignment.respondent_identifier} · {assignment.reporting_period_label || assignment.reporting_period_key}. Submitted answers are read-only.</DialogDescription></DialogHeader>{error ? <p className="text-sm text-destructive">{error}</p> : !detail ? <p className="text-sm text-muted-foreground">Decrypting submission…</p> : !submission ? <p className="text-sm text-muted-foreground">No submitted answers yet. Draft answers remain available only through the verified client portal.</p> : <div className="flex flex-col gap-5"><label className="flex max-w-xs flex-col gap-1"><Label>Submission history</Label><NativeSelect value={submissionIndex} onChange={(e) => setSubmissionIndex(Number(e.target.value))}>{detail.submissions.map((s, i) => <option key={s.id} value={i}>Submission {s.submission_number} · {new Date(s.submitted_at).toLocaleString()}</option>)}</NativeSelect></label><QuestionnairePdfAccess clientId={clientId} assignmentId={assignment.id} submissionId={submission.id} snapshot={snapshot} onChanged={refresh} /><AnswerSections definition={detail.definition} answers={submission.answers} /></div>}<DialogFooter><Button variant="outline" onClick={() => onOpenChange(false)}>Close</Button></DialogFooter></DialogContent></Dialog>;
 }
 
 // Mirrors what the client saw: the shared evaluator hides questions and

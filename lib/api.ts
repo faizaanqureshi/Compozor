@@ -244,6 +244,8 @@ export interface DocumentOut {
   // generic label), so the frontend doesn't reimplement it.
   resolved_display_name: string;
   download_url: string | null;
+  questionnaire_submission_id: number | null;
+  questionnaire_assignment_id: number | null;
 }
 
 export interface DocumentUploadResult {
@@ -1391,11 +1393,21 @@ export interface QuestionnaireSubmission {
   submitted_at: string;
   rule_evaluation_results: { requirements?: Record<string, unknown>[]; [key: string]: unknown };
 }
+export interface QuestionnairePdfSnapshot {
+  submission_id: number;
+  document_id: number | null;
+  status: "pending" | "failed" | "ready";
+  attempt_count: number;
+  failure_code: string | null;
+  generated_at: string | null;
+  retrospective: boolean;
+}
 export interface QuestionnaireAssignmentDetail extends QuestionnaireAssignment {
   questionnaire_name: string;
   version_number: number;
   definition: QuestionnaireDefinition;
   submissions: QuestionnaireSubmission[];
+  pdf_snapshots: QuestionnairePdfSnapshot[];
 }
 export interface QuestionnaireReviewProposal {
   id: number;
@@ -1443,6 +1455,25 @@ export const assignQuestionnaire = (clientId: number, input: QuestionnaireAssign
   request<QuestionnaireAssignment>(`/clients/${clientId}/questionnaire-assignments`, json("POST", input));
 export const getQuestionnaireSubmissions = (clientId: number, assignmentId: number) =>
   request<QuestionnaireAssignmentDetail>(`/clients/${clientId}/questionnaire-assignments/${assignmentId}/submissions`);
+export const requestQuestionnairePdf = (clientId: number, assignmentId: number, submissionId: number) =>
+  request<QuestionnairePdfSnapshot>(`/clients/${clientId}/questionnaire-assignments/${assignmentId}/submissions/${submissionId}/pdf`, { method: "POST" });
+export async function downloadQuestionnairePdf(clientId: number, assignmentId: number, submissionId: number): Promise<Blob> {
+  const path = `/clients/${clientId}/questionnaire-assignments/${assignmentId}/submissions/${submissionId}/pdf`;
+  const token = await getAuthToken();
+  if (!token) throw new ApiError(401, "Not authenticated");
+  const requestSession = (window as unknown as { Clerk?: ClerkGlobal }).Clerk?.session;
+  const headers = new Headers({ Authorization: `Bearer ${token}`, "X-Confirm-Sensitive-Access": "true" });
+  let response = await fetch(`${API_BASE_URL}${path}`, { headers, cache: "no-store" });
+  if (response.status === 401 && requestSession === (window as unknown as { Clerk?: ClerkGlobal }).Clerk?.session) {
+    const fresh = await getAuthToken(true);
+    if (fresh && requestSession === (window as unknown as { Clerk?: ClerkGlobal }).Clerk?.session) {
+      headers.set("Authorization", `Bearer ${fresh}`);
+      response = await fetch(`${API_BASE_URL}${path}`, { headers, cache: "no-store" });
+    }
+  }
+  if (!response.ok) throw await responseError(response);
+  return response.blob();
+}
 export const cancelQuestionnaireAssignment = (clientId: number, assignmentId: number) =>
   request<QuestionnaireAssignment>(`/clients/${clientId}/questionnaire-assignments/${assignmentId}/cancel`, { method: "POST" });
 export const supersedeQuestionnaireAssignment = (clientId: number, assignmentId: number, input: QuestionnaireAssignmentInput) =>
