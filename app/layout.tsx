@@ -6,26 +6,17 @@ import localFont from "next/font/local";
 import { cn } from "@/lib/utils";
 import { SITE_URL, SITE_DESCRIPTION } from "@/lib/seo";
 
-const neueMontreal = localFont({
+const geist = localFont({
   variable: "--font-sans",
-  src: [
-    { path: "./fonts/neue-montreal/PPNeueMontreal-Light.otf", weight: "300", style: "normal" },
-    { path: "./fonts/neue-montreal/PPNeueMontreal-Regular.otf", weight: "400", style: "normal" },
-    { path: "./fonts/neue-montreal/PPNeueMontreal-Italic.otf", weight: "400", style: "italic" },
-    { path: "./fonts/neue-montreal/PPNeueMontreal-Semibold.otf", weight: "600", style: "normal" },
-    { path: "./fonts/neue-montreal/PPNeueMontreal-SemiboldItalic.otf", weight: "600", style: "italic" },
-    { path: "./fonts/neue-montreal/PPNeueMontreal-Extrabold.otf", weight: "800", style: "normal" },
-  ],
+  src: "./fonts/geist/Geist.ttf",
+  weight: "100 900",
 });
 
-const denton = localFont({
-  variable: "--font-denton",
-  src: [
-    { path: "./fonts/denton/DentonTest-Thin.otf", weight: "100", style: "normal" },
-    { path: "./fonts/denton/DentonTest-Regular.otf", weight: "400", style: "normal" },
-    { path: "./fonts/denton/DentonTest-Medium.otf", weight: "500", style: "normal" },
-    { path: "./fonts/denton/DentonTest-Bold.otf", weight: "700", style: "normal" },
-  ],
+// SOFT and WONK are pinned to 0 in the file; weight and optical size stay variable.
+const fraunces = localFont({
+  variable: "--font-display",
+  src: "./fonts/fraunces/Fraunces.ttf",
+  weight: "100 900",
 });
 
 export const metadata: Metadata = {
@@ -56,7 +47,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={cn("h-full", "font-sans", neueMontreal.variable, denton.variable)}>
+    <html lang="en" className={cn("h-full", "font-sans", geist.variable, fraunces.variable)}>
       <body className="min-h-full flex flex-col">
         <ClerkProvider waitlistUrl="/waitlist" signInUrl="/sign-in" signUpUrl="/sign-up">
           <AppShell>{children}</AppShell>

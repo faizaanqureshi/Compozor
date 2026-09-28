@@ -350,7 +350,7 @@ export default function PublicUploadPage({
     return (
       <PublicShell firm={null}>
         <div className="mx-auto flex max-w-lg flex-col gap-4 py-10 text-center sm:py-20">
-          <h1 className="text-4xl leading-tight font-thin tracking-tight text-balance [font-family:var(--font-denton)] sm:text-5xl">
+          <h1 className="text-4xl leading-tight font-light tracking-tight text-balance [font-family:var(--font-display)] sm:text-5xl">
             This link isn&apos;t available
           </h1>
           <p className="text-sm text-pretty text-muted-foreground">{linkInfo.error}</p>
@@ -375,7 +375,7 @@ export default function PublicUploadPage({
         </p>
         {linkInfo ? (
           <>
-            <h1 className="text-[2.5rem] leading-[1.05] font-thin tracking-tight text-balance [font-family:var(--font-denton)] sm:text-5xl lg:text-6xl">
+            <h1 className="text-[2.5rem] leading-[1.05] font-light tracking-tight text-balance [font-family:var(--font-display)] sm:text-5xl lg:text-6xl">
               {view.requiredFirst
                 ? firstName
                   ? `${firstName}, a few questions before your documents.`

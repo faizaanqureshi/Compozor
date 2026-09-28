@@ -433,7 +433,7 @@ function ClientHeader({
       ) : (
         <div className="flex flex-col gap-4 animate-fade-in lg:flex-row lg:items-end lg:justify-between">
           <div className="flex min-w-0 flex-col gap-2">
-            <h1 className="text-4xl leading-tight font-thin tracking-tight text-balance [font-family:var(--font-denton)] md:text-5xl">
+            <h1 className="text-4xl leading-tight font-light tracking-tight text-balance [font-family:var(--font-display)] md:text-5xl">
               {client.name}
             </h1>
             <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">

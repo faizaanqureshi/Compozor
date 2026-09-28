@@ -107,7 +107,7 @@ export default function PackagesPage() {
     <div className="mx-auto flex w-full max-w-[96rem] flex-col gap-6">
       <header className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
         <div className="flex flex-col gap-2">
-          <h1 className="text-4xl leading-tight font-thin tracking-tight [font-family:var(--font-denton)] md:text-5xl">
+          <h1 className="text-4xl leading-tight font-light tracking-tight [font-family:var(--font-display)] md:text-5xl">
             Packages
           </h1>
           <p className="max-w-xl text-sm text-pretty text-muted-foreground">

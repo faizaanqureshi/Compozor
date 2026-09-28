@@ -46,7 +46,7 @@ export function QuestionnaireImportUpload() {
   return <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
     <Button className="self-start" variant="ghost" size="sm" nativeButton={false} render={<Link href="/questionnaires" />}><ArrowLeft /> Questionnaires</Button>
     <header className="flex flex-col gap-2">
-      <h1 className="text-4xl leading-tight font-thin tracking-tight [font-family:var(--font-denton)] md:text-5xl">Import a questionnaire</h1>
+      <h1 className="text-4xl leading-tight font-light tracking-tight [font-family:var(--font-display)] md:text-5xl">Import a questionnaire</h1>
       <p className="max-w-2xl text-sm text-pretty text-muted-foreground">Upload your firm’s existing blank questionnaire. Compozor reads it, drafts the questions in the builder and suggests document requests. You review everything, and nothing is created until you approve it.</p>
     </header>
 

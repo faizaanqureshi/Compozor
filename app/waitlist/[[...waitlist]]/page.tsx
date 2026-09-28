@@ -30,7 +30,7 @@ export default function WaitlistPage() {
           <p className="text-xs uppercase tracking-widest text-muted-foreground">
             Early access
           </p>
-          <h1 className="mt-6 text-5xl leading-tight font-thin tracking-tight sm:text-6xl [font-family:var(--font-denton)]">
+          <h1 className="mt-6 text-5xl leading-tight font-light tracking-tight sm:text-6xl [font-family:var(--font-display)]">
             A little less admin.
             <br />A lot more possibility.
           </h1>

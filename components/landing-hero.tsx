@@ -10,7 +10,7 @@ export function LandingHero() {
             <span className="h-px w-5 shrink-0 sm:w-7 bg-accent" aria-hidden />
             AI agents for professional firms
           </p>
-          <h1 className="text-[3.25rem] leading-[1.02] font-thin tracking-tight text-balance sm:text-7xl sm:leading-[1.06] xl:text-[5.25rem] [font-family:var(--font-denton)]">
+          <h1 className="text-[3.25rem] leading-[1.02] font-light tracking-tight text-balance sm:text-7xl sm:leading-[1.06] xl:text-[5.25rem] [font-family:var(--font-display)]">
             Less chasing.
             <br />
             <span className="text-marketing-forest dark:text-marketing-brass">

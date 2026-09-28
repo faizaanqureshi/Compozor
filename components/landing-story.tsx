@@ -298,7 +298,7 @@ export function LandingStory() {
             <p className="text-xs uppercase tracking-widest text-marketing-forest dark:text-marketing-brass">
               AI that follows the work through
             </p>
-            <h2 className="mt-5 max-w-2xl text-4xl leading-tight font-thin tracking-tight sm:text-5xl [font-family:var(--font-denton)]">
+            <h2 className="mt-5 max-w-2xl text-4xl leading-tight font-light tracking-tight sm:text-5xl [font-family:var(--font-display)]">
               From the first request
               <br />
               to the finished work.

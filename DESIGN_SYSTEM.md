@@ -20,8 +20,8 @@ and restraint are easier to see than to specify.
 
 **`docs/design-reference/landing-hero.png`** — the marketing landing hero.
 Reference for:
-- Denton at true hero scale (`Stop chasing clients.`) against Neue Montreal
-  everywhere else (nav, body copy, badge, button) — the contrast between the
+- The display serif at true hero scale (`Stop chasing clients.`) against the
+  UI sans everywhere else (nav, body copy, badge, button) — the contrast between the
   two faces is the whole effect; note how little else is competing with it.
 - The "AUTOMATED INTAKE" eyebrow: small, uppercase, tracked-out, muted —
   informative, not decorative. This is the reusable "quiet label" pattern
@@ -113,21 +113,25 @@ color at all.
 Two type families, each with a specific job — never use one for the other's
 job:
 
-- **`font-sans` (PP Neue Montreal, via `--font-sans`)** — the default
+- **`font-sans` (Geist, via `--font-sans`)** — the default
   UI/body font (`html` sets `font-sans` globally). Use for all body copy,
   labels, buttons, form fields, table content, nav. This is also aliased as
   `font-heading` in the theme, so `CardTitle`/section headings default to it
   too unless a page explicitly wants the display face.
-- **`[font-family:var(--font-denton)]` (Denton, condensed/thin display
-  serif)** — reserved for large marketing/hero headlines only (see
-  `landing-hero.tsx`: `font-thin tracking-tight` at `text-5xl`+). Do not use
-  Denton for in-app dashboard UI, table headers, or anything below hero
-  scale — it reads as decorative at small sizes, which breaks the restraint
-  principle in §1.
+- **`[font-family:var(--font-display)]` (Fraunces, light display serif)** —
+  reserved for large marketing/hero headlines only (see `landing-hero.tsx`:
+  `font-light tracking-tight` at `text-5xl`+). Do not use Fraunces for in-app
+  dashboard UI, table headers, or anything below hero scale — it reads as
+  decorative at small sizes, which breaks the restraint principle in §1.
+  Use `font-light` (300), not `font-thin`: Fraunces at 100 is a hairline.
+
+Both fonts are SIL Open Font License (`app/fonts/*/OFL.txt`), free for
+commercial use. Don't add a font without a licence that covers a public
+website and redistribution in this repo.
 
 Weight and tracking conventions worth following:
-- Thin/light weights (`font-thin`, `font-light`) at large display sizes read
-  as "quiet luxury"; avoid bold display type outside of real emphasis needs.
+- Light weights (`font-light`) at large display sizes read as "quiet
+  luxury"; avoid bold display type outside of real emphasis needs.
 - `uppercase tracking-wide text-muted-foreground` on a `Badge`/eyebrow label
   is the established "quiet label" pattern (see the "Automated intake" badge
   in `landing-hero.tsx`) — reuse it instead of inventing a new eyebrow style.
@@ -291,7 +295,7 @@ screen.
 - [ ] Have I looked at `docs/design-reference/` (§0) if I'm unsure whether
       something "feels right," not just whether it follows a rule?
 - [ ] Am I using semantic color tokens only (no raw hex/arbitrary colors)?
-- [ ] Am I using the right font for the context (sans for UI, Denton only
+- [ ] Am I using the right font for the context (sans for UI, Fraunces only
       for hero-scale display type)?
 - [ ] Does this reuse an existing `components/ui/` primitive or feature
       component before adding a new one?
@@ -343,7 +347,7 @@ and the rich brass token is for accents on dark backgrounds. Preserve the hero's
 fine grid and soft yellow aurora glow alongside the deeper evergreen surfaces.
 Product previews
 use fictional data and must be labeled as illustrations, never actual client
-records. Retain the existing Denton / Neue Montreal pairing and quiet motion.
+records. Retain the existing Fraunces / Geist pairing and quiet motion.
 
 Homepage scroll motion uses a short upward reveal with a light blur, once per
 content group. Keep surfaces stationary and stagger paired content by only 120ms.
@@ -419,7 +423,7 @@ and workflow output; the reminder row and workflow steps are hidden. On phones
 the "How it works" tabs unroll into a scrolling Collect → Check → Prepare
 sequence, each step showing its outcome with the shared `*Example` card bodies
 from `landing-story.tsx`. Wider screens keep the interactive tabs; edit the
-shared bodies so both stay in sync. Phone section titles are all Denton.
+shared bodies so both stay in sync. Phone section titles are all Fraunces.
 Report/practice cards drop decorative micro-labels and footers on phones but
 keep their fictional-data labels. The nav uses `public/compozor-wordmark.png`
 (lowercase sans lockup, #122023, cropped from the brand export). Give mobile navigation and report tabs

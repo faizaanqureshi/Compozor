@@ -59,7 +59,7 @@ export default function AdminClientUsagePage({ params }: { params: Promise<{ id:
           <Skeleton className="h-11 w-72" />
         ) : (
           <div className="flex flex-col gap-2">
-            <h1 className="text-4xl leading-tight font-thin tracking-tight text-balance [font-family:var(--font-denton)] md:text-5xl">
+            <h1 className="text-4xl leading-tight font-light tracking-tight text-balance [font-family:var(--font-display)] md:text-5xl">
               {data?.client_name ?? "Client"}
             </h1>
             <p className="text-sm text-muted-foreground">
