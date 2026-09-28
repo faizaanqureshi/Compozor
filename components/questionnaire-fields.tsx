@@ -31,6 +31,8 @@ import {
   addEntry,
   entryIdKey,
   fieldKey,
+  formatHint,
+  normalizeFormatted,
   moveEntry,
   removeEntry,
   setAnswer,
@@ -128,7 +130,8 @@ function QuestionField({
     return <RepeatingGroup q={q} chain={chain} scope={scope} value={value} required={required} error={error} field={field} />;
   }
 
-  const describedBy = [q.description ? `${id}-desc` : null, error ? `${id}-err` : null].filter(Boolean).join(" ") || undefined;
+  const hint = q.type === "short_text" && q.input_format ? formatHint(q.input_format) : null;
+  const describedBy = [q.description ? `${id}-desc` : null, hint?.example ? `${id}-hint` : null, error ? `${id}-err` : null].filter(Boolean).join(" ") || undefined;
   const common = { id, "aria-invalid": error ? true : undefined, "aria-describedby": describedBy, disabled: field.disabled };
   const grouped = ["yes_no", "single_choice", "multiple_choice", "contact", "address", "confirmation"].includes(q.type)
     || (q.type === "date" && q.date_precision !== "day" && q.date_precision != null);
@@ -153,8 +156,17 @@ function QuestionField({
       )}
       <div className="mt-0.5">
         {q.type === "short_text" && (
-          <Input {...common} value={typeof value === "string" ? value : ""} onChange={(e) => set(e.target.value || undefined)} />
+          <Input {...common} value={typeof value === "string" ? value : ""} onChange={(e) => set(e.target.value || undefined)}
+            {...(hint && q.input_format ? {
+              inputMode: hint.inputMode, autoComplete: hint.autoComplete, placeholder: hint.example || undefined,
+              className: "sm:max-w-xs",
+              onBlur: (e: React.FocusEvent<HTMLInputElement>) => {
+                const tidy = normalizeFormatted(q.input_format!, e.target.value);
+                if (tidy !== e.target.value) set(tidy);
+              },
+            } : {})} />
         )}
+        {hint?.example && <p id={`${id}-hint`} className="mt-1 text-xs text-muted-foreground">Format: {hint.example}</p>}
         {q.type === "long_text" && (
           <Textarea {...common} rows={4} value={typeof value === "string" ? value : ""} onChange={(e) => set(e.target.value || undefined)} />
         )}

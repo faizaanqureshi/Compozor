@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
 import { useRouter } from "next/navigation";
 import {
-  ArrowDown, ArrowUp, ChevronDown, ChevronRight, Copy, FileText, History, Plus, Save, Send, Settings2, SlidersHorizontal, Trash2,
+  AlertTriangle, ArrowDown, ArrowUp, ChevronDown, ChevronRight, Copy, FileText, History, Plus, Save, Send, Settings2, SlidersHorizontal, Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -37,6 +37,7 @@ import {
   type QuestionnaireDefinition,
   type QuestionnaireSection,
   type QuestionType,
+  type FormatKind,
 } from "@/lib/questionnaire-logic";
 import {
   OPERATOR_OPTIONS,
@@ -155,9 +156,11 @@ function TriggerInput({ question, request, onChange }: { question: QuestionDefin
   }
   if (question.type === "single_choice" || question.type === "multiple_choice") {
     const operator = question.type === "multiple_choice" ? "contains" : "equals";
-    return <NativeSelect aria-label="Answer" value={typeof request.value === "string" ? request.value : ""} onChange={(e) => onChange({ operator, value: e.target.value })}>
-      {!(question.options ?? []).some((o) => o.value === request.value) && <option value="">Select a choice…</option>}
+    const any = request.operator === "exists";
+    return <NativeSelect aria-label="Answer" value={any ? "__any__" : typeof request.value === "string" ? request.value : ""} onChange={(e) => onChange(e.target.value === "__any__" ? { operator: "exists", value: undefined } : { operator, value: e.target.value })}>
+      {!any && !(question.options ?? []).some((o) => o.value === request.value) && <option value="">Select a choice…</option>}
       {(question.options ?? []).map((o, i) => <option key={o.value} value={o.value}>{o.label || `Choice ${i + 1}`}</option>)}
+      <option value="__any__">Any answer</option>
     </NativeSelect>;
   }
   return <span className="flex h-8 items-center rounded-lg bg-muted/40 px-2.5 text-sm text-muted-foreground">Any answer is given</span>;
@@ -211,6 +214,23 @@ function ChoicesEditor({ question, rules, definition, onChange }: { question: Qu
   </div>;
 }
 
+// ---- Import review layer (optional) ----------------------------------------------
+// An AI import reuses this builder unchanged; the review page supplies these
+// hooks to mark items that need a decision and to filter to them.
+
+export type ReviewSeverity = "critical" | "warning";
+export interface ReviewLayer {
+  severity: Record<string, ReviewSeverity>;
+  render: (targetId: string) => ReactNode;
+  visibleQuestionIds: Set<string> | null;
+}
+
+function ReviewFlag({ severity }: { severity: ReviewSeverity }) {
+  return <span className={`inline-flex items-center gap-1 text-xs font-medium ${severity === "critical" ? "text-destructive" : "text-warning-foreground"}`}>
+    <AlertTriangle className="size-3.5" aria-hidden />{severity === "critical" ? "Must review" : "Needs review"}
+  </span>;
+}
+
 interface QuestionCardProps {
   question: QuestionDefinition;
   index: number;
@@ -227,6 +247,7 @@ interface QuestionCardProps {
   onMove: (delta: number) => void;
   onOpenRules: () => void;
   nested?: boolean;
+  review?: ReviewLayer;
 }
 
 function QuestionCard(props: QuestionCardProps) {
@@ -237,9 +258,11 @@ function QuestionCard(props: QuestionCardProps) {
   const requestCount = nested ? 0 : requestsForQuestion(rules, definition, question.id).simple.length;
   const choice = question.type === "single_choice" || question.type === "multiple_choice";
   const hasAdvanced = !!(question.description || question.visible_when || question.required_when || (question.sensitivity && question.sensitivity !== "standard"));
+  const flag = nested ? undefined : props.review?.severity[question.id];
+  const flagRing = flag === "critical" ? "ring-2 ring-destructive/60" : flag === "warning" ? "ring-2 ring-warning" : "";
 
   if (!expanded) {
-    return <button type="button" onClick={onToggle} className="group flex w-full items-center gap-3 rounded-lg bg-card px-3 py-3 text-left ring-1 ring-foreground/10 transition-colors hover:bg-muted/40">
+    return <button type="button" data-question-id={question.id} onClick={onToggle} className={`group flex w-full items-center gap-3 rounded-lg bg-card px-3 py-3 text-left transition-colors hover:bg-muted/40 ${flagRing || "ring-1 ring-foreground/10"}`}>
       <span className="w-5 shrink-0 text-right text-xs text-muted-foreground tabular-nums">{index + 1}</span>
       <span className="min-w-0 flex-1">
         <span className={`block truncate text-sm ${question.label ? "" : "text-muted-foreground italic"}`}>{question.label || "Untitled question"}</span>
@@ -248,6 +271,7 @@ function QuestionCard(props: QuestionCardProps) {
           {question.required && <span>· Required</span>}
           {(question.visible_when || question.required_when) && <span>· Conditional</span>}
           {requestCount > 0 && <span>· {requestCount} document request{requestCount === 1 ? "" : "s"}</span>}
+          {flag && <ReviewFlag severity={flag} />}
         </span>
       </span>
       <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
@@ -256,7 +280,8 @@ function QuestionCard(props: QuestionCardProps) {
 
   const fields = question.fields ?? [];
   const setFields = (next: QuestionDefinition[]) => onChange({ ...question, fields: next });
-  return <div className="flex flex-col gap-4 rounded-xl bg-card p-4 ring-1 ring-foreground/20 animate-blur-in-sm">
+  return <div data-question-id={question.id} className={`flex flex-col gap-4 rounded-xl bg-card p-4 animate-blur-in-sm ${flagRing || "ring-1 ring-foreground/20"}`}>
+    {!nested && props.review?.render(question.id)}
     <div className="flex items-start gap-2">
       <Textarea aria-label="Question" rows={1} autoFocus={!question.label} className="min-h-10 flex-1 resize-none text-base" value={question.label} placeholder={question.type === "information" ? "Information to show the client" : "Type your question"} onChange={(e) => onChange({ ...question, label: e.target.value })} />
       <Button size="icon" variant="ghost" aria-label="Collapse question" onClick={onToggle}><ChevronDown /></Button>
@@ -268,6 +293,21 @@ function QuestionCard(props: QuestionCardProps) {
       {question.type !== "information" && <label className="flex items-center gap-2 text-sm"><Switch checked={!!question.required} onCheckedChange={(required) => onChange({ ...question, required })} /> Required</label>}
       {question.type === "date" && <label className="flex items-center gap-2 text-sm text-muted-foreground">Ask for
         <NativeSelect className="w-52" value={question.date_precision ?? "day"} onChange={(e) => onChange({ ...question, date_precision: e.target.value as QuestionDefinition["date_precision"] })}><option value="day">A full date</option><option value="month">Month and year</option><option value="year">Year only</option><option value="partial">As much as they know</option></NativeSelect>
+      </label>}
+      {question.type === "short_text" && <label className="flex items-center gap-2 text-sm text-muted-foreground">Answer format
+        <NativeSelect aria-label="Answer format" className="w-44" value={question.input_format?.kind ?? ""} onChange={(e) => {
+          const kind = e.target.value as FormatKind | "";
+          onChange(kind ? { ...question, input_format: { kind, region: kind === "email" ? null : question.input_format?.region ?? null },
+            ...(kind === "national_id" ? { sensitivity: "restricted" } : {}) } : { ...question, input_format: null });
+        }}>
+          <option value="">Any text</option><option value="phone">Phone number</option><option value="email">Email address</option>
+          <option value="postal_code">Postal or ZIP code</option><option value="national_id">ID number (e.g. SIN, SSN)</option>
+        </NativeSelect>
+      </label>}
+      {question.type === "short_text" && question.input_format && question.input_format.kind !== "email" && <label className="flex items-center gap-2 text-sm text-muted-foreground">Country
+        <NativeSelect aria-label="Format country" className="w-40" value={question.input_format.region ?? ""} onChange={(e) => onChange({ ...question, input_format: { ...question.input_format!, region: (e.target.value || null) as "CA" | "US" | null } })}>
+          <option value="">Any country</option><option value="CA">Canada</option><option value="US">United States</option>
+        </NativeSelect>
       </label>}
       {question.type === "currency" && <label className="flex items-center gap-2 text-sm text-muted-foreground">Currency
         <Input className="w-20 uppercase" maxLength={3} value={question.currency_code ?? ""} placeholder="CAD" onChange={(e) => onChange({ ...question, currency_code: e.target.value.toUpperCase() })} />
@@ -331,6 +371,7 @@ interface SectionCardProps {
   rules: Rules;
   setDraft: (definition: QuestionnaireDefinition, rules?: Rules) => void;
   onOpenRules: () => void;
+  review?: ReviewLayer;
 }
 
 function SectionCard(props: SectionCardProps) {
@@ -347,7 +388,7 @@ function SectionCard(props: SectionCardProps) {
       <Button size="icon" variant="ghost" className="mt-0.5" aria-label={collapsed ? "Expand section" : "Collapse section"} aria-expanded={!collapsed} onClick={() => props.onCollapse(!collapsed)}>{collapsed ? <ChevronRight /> : <ChevronDown />}</Button>
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <input aria-label="Section title" className="w-full min-w-0 bg-transparent text-xl font-light tracking-tight outline-none placeholder:text-muted-foreground/70 focus-visible:underline focus-visible:decoration-border focus-visible:underline-offset-8" value={section.title} placeholder={`Section ${index + 1} title`} onChange={(e) => updateSection({ ...section, title: e.target.value })} />
-        <span className="text-xs text-muted-foreground">{count} question{count === 1 ? "" : "s"}{section.visible_when ? " · Shown conditionally" : ""}</span>
+        <span className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">{count} question{count === 1 ? "" : "s"}{section.visible_when ? " · Shown conditionally" : ""}{props.review?.severity[section.id] && <ReviewFlag severity={props.review.severity[section.id]} />}</span>
       </div>
       <div className="order-last flex w-full shrink-0 justify-end gap-0.5 sm:order-none sm:w-auto">
         <Button size="icon" variant="ghost" aria-label="Section settings" aria-pressed={settings} onClick={() => { setSettings(!settings); props.onCollapse(false); }}><Settings2 /></Button>
@@ -364,8 +405,9 @@ function SectionCard(props: SectionCardProps) {
         <p className="text-sm font-medium">Section settings</p>
         <ConditionEditor label="Show this section only when" empty="Always shown" value={section.visible_when} definition={definition} onChange={(visible_when) => updateSection({ ...section, visible_when })} />
       </div>}
+      {props.review?.render(section.id)}
       {blockers.length > 0 && <p className="text-xs text-muted-foreground">This section can’t be deleted while {blockers.join(", ")} depend{blockers.length === 1 ? "s" : ""} on its questions.</p>}
-      {section.questions.map((q, qi) => <QuestionCard key={q.id} question={q} index={qi} total={section.questions.length}
+      {section.questions.map((q, qi) => props.review?.visibleQuestionIds && !props.review.visibleQuestionIds.has(q.id) ? null : <QuestionCard key={q.id} review={props.review} question={q} index={qi} total={section.questions.length}
         expanded={props.expandedQuestion === q.id} onToggle={() => props.setExpandedQuestion(props.expandedQuestion === q.id ? null : q.id)}
         definition={definition} rules={rules} setRules={(next) => setDraft(definition, next)} onOpenRules={props.onOpenRules}
         onChange={(next) => setQuestion(qi, next)}
@@ -472,7 +514,7 @@ function useGeneratedDocuments(definition: QuestionnaireDefinition, rules: Rules
   return result;
 }
 
-function QuestionnairePreview({ definition, rules, title }: { definition: QuestionnaireDefinition; rules: Rules; title: string }) {
+export function QuestionnairePreview({ definition, rules, title }: { definition: QuestionnaireDefinition; rules: Rules; title: string }) {
   const [answers, setAnswers] = useState<Answers>({});
   const [sectionIndex, setSectionIndex] = useState(0);
   const context = useMemo(() => new QuestionnaireContext(definition, answers), [definition, answers]);
@@ -545,22 +587,48 @@ export function pendingHandoff(id: number): QuestionnaireTemplate | null {
   return handoffs.get(id)?.template ?? null;
 }
 
-const COLLAPSE_KEY = (id: number | null) => `compozor.builder.collapsed.${id ?? "new"}`;
+const COLLAPSE_KEY = (id: number | string | null) => `compozor.builder.collapsed.${id ?? "new"}`;
 
-function readCollapsed(id: number | null): Set<string> {
+function readCollapsed(id: number | string | null): Set<string> {
   try { return new Set(JSON.parse(window.localStorage.getItem(COLLAPSE_KEY(id)) ?? "[]") as string[]); } catch { return new Set(); }
 }
 
-export function QuestionnaireBuilder({ template, versions, onSaved }: { template: QuestionnaireTemplate | null; versions: QuestionnaireVersion[]; onSaved: (template: QuestionnaireTemplate, version?: QuestionnaireVersion) => void }) {
+export interface BuilderDraft { name: string; description: string; definition: QuestionnaireDefinition; rules: Rules }
+export interface BuilderHandle {
+  focusQuestion: (questionId: string) => void;
+  showTab: (tab: "questions" | "rules" | "preview") => void;
+  updateRules: (update: (rules: Rules) => Rules) => void;
+  updateDefinition: (update: (definition: QuestionnaireDefinition) => QuestionnaireDefinition) => void;
+  flush: () => Promise<boolean>;
+}
+/** Reuses the builder to review an AI import: persistence and header actions come from the import. */
+export interface BuilderImportMode {
+  key: string;
+  initial: BuilderDraft;
+  save: (draft: BuilderDraft) => Promise<void>;
+  actions: ReactNode;
+  banner: ReactNode;
+  review: ReviewLayer;
+  onDraftChange: (draft: BuilderDraft) => void;
+}
+
+export function QuestionnaireBuilder({ template, versions, onSaved, importMode, handle }: {
+  template: QuestionnaireTemplate | null;
+  versions: QuestionnaireVersion[];
+  onSaved: (template: QuestionnaireTemplate, version?: QuestionnaireVersion) => void;
+  importMode?: BuilderImportMode;
+  handle?: Ref<BuilderHandle>;
+}) {
   const router = useRouter();
   const [resume] = useState(() => (template ? handoffs.get(template.id) ?? null : null));
   useEffect(() => { if (template) handoffs.delete(template.id); }, [template]);
-  const [name, setName] = useState(resume?.name ?? template?.name ?? "");
-  const [description, setDescription] = useState(resume?.description ?? template?.description ?? "");
-  const [definition, setDefinition] = useState<QuestionnaireDefinition>(() => resume?.definition ?? template?.draft_definition ?? emptyQuestionnaire());
-  const [rules, setRules] = useState<Rules>(resume?.rules ?? template?.draft_document_rules ?? []);
+  const seed = importMode?.initial;
+  const [name, setName] = useState(seed?.name ?? resume?.name ?? template?.name ?? "");
+  const [description, setDescription] = useState(seed?.description ?? resume?.description ?? template?.description ?? "");
+  const [definition, setDefinition] = useState<QuestionnaireDefinition>(() => seed?.definition ?? resume?.definition ?? template?.draft_definition ?? emptyQuestionnaire());
+  const [rules, setRules] = useState<Rules>(seed?.rules ?? resume?.rules ?? template?.draft_document_rules ?? []);
   const serialized = JSON.stringify({ name, description, definition, rules });
-  const [baseline, setBaseline] = useState(() => resume?.baseline ?? (template ? serialized : JSON.stringify({ name: "", description: "", definition, rules: [] })));
+  const [baseline, setBaseline] = useState(() => resume?.baseline ?? (template || seed ? serialized : JSON.stringify({ name: "", description: "", definition, rules: [] })));
   const [status, setStatus] = useState<{ text: string; error?: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState(resume?.tab ?? "questions");
@@ -568,16 +636,19 @@ export function QuestionnaireBuilder({ template, versions, onSaved }: { template
   const latest = useRef<EditorState | null>(null);
   useEffect(() => { latest.current = { name, description, definition, rules, tab, expandedQuestion }; });
   const templateId = useRef<number | null>(template?.id ?? null);
-  const [savedId, setSavedId] = useState<number | null>(template?.id ?? null);
+  const [savedId, setSavedId] = useState<number | null>(template?.id ?? (importMode ? 0 : null));
   const saving = useRef<Promise<QuestionnaireTemplate | null> | null>(null);
   const lastSaved = useRef<QuestionnaireTemplate | null>(template);
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
-  useEffect(() => { setCollapsed(readCollapsed(templateId.current)); }, []);
+  const collapseKey = useRef<number | string | null>(importMode ? importMode.key : template?.id ?? null);
+  useEffect(() => { setCollapsed(readCollapsed(collapseKey.current)); }, []);
   const setSectionCollapsed = (id: string, value: boolean) => setCollapsed((prev) => {
     const next = new Set(prev); if (value) next.add(id); else next.delete(id);
-    try { window.localStorage.setItem(COLLAPSE_KEY(templateId.current), JSON.stringify([...next])); } catch { /* preference only */ }
+    try { window.localStorage.setItem(COLLAPSE_KEY(collapseKey.current), JSON.stringify([...next])); } catch { /* preference only */ }
     return next;
   });
+  const onDraftChange = importMode?.onDraftChange;
+  useEffect(() => { onDraftChange?.({ name, description, definition, rules }); }, [onDraftChange, name, description, definition, rules]);
 
   const dirty = baseline !== serialized;
   useEffect(() => {
@@ -599,12 +670,19 @@ export function QuestionnaireBuilder({ template, versions, onSaved }: { template
     const payload = { description: description || null, draft_definition: definition, draft_document_rules: { format_version: "1" as const, rules } };
     const run = (async () => {
       try {
+        if (importMode) {
+          await importMode.save({ name, description, definition, rules });
+          setBaseline(snapshot);
+          setStatus({ text: "Review progress saved" });
+          return null;
+        }
         let saved: QuestionnaireTemplate;
         if (templateId.current === null) {
           if (!name.trim()) { setStatus({ text: "Name the questionnaire to save it" }); return null; }
           saved = await createQuestionnaireTemplate({ name: name.trim(), ...payload });
           try { const prior = window.localStorage.getItem(COLLAPSE_KEY(null)); if (prior) window.localStorage.setItem(COLLAPSE_KEY(saved.id), prior); window.localStorage.removeItem(COLLAPSE_KEY(null)); } catch { /* preference only */ }
           templateId.current = saved.id;
+          collapseKey.current = saved.id;
           setSavedId(saved.id);
           if (navigate) {
             handoffs.set(saved.id, { ...latest.current!, template: saved, baseline: snapshot });
@@ -625,14 +703,14 @@ export function QuestionnaireBuilder({ template, versions, onSaved }: { template
     })();
     saving.current = run;
     try { return await run; } finally { if (saving.current === run) saving.current = null; }
-  }, [name, description, definition, rules, onSaved, router]);
+  }, [name, description, definition, rules, onSaved, router, importMode]);
 
   // Autosave: drafts may be incomplete; a new questionnaire is persisted once it has a name.
   useEffect(() => {
-    if (!dirty || busy || (templateId.current === null && !name.trim())) return;
+    if (!dirty || busy || (!importMode && templateId.current === null && !name.trim())) return;
     const timer = setTimeout(() => { void save(); }, 1200);
     return () => clearTimeout(timer);
-  }, [dirty, busy, name, save]);
+  }, [dirty, busy, name, save, importMode]);
 
   const publish = async () => {
     if (!name.trim()) { setStatus({ text: "Name the questionnaire before publishing", error: true }); return; }
@@ -663,27 +741,44 @@ export function QuestionnaireBuilder({ template, versions, onSaved }: { template
     setStatus({ text: `Draft replaced with version ${version.version_number}` });
   };
 
+  useImperativeHandle(handle, () => ({
+    focusQuestion: (questionId: string) => {
+      const section = definition.sections.find((s) => s.questions.some((q) => q.id === questionId));
+      if (!section) return;
+      setTab("questions");
+      if (collapsed.has(section.id)) setSectionCollapsed(section.id, false);
+      setExpandedQuestion(questionId);
+      requestAnimationFrame(() => requestAnimationFrame(() => document.querySelector(`[data-question-id="${questionId}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" })));
+    },
+    showTab: (next) => setTab(next),
+    updateRules: (update) => setRules((prev) => update(prev)),
+    updateDefinition: (update) => setDefinition((prev) => update(prev)),
+    flush: async () => { if (baseline === serialized) return true; await save(); return true; },
+  }));
+
   const latestVersion = versions.reduce<number | null>((max, v) => Math.max(max ?? 0, v.version_number), null);
-  const statusText = status?.error ? status.text
+  const statusText = importMode ? (status?.error ? status.text : dirty ? "Unsaved changes" : "Review progress saved")
+    : status?.error ? status.text
     : savedId === null ? (name.trim() ? "Saving…" : "Not saved yet — name the questionnaire to save it")
     : dirty ? "Unsaved changes" : status?.text ?? "All changes saved";
 
   return <div className="flex flex-col gap-6">
     <div className="flex flex-col gap-4">
-      <input aria-label="Questionnaire name" autoFocus={!template} className="w-full min-w-0 bg-transparent text-4xl leading-tight font-thin tracking-tight outline-none [font-family:var(--font-denton)] placeholder:text-muted-foreground/60 md:text-5xl" value={name} placeholder="Untitled questionnaire" onChange={(e) => setName(e.target.value)} />
+      <input aria-label="Questionnaire name" autoFocus={!template} className="w-full min-w-0 bg-transparent text-3xl leading-tight font-thin sm:text-4xl tracking-tight outline-none [font-family:var(--font-denton)] placeholder:text-muted-foreground/60 md:text-5xl" value={name} placeholder="Untitled questionnaire" onChange={(e) => setName(e.target.value)} />
       <Textarea aria-label="Questionnaire description" rows={1} className="min-h-9 max-w-3xl resize-none border-transparent bg-transparent px-0 text-sm text-muted-foreground shadow-none focus-visible:border-input focus-visible:px-2.5" value={description} placeholder="Add a description for your team (optional)" onChange={(e) => setDescription(e.target.value)} />
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <span role="status" className={`text-xs ${status?.error ? "text-destructive" : "text-muted-foreground"}`}>{statusText}{latestVersion ? ` · Latest published: version ${latestVersion}` : " · Not published"}</span>
-        <div className="flex gap-2">
+        <span role="status" className={`text-xs ${status?.error ? "text-destructive" : "text-muted-foreground"}`}>{statusText}{importMode ? "" : latestVersion ? ` · Latest published: version ${latestVersion}` : " · Not published"}</span>
+        {importMode ? <div className="flex flex-wrap gap-2">{importMode.actions}</div> : <div className="flex gap-2">
           <Button variant="outline" onClick={() => void save()} disabled={busy || (!dirty && savedId !== null)}><Save /> Save draft</Button>
           <Button onClick={() => void publish()} disabled={busy}><Send /> Publish version</Button>
-        </div>
+        </div>}
       </div>
     </div>
+    {importMode?.banner}
     <Tabs value={tab} onValueChange={(v) => setTab(String(v))}>
-      <TabsList className="max-w-full justify-start overflow-x-auto"><TabsTrigger value="questions">Questions</TabsTrigger><TabsTrigger value="rules"><span className="sm:hidden">Requests</span><span className="hidden sm:inline">Document requests</span>{rules.length ? ` (${rules.length})` : ""}</TabsTrigger><TabsTrigger value="preview">Preview</TabsTrigger><TabsTrigger value="versions">Versions{versions.length ? ` (${versions.length})` : ""}</TabsTrigger></TabsList>
+      <TabsList className="max-w-full justify-start overflow-x-auto"><TabsTrigger value="questions">Questions</TabsTrigger><TabsTrigger value="rules"><span className="sm:hidden">Requests</span><span className="hidden sm:inline">Document requests</span>{rules.length ? ` (${rules.length})` : ""}</TabsTrigger><TabsTrigger value="preview">Preview</TabsTrigger>{!importMode && <TabsTrigger value="versions">Versions{versions.length ? ` (${versions.length})` : ""}</TabsTrigger>}</TabsList>
       <TabsContent value="questions" className="flex flex-col gap-5 pt-2">
-        {definition.sections.map((section, si) => <SectionCard key={section.id} section={section} index={si} total={definition.sections.length}
+        {definition.sections.map((section, si) => importMode?.review.visibleQuestionIds && !section.questions.some((q) => importMode.review.visibleQuestionIds!.has(q.id)) && !importMode.review.severity[section.id] ? null : <SectionCard key={section.id} review={importMode?.review} section={section} index={si} total={definition.sections.length}
           collapsed={collapsed.has(section.id)} onCollapse={(value) => setSectionCollapsed(section.id, value)}
           expandedQuestion={expandedQuestion} setExpandedQuestion={setExpandedQuestion}
           definition={definition} rules={rules} setDraft={setDraft} onOpenRules={() => setTab("rules")} />)}
@@ -691,7 +786,7 @@ export function QuestionnaireBuilder({ template, versions, onSaved }: { template
       </TabsContent>
       <TabsContent value="rules" className="pt-2"><RulesTab definition={definition} rules={rules} setRules={setRules} /></TabsContent>
       <TabsContent value="preview" className="pt-2"><QuestionnairePreview definition={definition} rules={rules} title="Client preview" /></TabsContent>
-      <TabsContent value="versions" className="pt-2"><VersionsTab versions={versions} definition={definition} rules={rules} onRestore={restore} /></TabsContent>
+      {!importMode && <TabsContent value="versions" className="pt-2"><VersionsTab versions={versions} definition={definition} rules={rules} onRestore={restore} /></TabsContent>}
     </Tabs>
   </div>;
 }
