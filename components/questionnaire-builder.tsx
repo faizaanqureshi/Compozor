@@ -14,6 +14,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Panel } from "@/components/panel";
+import { LeaveEditorDialog, useLeaveGuard } from "@/components/questionnaire-leave-guard";
 import { QuestionList } from "@/components/questionnaire-fields";
 import {
   ApiError,
@@ -262,7 +263,7 @@ function QuestionCard(props: QuestionCardProps) {
   const flagRing = flag === "critical" ? "ring-2 ring-destructive/60" : flag === "warning" ? "ring-2 ring-warning" : "";
 
   if (!expanded) {
-    return <button type="button" data-question-id={question.id} onClick={onToggle} className={`group flex w-full items-center gap-3 rounded-lg bg-card px-3 py-3 text-left transition-colors hover:bg-muted/40 ${flagRing || "ring-1 ring-foreground/10"}`}>
+    return <button type="button" data-question-id={question.id} onClick={onToggle} className={`group flex w-full items-center gap-3 rounded-lg px-2 py-3 text-left transition-colors hover:bg-muted/40 ${flagRing}`}>
       <span className="w-5 shrink-0 text-right text-xs text-muted-foreground tabular-nums">{index + 1}</span>
       <span className="min-w-0 flex-1">
         <span className={`block truncate text-sm ${question.label ? "" : "text-muted-foreground italic"}`}>{question.label || "Untitled question"}</span>
@@ -280,7 +281,7 @@ function QuestionCard(props: QuestionCardProps) {
 
   const fields = question.fields ?? [];
   const setFields = (next: QuestionDefinition[]) => onChange({ ...question, fields: next });
-  return <div data-question-id={question.id} className={`flex flex-col gap-4 rounded-xl bg-card p-4 animate-blur-in-sm ${flagRing || "ring-1 ring-foreground/20"}`}>
+  return <div data-question-id={question.id} className={`my-2 flex flex-col gap-4 rounded-xl bg-card p-4 animate-blur-in-sm ${flagRing || "ring-1 ring-foreground/15"}`}>
     {!nested && props.review?.render(question.id)}
     <div className="flex items-start gap-2">
       <Textarea aria-label="Question" rows={1} autoFocus={!question.label} className="min-h-10 flex-1 resize-none text-base" value={question.label} placeholder={question.type === "information" ? "Information to show the client" : "Type your question"} onChange={(e) => onChange({ ...question, label: e.target.value })} />
@@ -333,7 +334,7 @@ function QuestionCard(props: QuestionCardProps) {
       <Button size="sm" variant="ghost" className="self-start" onClick={() => { const q = newQuestion(); setFields([...fields, q]); setOpenField(q.id); }}><Plus /> Add question to entry</Button>
     </div>}
 
-    {more && <div className="flex flex-col gap-4 rounded-lg border border-border/60 p-3">
+    {more && <div className="flex flex-col gap-4 border-l-2 border-border/60 pl-3">
       <label className="flex flex-col gap-1 text-xs text-muted-foreground">Help text shown under the question<Textarea rows={2} value={question.description ?? ""} placeholder="Optional guidance for the client" onChange={(e) => onChange({ ...question, description: e.target.value || null })} /></label>
       <label className="flex flex-col gap-1 text-xs text-muted-foreground">How sensitive is this answer?
         <NativeSelect value={question.sensitivity ?? "standard"} onChange={(e) => onChange({ ...question, sensitivity: e.target.value })}>{SENSITIVITY.map((s) => <option key={s.value} value={s.value}>{s.label} — {s.hint}</option>)}</NativeSelect>
@@ -401,21 +402,21 @@ function SectionCard(props: SectionCardProps) {
     </header>
     {!collapsed && <div className="flex flex-col gap-3 px-4 pb-5 sm:px-5 sm:pl-14">
       <Textarea aria-label="Section description" rows={1} className="min-h-9 resize-none border-transparent bg-transparent px-0 text-sm shadow-none focus-visible:border-input focus-visible:px-2.5" value={section.description ?? ""} placeholder="Add a description (optional)" onChange={(e) => updateSection({ ...section, description: e.target.value || null })} />
-      {settings && <div className="flex flex-col gap-2 rounded-lg border border-border/60 p-3">
+      {settings && <div className="flex flex-col gap-2 border-l-2 border-border/60 pl-3">
         <p className="text-sm font-medium">Section settings</p>
         <ConditionEditor label="Show this section only when" empty="Always shown" value={section.visible_when} definition={definition} onChange={(visible_when) => updateSection({ ...section, visible_when })} />
       </div>}
       {props.review?.render(section.id)}
       {blockers.length > 0 && <p className="text-xs text-muted-foreground">This section can’t be deleted while {blockers.join(", ")} depend{blockers.length === 1 ? "s" : ""} on its questions.</p>}
-      {section.questions.map((q, qi) => props.review?.visibleQuestionIds && !props.review.visibleQuestionIds.has(q.id) ? null : <QuestionCard key={q.id} review={props.review} question={q} index={qi} total={section.questions.length}
+      <div className="flex flex-col divide-y divide-border/50">{section.questions.map((q, qi) => props.review?.visibleQuestionIds && !props.review.visibleQuestionIds.has(q.id) ? null : <QuestionCard key={q.id} review={props.review} question={q} index={qi} total={section.questions.length}
         expanded={props.expandedQuestion === q.id} onToggle={() => props.setExpandedQuestion(props.expandedQuestion === q.id ? null : q.id)}
         definition={definition} rules={rules} setRules={(next) => setDraft(definition, next)} onOpenRules={props.onOpenRules}
         onChange={(next) => setQuestion(qi, next)}
         onChangeType={(type) => { const next = changeQuestionType(q, type); const qs = [...section.questions]; qs[qi] = next; const nextDefinition = { ...definition, sections: definition.sections.map((s) => (s.id === section.id ? { ...section, questions: qs } : s)) }; setDraft(nextDefinition, retargetQuestionRequests(rules, nextDefinition, next) as Rules); }}
         onDuplicate={() => { const next = duplicateQuestionIn(definition, rules, section.id, q.id); setDraft(next.definition, next.rules as Rules); props.setExpandedQuestion(next.newId); }}
         onDelete={() => { const next = deleteQuestionIn(definition, rules, section.id, q.id); if (next) setDraft(next.definition, next.rules as Rules); }}
-        onMove={(delta) => setQuestions(move(section.questions, qi, delta))} />)}
-      {!section.questions.length && <p className="rounded-lg border border-dashed px-3 py-4 text-center text-sm text-muted-foreground">No questions in this section yet.</p>}
+        onMove={(delta) => setQuestions(move(section.questions, qi, delta))} />)}</div>
+      {!section.questions.length && <p className="py-3 text-sm text-muted-foreground">No questions in this section yet.</p>}
       <Button variant="outline" className="self-start" onClick={() => { const q = newQuestion(); setQuestions([...section.questions, q]); props.setExpandedQuestion(q.id); }}><Plus /> Add question</Button>
     </div>}
   </section>;
@@ -638,6 +639,7 @@ export function QuestionnaireBuilder({ template, versions, onSaved, importMode, 
   const templateId = useRef<number | null>(template?.id ?? null);
   const [savedId, setSavedId] = useState<number | null>(template?.id ?? (importMode ? 0 : null));
   const saving = useRef<Promise<QuestionnaireTemplate | null> | null>(null);
+  const [saveInFlight, setSaveInFlight] = useState(false);
   const lastSaved = useRef<QuestionnaireTemplate | null>(template);
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const collapseKey = useRef<number | string | null>(importMode ? importMode.key : template?.id ?? null);
@@ -651,12 +653,13 @@ export function QuestionnaireBuilder({ template, versions, onSaved, importMode, 
   useEffect(() => { onDraftChange?.({ name, description, definition, rules }); }, [onDraftChange, name, description, definition, rules]);
 
   const dirty = baseline !== serialized;
+  const guard = useLeaveGuard({ blocked: !importMode && (dirty || saveInFlight), historyGuard: !importMode && !!template });
   useEffect(() => {
-    if (!dirty) return;
+    if (!importMode || !dirty) return;
     const warn = (e: BeforeUnloadEvent) => e.preventDefault();
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
-  }, [dirty]);
+  }, [dirty, importMode]);
 
   const setDraft = useCallback((nextDefinition: QuestionnaireDefinition, nextRules?: Rules) => {
     setDefinition(nextDefinition);
@@ -702,15 +705,16 @@ export function QuestionnaireBuilder({ template, versions, onSaved, importMode, 
       }
     })();
     saving.current = run;
-    try { return await run; } finally { if (saving.current === run) saving.current = null; }
+    setSaveInFlight(true);
+    try { return await run; } finally { if (saving.current === run) { saving.current = null; setSaveInFlight(false); } }
   }, [name, description, definition, rules, onSaved, router, importMode]);
 
   // Autosave: drafts may be incomplete; a new questionnaire is persisted once it has a name.
   useEffect(() => {
-    if (!dirty || busy || (!importMode && templateId.current === null && !name.trim())) return;
+    if (!dirty || busy || guard.target || (!importMode && templateId.current === null && !name.trim())) return;
     const timer = setTimeout(() => { void save(); }, 1200);
     return () => clearTimeout(timer);
-  }, [dirty, busy, name, save, importMode]);
+  }, [dirty, busy, name, save, importMode, guard.target]);
 
   const publish = async () => {
     if (!name.trim()) { setStatus({ text: "Name the questionnaire before publishing", error: true }); return; }
@@ -776,7 +780,7 @@ export function QuestionnaireBuilder({ template, versions, onSaved, importMode, 
     </div>
     {importMode?.banner}
     <Tabs value={tab} onValueChange={(v) => setTab(String(v))}>
-      <TabsList className="max-w-full justify-start overflow-x-auto"><TabsTrigger value="questions">Questions</TabsTrigger><TabsTrigger value="rules"><span className="sm:hidden">Requests</span><span className="hidden sm:inline">Document requests</span>{rules.length ? ` (${rules.length})` : ""}</TabsTrigger><TabsTrigger value="preview">Preview</TabsTrigger>{!importMode && <TabsTrigger value="versions">Versions{versions.length ? ` (${versions.length})` : ""}</TabsTrigger>}</TabsList>
+      <TabsList className="max-w-full justify-start overflow-x-auto"><TabsTrigger value="questions">Questions</TabsTrigger><TabsTrigger value="rules"><span className="sm:hidden">Requests</span><span className="hidden sm:inline">Document requests</span>{rules.length ? ` (${rules.length})` : ""}</TabsTrigger><TabsTrigger value="preview">Preview</TabsTrigger>{!importMode && <TabsTrigger value="versions">History</TabsTrigger>}</TabsList>
       <TabsContent value="questions" className="flex flex-col gap-5 pt-2">
         {definition.sections.map((section, si) => importMode?.review.visibleQuestionIds && !section.questions.some((q) => importMode.review.visibleQuestionIds!.has(q.id)) && !importMode.review.severity[section.id] ? null : <SectionCard key={section.id} review={importMode?.review} section={section} index={si} total={definition.sections.length}
           collapsed={collapsed.has(section.id)} onCollapse={(value) => setSectionCollapsed(section.id, value)}
@@ -788,5 +792,7 @@ export function QuestionnaireBuilder({ template, versions, onSaved, importMode, 
       <TabsContent value="preview" className="pt-2"><QuestionnairePreview definition={definition} rules={rules} title="Client preview" /></TabsContent>
       {!importMode && <TabsContent value="versions" className="pt-2"><VersionsTab versions={versions} definition={definition} rules={rules} onRestore={restore} /></TabsContent>}
     </Tabs>
+    {!importMode && <LeaveEditorDialog target={guard.target} dirty={dirty} saving={saveInFlight} isNew={savedId === null} canSave={savedId !== null || !!name.trim()}
+      onSave={async () => (await save({ navigate: false })) !== null} onLeave={guard.leave} onCancel={guard.cancel} />}
   </div>;
 }

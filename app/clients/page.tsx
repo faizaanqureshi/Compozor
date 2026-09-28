@@ -14,6 +14,7 @@ import {
   Search,
   Trash2,
   Workflow as WorkflowIcon,
+  FileQuestion as QuestionnaireIcon,
   X as XIcon,
 } from "lucide-react";
 import {
@@ -60,6 +61,7 @@ import { ClientImportModal } from "@/components/client-import-modal";
 import { WorkflowFormDialog } from "@/components/workflow-form-dialog";
 import { PackageFormDialog } from "@/components/package-form-dialog";
 import { AssignWorkflowDialog } from "@/components/assign-workflow-dialog";
+import { AssignQuestionnaireDialog } from "@/components/assign-questionnaire-dialog";
 import { AssignPackageDialog } from "@/components/assign-package-dialog";
 import { PurgeConfirmDialog } from "@/components/purge-confirm-dialog";
 import { Panel, panelTableHead } from "@/components/panel";
@@ -352,6 +354,8 @@ export default function ClientsPage() {
   // than on the Workflows page, so picking who a workflow runs for happens in
   // the same place you're already looking at/sorting/searching clients.
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  // The exact selection at the moment "Assign questionnaire" is clicked.
+  const [questionnaireTargets, setQuestionnaireTargets] = useState<number[] | null>(null);
   const toggleSelected = (clientId: number) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -643,6 +647,16 @@ export default function ClientsPage() {
           </>
         }
       >
+        <AssignQuestionnaireDialog
+          open={questionnaireTargets !== null}
+          onOpenChange={(open) => !open && setQuestionnaireTargets(null)}
+          clients={questionnaireTargets && { ids: questionnaireTargets }}
+          onAssigned={(result) => {
+            // Keep only the clients that still need attention selected, for a retry.
+            if (!result.failed.length) setSelectedIds(new Set());
+            else setSelectedIds(new Set(result.failed.map((f) => f.client_id)));
+          }}
+        />
         {selectedIds.size > 0 && (
           <div className="flex flex-wrap items-center gap-3 rounded-lg bg-accent/[0.08] px-4 py-2.5 text-sm animate-fade-in">
             <span className="font-medium text-accent">
@@ -675,6 +689,15 @@ export default function ClientsPage() {
                   </Button>
                 }
               />
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={selectedIds.size === 0}
+                onClick={() => setQuestionnaireTargets(Array.from(selectedIds))}
+              >
+                <QuestionnaireIcon />
+                Assign questionnaire
+              </Button>
               <BulkDeleteClientsButton
                 clientIds={Array.from(selectedIds)}
                 onDeleted={() => {

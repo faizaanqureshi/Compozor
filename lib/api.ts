@@ -1384,6 +1384,7 @@ export interface QuestionnaireAssignment {
   created_at: string;
   updated_at: string;
   questionnaire_name: string;
+  template_id: number;
   version_number: number;
 }
 export interface QuestionnaireSubmission {
@@ -1540,6 +1541,17 @@ export const listClientQuestionnaireAssignments = (clientId: number) =>
   request<QuestionnaireAssignment[]>(`/clients/${clientId}/questionnaire-assignments`);
 export const assignQuestionnaire = (clientId: number, input: QuestionnaireAssignmentInput) =>
   request<QuestionnaireAssignment>(`/clients/${clientId}/questionnaire-assignments`, json("POST", input));
+export type QuestionnaireAssignSkipReason = "already_assigned" | "already_submitted" | "previously_cancelled" | "client_unavailable";
+export interface QuestionnaireBulkAssignResult {
+  template_id: number;
+  questionnaire_name: string;
+  assigned: number[];
+  skipped: { client_id: number; reason: QuestionnaireAssignSkipReason }[];
+  failed: { client_id: number; detail: string }[];
+}
+/** Assigns the questionnaire's latest published version; clients who already have it are skipped. */
+export const bulkAssignQuestionnaire = (templateId: number, clientIds: number[], isRequired: boolean) =>
+  request<QuestionnaireBulkAssignResult>(`/questionnaires/templates/${templateId}/assignments`, json("POST", { client_ids: clientIds, is_required: isRequired }));
 export const getQuestionnaireSubmissions = (clientId: number, assignmentId: number) =>
   request<QuestionnaireAssignmentDetail>(`/clients/${clientId}/questionnaire-assignments/${assignmentId}/submissions`);
 export const requestQuestionnairePdf = (clientId: number, assignmentId: number, submissionId: number) =>

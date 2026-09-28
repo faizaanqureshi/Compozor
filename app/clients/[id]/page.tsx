@@ -332,7 +332,7 @@ export default function ClientDetailPage({
             onEditPackage={() => setAssignPackageOpen(true)}
           />
 
-          <ClientQuestionnairesCard clientId={clientId} />
+          <ClientQuestionnairesCard clientId={clientId} clientName={client?.name} />
 
           <WorkflowRunsCard
             clientId={clientId}
