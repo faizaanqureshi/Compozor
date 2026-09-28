@@ -12,7 +12,7 @@ import {
   clientDocumentsKey,
   clientKey,
   clientMeetingsKey,
-  clientMemoryNotesKey,
+  clientFactsKey,
   clientThreadsKey,
   clientWorkflowSnapshotKey,
 } from "@/lib/swr-keys";
@@ -43,7 +43,7 @@ import {
   ChecklistSummary,
   ClientCommitment,
   ClientDetail,
-  ClientMemoryNote,
+  ClientFact,
   ClientStatus,
   ClientUploadLink,
   CommitmentStatus,
@@ -60,7 +60,7 @@ import {
   listClientWorkflowAssignments,
   startAssignedWorkflow,
   deleteClient,
-  deleteClientMemoryNote,
+  deleteClientFact,
   deleteDocument,
   downloadClientDocumentsZip,
   getClient,
@@ -70,7 +70,7 @@ import {
   listClientCommitments,
   listClientDocuments,
   listClientMeetings,
-  listClientMemoryNotes,
+  listClientFacts,
   listClientUploadLinkEvents,
   listClientWorkflowRuns,
   listEmailThreads,
@@ -201,7 +201,7 @@ export default function ClientDetailPage({
   const checklistQuery = useSWR(clientChecklistKey(clientId), () => listChecklistItems(clientId));
   const threadsQuery = useSWR(clientThreadsKey(clientId), () => listEmailThreads(clientId));
   const documentsQuery = useSWR(clientDocumentsKey(clientId), () => listClientDocuments(clientId));
-  const memoryNotesQuery = useSWR(clientMemoryNotesKey(clientId), () => listClientMemoryNotes(clientId));
+  const clientFactsQuery = useSWR(clientFactsKey(clientId), () => listClientFacts(clientId));
   const commitmentsQuery = useSWR(clientCommitmentsKey(clientId), () => listClientCommitments(clientId));
   const meetingsQuery = useSWR(clientMeetingsKey(clientId), () => listClientMeetings(clientId));
   // Workflows keep their live refresher (SSE + polling, serialized); it writes
@@ -214,7 +214,7 @@ export default function ClientDetailPage({
   const checklist = checklistQuery.data ?? null;
   const threads = threadsQuery.data ?? null;
   const documents = documentsQuery.data ?? null;
-  const memoryNotes = memoryNotesQuery.data ?? null;
+  const clientFacts = clientFactsQuery.data ?? null;
   const commitments = commitmentsQuery.data ?? null;
   const meetings = meetingsQuery.data ?? null;
   const workflowRuns = workflowSnapshot?.[0] ?? null;
@@ -227,7 +227,7 @@ export default function ClientDetailPage({
     checklist: sectionError(checklistQuery),
     threads: sectionError(threadsQuery),
     documents: sectionError(documentsQuery),
-    memoryNotes: sectionError(memoryNotesQuery),
+    clientFacts: sectionError(clientFactsQuery),
     commitments: sectionError(commitmentsQuery),
     meetings: sectionError(meetingsQuery),
   };
@@ -269,7 +269,7 @@ export default function ClientDetailPage({
     void checklistQuery.mutate();
     void threadsQuery.mutate();
     void documentsQuery.mutate();
-    void memoryNotesQuery.mutate();
+    void clientFactsQuery.mutate();
     void commitmentsQuery.mutate();
     void meetingsQuery.mutate();
   };
@@ -359,10 +359,10 @@ export default function ClientDetailPage({
 
           <UploadLinkCard clientId={clientId} />
 
-          <MemoryNotesCard
+          <ClientFactsCard
             clientId={clientId}
-            notes={memoryNotes}
-            loadError={loadErrors.memoryNotes}
+            notes={clientFacts}
+            loadError={loadErrors.clientFacts}
             onChange={refresh}
           />
         </aside>
@@ -2558,14 +2558,14 @@ function RemoveWorkflowButton({
   );
 }
 
-function MemoryNotesCard({
+function ClientFactsCard({
   clientId,
   notes,
   loadError,
   onChange,
 }: {
   clientId: number;
-  notes: ClientMemoryNote[] | null;
+  notes: ClientFact[] | null;
   loadError?: string | null;
   onChange: () => void;
 }) {
@@ -2585,23 +2585,24 @@ function MemoryNotesCard({
             key={note.id}
             className={cn(
               "-mr-2 flex items-start justify-between gap-2 py-2.5 text-sm first:pt-0 last:pb-0",
-              note.superseded_at && "opacity-50"
+              note.status === "replaced" && "opacity-50"
             )}
           >
             <div>
               <p className="text-foreground/80">
-                {note.note}
-                {note.superseded_at && (
+                {note.statement}
+                {note.status === "replaced" && (
                   <span className="ml-2 inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
                     superseded
                   </span>
                 )}
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
-                Learned {formatShortDate(note.created_at, true)}
+                {note.status === "conflict" ? "Conflicting information · " : note.verified ? "Verified · " : "Learned "}
+                {formatShortDate(note.created_at, true)}
               </p>
             </div>
-            <DeleteMemoryNoteButton
+            <DeleteClientFactButton
               clientId={clientId}
               note={note}
               onChange={onChange}
@@ -2619,13 +2620,13 @@ function MemoryNotesCard({
   );
 }
 
-function DeleteMemoryNoteButton({
+function DeleteClientFactButton({
   clientId,
   note,
   onChange,
 }: {
   clientId: number;
-  note: ClientMemoryNote;
+  note: ClientFact;
   onChange: () => void;
 }) {
   const [confirming, setConfirming] = useState(false);
@@ -2636,7 +2637,7 @@ function DeleteMemoryNoteButton({
     setPending(true);
     setError(null);
     try {
-      await deleteClientMemoryNote(clientId, note.id);
+      await deleteClientFact(clientId, note.id);
       setConfirming(false);
       onChange();
     } catch (e) {
@@ -2655,17 +2656,16 @@ function DeleteMemoryNoteButton({
         onClick={() => setConfirming(true)}
       >
         <Trash2 className="size-3.5" />
-        <span className="sr-only">Delete note</span>
+        <span className="sr-only">Delete fact</span>
       </Button>
 
       <Dialog open={confirming} onOpenChange={(open) => !pending && setConfirming(open)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete this memory note?</DialogTitle>
+            <DialogTitle>Delete this client fact?</DialogTitle>
             <DialogDescription>
-              This removes “{note.note}” from what the AI knows about this
-              client. Use this to correct something wrong - it won&apos;t be
-              suggested again.
+              This removes “{note.statement}” from what the AI knows about this
+              client.
             </DialogDescription>
           </DialogHeader>
           {error && <p className="text-sm text-destructive">{error}</p>}
@@ -2674,7 +2674,7 @@ function DeleteMemoryNoteButton({
               Cancel
             </Button>
             <Button variant="destructive" onClick={onDelete} disabled={pending}>
-              {pending ? "Deleting…" : "Delete note"}
+              {pending ? "Deleting…" : "Delete fact"}
             </Button>
           </DialogFooter>
         </DialogContent>
