@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { onboardingDestination, mailboxResult, withoutMailboxResult } from '../lib/onboarding.ts';
+import { readFileSync } from 'node:fs';
+import { isOnboardingPage, onboardingDestination, mailboxResult, withoutMailboxResult } from '../lib/onboarding.ts';
 
 for (const provider of ['gmail', 'outlook']) {
   test(`${provider} callback errors survive the onboarding redirect`, () => {
@@ -26,4 +27,18 @@ test('persisted completion, not a tour flag, controls access after a reload', ()
   assert.equal(onboardingDestination(false, '/onboarding', ''), null);
   assert.equal(onboardingDestination(true, '/onboarding', ''), '/clients');
   assert.equal(mailboxResult('?filter=active'), null);
+});
+
+test('onboarding renders outside the animated dashboard page wrapper', () => {
+  assert.equal(isOnboardingPage('/onboarding'), true);
+  assert.equal(isOnboardingPage('/onboarding/anything'), true);
+  for (const pathname of ['/clients', '/onboarding-help', '/settings', null]) {
+    assert.equal(isOnboardingPage(pathname), false, String(pathname));
+  }
+  // The wrapper's leftover filter/transform traps position: fixed children,
+  // which blanked onboarding. Guard that the shell still bypasses it.
+  const shell = readFileSync(new URL('../components/app-shell.tsx', import.meta.url), 'utf8');
+  const bypass = shell.indexOf('isOnboardingPage(pathname) ?');
+  const wrapper = shell.indexOf('className="animate-blur-in-sm"');
+  assert.ok(bypass !== -1 && wrapper !== -1 && bypass < wrapper);
 });

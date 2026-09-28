@@ -12,6 +12,7 @@ import { ProductTour } from "@/components/product-tour";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 import { isStandalonePublicPage } from "@/lib/public-routes";
+import { isOnboardingPage } from "@/lib/onboarding";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -29,19 +30,25 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <TooltipProvider>
         <MobileNavProvider>
           <OnboardingGate>
-            <div className="flex min-h-full flex-1">
-              <Nav />
-              <div className="relative isolate flex min-w-0 flex-1 flex-col overflow-x-hidden">
-                <MobileTopBar />
-                <main className="relative flex-1 p-6 xl:p-10">
-                  <DashboardBackground />
-                  {/* One identical entrance for every page, keyed so it replays per navigation. */}
-                  <div key={pathname} className="animate-blur-in-sm">
-                    {children}
-                  </div>
-                </main>
+            {isOnboardingPage(pathname) ? (
+              // Full-screen page: see isOnboardingPage for why it skips the
+              // animated wrapper below.
+              children
+            ) : (
+              <div className="flex min-h-full flex-1">
+                <Nav />
+                <div className="relative isolate flex min-w-0 flex-1 flex-col overflow-x-hidden">
+                  <MobileTopBar />
+                  <main className="relative flex-1 p-6 xl:p-10">
+                    <DashboardBackground />
+                    {/* One identical entrance for every page, keyed so it replays per navigation. */}
+                    <div key={pathname} className="animate-blur-in-sm">
+                      {children}
+                    </div>
+                  </main>
+                </div>
               </div>
-            </div>
+            )}
             <ProductTour key={`${userId}:${pathname}`} />
           </OnboardingGate>
         </MobileNavProvider>
