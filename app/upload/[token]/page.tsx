@@ -166,15 +166,26 @@ export default function PublicUploadPage({
     async (entry: QueueEntry, id: number) => {
       const abortController = new AbortController();
       updateEntry(entry.key, { clientPhase: "uploading", clientError: null, abortController });
+      let itemId: number | null = null;
+      // A file removed before its server id reached the queue would otherwise stay
+      // on the server and block submission. Cancellation is idempotent.
+      const cancelIfRemoved = () => {
+        if (!abortController.signal.aborted || itemId === null) return false;
+        void removeUploadItem(token, id, itemId).catch(() => {});
+        return true;
+      };
       try {
         const init = await initUploadItem(token, id, entry.file);
+        itemId = init.item_id;
+        if (cancelIfRemoved()) return;
         updateEntry(entry.key, { itemId: init.item_id });
         await uploadClientFile(token, id, init, entry.file,
           (fraction) => updateEntry(entry.key, { progress: fraction }), abortController.signal);
         await completeUploadItem(token, id, init.item_id);
+        if (cancelIfRemoved()) return;
         updateEntry(entry.key, { clientPhase: "uploaded", progress: 1, serverStatus: "queued", abortController: null });
       } catch (e) {
-        if (abortController.signal.aborted) return;
+        if (abortController.signal.aborted) { cancelIfRemoved(); return; }
         updateEntry(entry.key, {
           clientPhase: "failed",
           abortController: null,
@@ -319,6 +330,8 @@ export default function PublicUploadPage({
     } catch (error) {
       setSubmitError(error instanceof PublicUploadApiError
         ? error.message : "The files could not be submitted. Please try again.");
+      // A conflict can mean files were sent back for another check; refresh their status.
+      if (error instanceof PublicUploadApiError && error.status === 409) startPolling(id);
     }
   }, [token, startPolling, queue]);
 
@@ -565,9 +578,9 @@ export default function PublicUploadPage({
                   {isUploading
                     ? "Keep this page open until uploading finishes."
                     : hasUnresolvedFailures
-                      ? "Remove or replace files that failed their security check."
+                      ? "Remove or replace files that couldn’t be accepted."
                       : securityPending
-                        ? "Security checks are still in progress. You can wait or remove a file."
+                        ? "Files are still being checked. You can wait or remove a file."
                         : "Everything is ready. Submit when you’re satisfied with the list."}
                 </span>
                 <Button disabled={!canCompleteUpload} onClick={() => setConfirmOpen(true)}>
@@ -619,7 +632,7 @@ function entryStatus(entry: QueueEntry): { label: string; tone: "muted" | "done"
       return { label: "Ready to submit", tone: "done" };
     case "scanning":
     case "queued":
-      return { label: "Security check in progress", tone: "muted" };
+      return { label: "Checking file", tone: "muted" };
     case "awaiting_upload":
       return { label: "Uploading", tone: "muted" };
   }
@@ -629,7 +642,7 @@ function entryStatus(entry: QueueEntry): { label: string; tone: "muted" | "done"
     case "uploading":
       return { label: `Uploading ${Math.round(entry.progress * 100)}%`, tone: "muted" };
     default:
-      return { label: "Security check in progress", tone: "muted" };
+      return { label: "Checking file", tone: "muted" };
   }
 }
 
