@@ -34,7 +34,6 @@ import {
   Plus,
   RotateCcw,
   Trash2,
-  FileText,
   UploadCloud,
 } from "lucide-react";
 import {
@@ -112,6 +111,7 @@ import {
 import { ClientQuestionnairesCard } from "@/components/client-questionnaires-card";
 import { QuestionnairePdfAccess } from "@/components/questionnaire-pdf-access";
 import { ChecklistItemFormDialog } from "@/components/checklist-item-form-dialog";
+import { ChecklistItemFiles } from "@/components/checklist-item-files";
 import {
   Accordion,
 } from "@/components/ui/accordion";
@@ -152,12 +152,15 @@ const statusPillClasses: Record<ChecklistItemStatus, string> = {
   received: "bg-accent/15 text-accent",
   missing: "bg-warning/20 text-warning-foreground",
   wrong: "bg-destructive/10 text-destructive",
+  // Some files in, more may follow - in progress rather than a warning.
+  collecting: "bg-secondary text-secondary-foreground",
 };
 
 const statusLabels: Record<ChecklistItemStatus, string> = {
   received: "Received",
   missing: "Missing",
   wrong: "Wrong",
+  collecting: "Collecting",
 };
 
 function StatusPill({ status }: { status: ChecklistItemStatus }) {
@@ -186,7 +189,7 @@ function DeadlineCell({ item, today }: { item: ChecklistItem; today: Date }) {
     day: "numeric",
     year: "numeric",
   });
-  if (item.status !== "missing" && item.status !== "wrong") {
+  if (item.status === "received") {
     return <span className="text-muted-foreground">{dateText}</span>;
   }
   const { tier } = computeTier(item, today);
@@ -488,7 +491,7 @@ function ClientSummary({
   const loading = client === null || checklist === null;
 
   const nextDeadline = checklist?.items
-    .filter((i) => (i.status === "missing" || i.status === "wrong") && i.expected_date_range_end)
+    .filter((i) => i.status !== "received" && i.expected_date_range_end)
     .sort((a, b) => a.expected_date_range_end!.localeCompare(b.expected_date_range_end!))[0];
   const deadlineTier = nextDeadline ? TIER_META[computeTier(nextDeadline, today).tier] : null;
 
@@ -514,7 +517,7 @@ function ClientSummary({
   const running = latestRuns.filter((r) => r.status === "running").length;
   const completed = latestRuns.filter((r) => r.status === "completed").length;
 
-  const outstanding = checklist ? checklist.missing + checklist.wrong : 0;
+  const outstanding = checklist ? checklist.missing + checklist.wrong + checklist.collecting : 0;
   const tiles: StatStripItem[] = checklist && client
     ? [
         {
@@ -539,7 +542,11 @@ function ClientSummary({
           detail:
             outstanding === 0
               ? "Nothing outstanding"
-              : [checklist.missing > 0 && `${checklist.missing} missing`, checklist.wrong > 0 && `${checklist.wrong} wrong`]
+              : [
+                  checklist.missing > 0 && `${checklist.missing} missing`,
+                  checklist.wrong > 0 && `${checklist.wrong} wrong`,
+                  checklist.collecting > 0 && `${checklist.collecting} collecting`,
+                ]
                   .filter(Boolean)
                   .join(" · "),
         },
@@ -897,7 +904,7 @@ function ChecklistCard({
   const [deselecting, setDeselecting] = useState(false);
   const [deselectOpen, setDeselectOpen] = useState(false);
 
-  const actionRequired = checklist ? checklist.missing + checklist.wrong : 0;
+  const actionRequired = checklist ? checklist.missing + checklist.wrong + checklist.collecting : 0;
 
   // Which package(s) this client's items trace back to, plus how many were
   // added outside any package (manually, via "Add requirement" below) -
@@ -1009,9 +1016,9 @@ function ChecklistCard({
         </thead>
         <tbody>
           {checklist?.items.map((item) => {
-            const matched = documents
-              ?.filter((d) => d.checklist_item_id === item.id)
-              .sort((a, b) => b.received_at.localeCompare(a.received_at))[0];
+            const linked = (documents ?? [])
+              .filter((d) => d.checklist_item_id === item.id)
+              .sort((a, b) => b.received_at.localeCompare(a.received_at));
             return (
               <tr key={item.id} className="border-b border-border/50 last:border-0">
                 <td className="py-3 pr-4 align-top">
@@ -1035,24 +1042,7 @@ function ChecklistCard({
                   <DeadlineCell item={item} today={today} />
                 </td>
                 <td className="max-w-56 py-3 pr-4 align-top">
-                  {matched ? (
-                    matched.download_url ? (
-                      <a
-                        href={matched.download_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        title={matched.resolved_display_name}
-                        className="inline-flex max-w-full items-center gap-1.5 text-foreground/85 hover:text-foreground hover:underline"
-                      >
-                        <FileText className="size-3.5 shrink-0 text-muted-foreground" />
-                        <span className="truncate">{matched.resolved_display_name}</span>
-                      </a>
-                    ) : (
-                      <span className="text-muted-foreground">Uploaded</span>
-                    )
-                  ) : (
-                    <span className="text-muted-foreground">—</span>
-                  )}
+                  <ChecklistItemFiles documents={linked} />
                 </td>
                 <td className="py-2 pr-0 text-right align-top">
                   <ChecklistItemActions
@@ -1279,7 +1269,8 @@ function ChecklistItemActions({
   const [confirmingWaive, setConfirmingWaive] = useState(false);
   const [editing, setEditing] = useState(false);
 
-  const isOutstanding = item.status === "missing" || item.status === "wrong";
+  const isOutstanding = item.status !== "received";
+  const collecting = item.status === "collecting";
 
   const onAccept = async () => {
     setPending(true);
@@ -1338,10 +1329,10 @@ function ChecklistItemActions({
             Edit requirement
           </DropdownMenuItem>
           <DropdownMenuItem disabled={item.status === "received"} onClick={onAccept}>
-            Accept anyway
+            {collecting ? "Mark complete" : "Accept anyway"}
           </DropdownMenuItem>
           <DropdownMenuItem disabled={!isOutstanding} onClick={onRequestReupload}>
-            Request re-upload
+            {collecting ? "Request remaining files" : "Request re-upload"}
           </DropdownMenuItem>
           <DropdownMenuItem
             variant="destructive"
@@ -2070,7 +2061,8 @@ function DocumentActions({
       ? (doc.extracted_metadata as { validation_status?: string }).validation_status
       : undefined;
   const satisfiesReceivedItem =
-    !!checklistItem && checklistItem.status === "received" && validationStatus === "accepted";
+    !!checklistItem && (checklistItem.status === "received" || checklistItem.status === "collecting")
+    && validationStatus === "accepted";
 
   const onStartRename = () => {
     setNewName(doc.resolved_display_name);

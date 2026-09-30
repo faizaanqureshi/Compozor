@@ -17,7 +17,7 @@ export interface OutstandingRow {
   daysUntil: number | null;
 }
 
-// Every document still owed (missing, or received but wrong), with its
+// Every document still owed (missing, wrong, or still collecting), with its
 // deadline tier. Shared by the panel below and the page's summary figures so
 // both count the same thing.
 export function outstandingRows(clients: ClientWithChecklistSummary[] | undefined): OutstandingRow[] {
@@ -25,7 +25,7 @@ export function outstandingRows(clients: ClientWithChecklistSummary[] | undefine
   const list: OutstandingRow[] = [];
   for (const client of clients ?? []) {
     for (const item of client.checklist_summary.items) {
-      if (item.status !== "missing" && item.status !== "wrong") continue;
+      if (item.status === "received") continue;
       list.push({ client, item, ...computeTier(item, today) });
     }
   }
