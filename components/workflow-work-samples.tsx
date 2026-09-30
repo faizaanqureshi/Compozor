@@ -7,6 +7,12 @@ import { Button } from "@/components/ui/button";
 
 const ACCEPT = ".docx,.xlsx,.pptx,.pdf,.png,.jpg,.jpeg,.webp,.csv,.txt";
 
+// PDFs and images can't be edited, so the agent rebuilds their layout on
+// every run; an editable original is filled in place and keeps its formatting.
+function isRebuiltFormat(filename: string) {
+  return /\.(pdf|png|jpe?g|webp)$/i.test(filename);
+}
+
 export function WorkflowWorkSamples({ value, onChange, disabled, onBusyChange }: {
   value: WorkflowWorkSample[];
   onChange: (samples: WorkflowWorkSample[]) => void;
@@ -65,6 +71,11 @@ export function WorkflowWorkSamples({ value, onChange, disabled, onBusyChange }:
           <div className="min-w-0 flex-1">
             <p className="break-words text-xs">{sample.filename}</p>
             <p className="mt-0.5 text-[0.6875rem] text-muted-foreground">{Math.max(1, Math.round(sample.size_bytes / 1024)).toLocaleString()} KB</p>
+            {isRebuiltFormat(sample.filename) && (
+              <p className="mt-1 text-[0.6875rem] leading-relaxed text-warning-foreground">
+                The agent can only recreate this layout, so formatting may drift. If you have the original Word, Excel or PowerPoint file, add that instead.
+              </p>
+            )}
           </div>
           <Button type="button" variant="ghost" size="icon-sm" aria-label={`Remove ${sample.filename}`} disabled={disabled || !!uploading} onClick={() => onChange(value.filter((item) => item.id !== sample.id))}>
             <X className="size-3.5" />
