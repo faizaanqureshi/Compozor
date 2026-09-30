@@ -90,7 +90,7 @@ export interface UploadBatchStatusOut {
 export interface PublicChecklistItem {
   doc_type_needed: string;
   description: string | null;
-  status: "missing" | "received" | "wrong";
+  status: "missing" | "received" | "wrong" | "collecting";
 }
 
 export interface PublicChecklist {

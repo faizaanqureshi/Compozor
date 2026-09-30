@@ -652,7 +652,7 @@ function ChecklistPanel({ checklist }: { checklist: PublicChecklist }) {
   const items = useMemo(
     () =>
       [...checklist.items].sort((a, b) => {
-        const rank = (s: string) => (s === "wrong" ? 0 : s === "missing" ? 1 : 2);
+        const rank = (s: string) => (s === "wrong" ? 0 : s === "missing" ? 1 : s === "collecting" ? 2 : 3);
         return rank(a.status) - rank(b.status);
       }),
     [checklist]
@@ -677,6 +677,7 @@ function ChecklistPanel({ checklist }: { checklist: PublicChecklist }) {
         {items.map((item, i) => {
           const received = item.status === "received";
           const wrong = item.status === "wrong";
+          const collecting = item.status === "collecting";
           return (
             <li key={i} className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
               <span
@@ -694,6 +695,10 @@ function ChecklistPanel({ checklist }: { checklist: PublicChecklist }) {
                   <span className="text-xs text-warning-foreground">Please send this again. The last file didn&apos;t match.</span>
                 ) : received ? (
                   <span className="text-xs text-muted-foreground">Received</span>
+                ) : collecting ? (
+                  <span className="text-xs text-pretty text-muted-foreground">
+                    Some received. Upload any others, or reply to our email once you&apos;ve sent them all.
+                  </span>
                 ) : (
                   item.description && <span className="text-xs text-pretty text-muted-foreground">{item.description}</span>
                 )}

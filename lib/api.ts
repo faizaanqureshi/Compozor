@@ -114,7 +114,9 @@ function json(method: string, body: unknown): RequestInit {
 // ---------- Types ----------
 
 export type ClientStatus = "active" | "inactive";
-export type ChecklistItemStatus = "missing" | "received" | "wrong";
+// "collecting": a multi-file requirement with at least one accepted file,
+// still open for more until staff or the client closes it.
+export type ChecklistItemStatus = "missing" | "received" | "wrong" | "collecting";
 export type EmailDirection = "inbound" | "outbound";
 export type EmailStatus = "received" | "draft" | "sent" | "needs_human_attention";
 export type InboxConnectionStatus = "active" | "needs_reauth";
@@ -177,6 +179,8 @@ export interface ChecklistItem {
   status: ChecklistItemStatus;
   expected_date_range_end: string | null;
   description: string | null;
+  // Any number of files satisfy it (e.g. expense receipts).
+  allows_multiple: boolean;
   wrong_attempt_count: number;
   last_wrong_doc_type: string | null;
   package_id: number | null;
@@ -195,6 +199,7 @@ export interface ChecklistSummary {
   missing: number;
   received: number;
   wrong: number;
+  collecting: number;
   items: ChecklistItem[];
 }
 
@@ -663,6 +668,7 @@ export const createChecklistItem = (
     status?: ChecklistItemStatus;
     expected_date_range_end?: string;
     description?: string;
+    allows_multiple?: boolean;
   }
 ) =>
   request<ChecklistItem>(
@@ -684,6 +690,7 @@ export interface ChecklistItemEditInput {
   doc_type_needed?: string;
   description?: string;
   expected_date_range_end?: string | null;
+  allows_multiple?: boolean;
   // Must be true to proceed with a material edit (a doc_type_needed
   // change) to a Received item - the backend 409s otherwise. Set this
   // only after the user has confirmed the "already marked as received"
@@ -1237,6 +1244,7 @@ export interface PackageDocument {
   doc_type_needed: string;
   description: string | null;
   is_required: boolean;
+  allows_multiple: boolean;
   position: number;
 }
 
@@ -1244,6 +1252,7 @@ export interface PackageDocumentInput {
   doc_type_needed: string;
   description?: string | null;
   is_required?: boolean;
+  allows_multiple?: boolean;
 }
 
 export interface Package {

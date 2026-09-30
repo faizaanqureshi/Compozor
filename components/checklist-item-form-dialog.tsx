@@ -53,6 +53,7 @@ export function ChecklistItemFormDialog({
   // Deadline is stored as expected_date_range_end - a due date only;
   // document validation ignores it.
   const [deadline, setDeadline] = useState(item?.expected_date_range_end ?? "");
+  const [allowsMultiple, setAllowsMultiple] = useState(item?.allows_multiple ?? false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmedMaterial, setConfirmedMaterial] = useState(false);
@@ -63,6 +64,7 @@ export function ChecklistItemFormDialog({
     setDocTypeNeeded(item?.doc_type_needed ?? "");
     setDescription(item?.description ?? "");
     setDeadline(item?.expected_date_range_end ?? "");
+    setAllowsMultiple(item?.allows_multiple ?? false);
     setError(null);
     setConfirmedMaterial(false);
     setShowReceivedWarning(false);
@@ -98,6 +100,7 @@ export function ChecklistItemFormDialog({
           doc_type_needed: docTypeNeeded.trim(),
           description: description.trim(),
           expected_date_range_end: deadline || null,
+          allows_multiple: allowsMultiple,
           confirm_material: confirmMaterialNow,
           notify_client: notifyClient,
         });
@@ -106,6 +109,7 @@ export function ChecklistItemFormDialog({
           doc_type_needed: docTypeNeeded.trim(),
           description: description.trim() || undefined,
           expected_date_range_end: deadline || undefined,
+          allows_multiple: allowsMultiple,
         });
       }
       setShowReceivedWarning(false);
@@ -126,7 +130,8 @@ export function ChecklistItemFormDialog({
   // saves. Re-run from the top after each acknowledgment rather than
   // chaining ad hoc, so reopening the form always re-evaluates cleanly.
   const proceed = (confirmedMaterialNow = confirmedMaterial) => {
-    if (isMaterial && item!.status === "received" && !confirmedMaterialNow) {
+    const hasAcceptedFiles = item?.status === "received" || item?.status === "collecting";
+    if (isMaterial && hasAcceptedFiles && !confirmedMaterialNow) {
       setShowReceivedWarning(true);
       return;
     }
@@ -184,6 +189,17 @@ export function ChecklistItemFormDialog({
                   rows={3}
                 />
               </div>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  id="checklist-item-allows-multiple"
+                  type="checkbox"
+                  checked={allowsMultiple}
+                  onChange={(e) => setAllowsMultiple(e.target.checked)}
+                  className="size-3.5 accent-foreground"
+                />
+                Accepts multiple files
+                <span className="text-muted-foreground">e.g. receipts</span>
+              </label>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="checklist-item-deadline">Deadline <span className="font-normal text-muted-foreground">Optional</span></Label>
                 <Input

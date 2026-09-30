@@ -29,7 +29,7 @@ import {
 
 type DocRow = PackageDocumentInput;
 
-const emptyRow = (): DocRow => ({ doc_type_needed: "", description: "", is_required: true });
+const emptyRow = (): DocRow => ({ doc_type_needed: "", description: "", is_required: true, allows_multiple: false });
 
 // Shared between the Packages library page (create/edit) and any other
 // entry point that wants a "define a new package" affordance - one dialog,
@@ -54,6 +54,7 @@ export function PackageFormDialog({
           doc_type_needed: d.doc_type_needed,
           description: d.description ?? "",
           is_required: d.is_required,
+          allows_multiple: d.allows_multiple,
         }))
       : [emptyRow()]
   );
@@ -68,6 +69,7 @@ export function PackageFormDialog({
             doc_type_needed: d.doc_type_needed,
             description: d.description ?? "",
             is_required: d.is_required,
+            allows_multiple: d.allows_multiple,
           }))
         : [emptyRow()]
     );
@@ -91,6 +93,7 @@ export function PackageFormDialog({
         doc_type_needed: r.doc_type_needed.trim(),
         description: r.description?.trim() || null,
         is_required: r.is_required,
+        allows_multiple: r.allows_multiple,
       }));
     if (documents.length === 0) return;
 
@@ -175,6 +178,15 @@ export function PackageFormDialog({
                           className="size-3.5 accent-foreground"
                         />
                         Required (unchecked = optional)
+                      </label>
+                      <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <input
+                          type="checkbox"
+                          checked={row.allows_multiple ?? false}
+                          onChange={(e) => updateRow(i, { allows_multiple: e.target.checked })}
+                          className="size-3.5 accent-foreground"
+                        />
+                        Accepts multiple files (e.g. receipts)
                       </label>
                     </div>
                     <Button

@@ -126,7 +126,7 @@ function deriveClientStatus(
   if (client.status === "inactive") return { label: "Inactive", tone: "neutral" };
   if (summary && summary.total > 0) {
     if (summary.wrong > 0) return { label: "Under review", tone: "warning" };
-    if (summary.missing > 0) return { label: "Awaiting docs", tone: "warning" };
+    if (summary.missing > 0 || summary.collecting > 0) return { label: "Awaiting docs", tone: "warning" };
     return { label: "Complete", tone: "success" };
   }
   return { label: "Active", tone: "success" };
