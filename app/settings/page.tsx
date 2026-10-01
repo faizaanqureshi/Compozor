@@ -134,7 +134,7 @@ const automationOptions: { value: AutomationLevel; label: string; description: s
   {
     value: "no_automation",
     label: "No automation",
-    description: "Every drafted email waits for someone to press send.",
+    description: "Drafted replies wait for someone to press send.",
   },
   {
     value: "medium_automation",
@@ -558,7 +558,13 @@ function AutomationSection({
         <div className="flex flex-col">
           <SettingRow
             label="Sending drafted emails"
-            description="Reminders, receipts, follow-ups on wrong documents, and answers to client questions."
+            description={
+              <>
+                Answers to client questions, receipts, follow-ups on wrong documents and meeting proposals.
+                Document reminders and follow-ups on promises a client made always send on their own, at every level,
+                because they only restate what&apos;s still outstanding.
+              </>
+            }
           >
             <div
               role="radiogroup"
