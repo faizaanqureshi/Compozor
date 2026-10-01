@@ -322,9 +322,21 @@ export interface EmailLogEntry {
   delivery_state?: "pending" | "sending" | "uncertain" | "failed" | "sent";
   safety_checks?: { passed: boolean; category: string; reason?: string | null } | null;
   tool_trajectory: ToolTrajectoryStep[] | null;
+  // Actions queued with this reply; they run when it is sent.
+  actions?: EmailAction[] | null;
   created_at: string;
   archived_at: string | null;
   documents: DocumentOut[];
+}
+
+export interface EmailAction {
+  type: "request_document" | "new_date" | string;
+  status: "queued" | "applied" | "failed";
+  document?: string;
+  description?: string;
+  label?: string;
+  new_date?: string;
+  error?: string;
 }
 
 export interface EmailThread {

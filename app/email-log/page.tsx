@@ -43,6 +43,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { EmailActionsNote } from "@/components/email-actions-note";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Tooltip,
@@ -1242,6 +1243,7 @@ function DraftComposer({
         />
       </div>
       <EmailDraftEditor content={content} onChange={setContent} className="bg-card" />
+      <EmailActionsNote actions={entry.actions} />
       {entry.autosend_error && (
         <p className="flex items-start gap-2 text-xs text-muted-foreground">
           <Info className="mt-0.5 size-3.5 shrink-0" />
