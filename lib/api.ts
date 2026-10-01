@@ -1089,12 +1089,18 @@ export type WorkflowRunStatus =
   | "failed"
   | "needs_review";
 
+export type SampleTemplateStatus = "processing" | "draft" | "approved" | "failed";
+
 export interface WorkflowWorkSample {
   id: number;
   filename: string;
   size_bytes: number;
   sha256: string;
   created_at: string;
+  // null when no fill-in template was set up for this sample.
+  template_status?: SampleTemplateStatus | null;
+  // Fonts the sample uses that aren't available for previews; null = unknown.
+  missing_fonts?: string[] | null;
 }
 
 export const uploadWorkflowWorkSample = (file: File) => {
@@ -1102,6 +1108,79 @@ export const uploadWorkflowWorkSample = (file: File) => {
   body.append("file", file);
   return request<WorkflowWorkSample>("/workflows/work-samples", { method: "POST", body });
 };
+
+export const getWorkflowWorkSampleDownload = (sampleId: number) =>
+  request<{ download_url: string }>(`/workflows/work-samples/${sampleId}/download`);
+
+export type TemplateSlotKind = "text" | "list" | "table_rows";
+
+// A part of the sample that changes per client. Location fields (find,
+// part, paragraph, table, row, count) are kept as-is when saving edits.
+export interface TemplateSlot {
+  id?: string;
+  label: string;
+  kind: TemplateSlotKind;
+  description?: string;
+  find?: string;
+  example?: string | string[] | string[][];
+  occurrences?: number;
+  columns?: number;
+  [location: string]: unknown;
+}
+
+export interface SampleTemplate {
+  sample_id: number;
+  status: SampleTemplateStatus;
+  source: "native" | "converted";
+  format: string | null;
+  slots: TemplateSlot[];
+  warnings: string[];
+  // Converted PDF/image samples only: 0-1 visual match with the original.
+  similarity: number | null;
+  error: string | null;
+  approved_at: string | null;
+}
+
+const templatePath = (sampleId: number) => `/workflows/work-samples/${sampleId}/template`;
+
+export const startSampleTemplate = (sampleId: number) =>
+  request<SampleTemplate>(templatePath(sampleId), { method: "POST" });
+
+export const getSampleTemplate = (sampleId: number) => request<SampleTemplate>(templatePath(sampleId));
+
+export const updateSampleTemplateSlots = (sampleId: number, slots: TemplateSlot[]) =>
+  request<SampleTemplate>(`${templatePath(sampleId)}/slots`, json("PUT", { slots }));
+
+export const approveSampleTemplate = (sampleId: number) =>
+  request<SampleTemplate>(`${templatePath(sampleId)}/approve`, { method: "POST" });
+
+export const deleteSampleTemplate = (sampleId: number) =>
+  request<void>(templatePath(sampleId), { method: "DELETE" });
+
+export const getSampleTemplateDocument = (sampleId: number) =>
+  request<import("@/lib/template-document").DocumentView>(`${templatePath(sampleId)}/document`);
+
+export const getSampleTemplateFiles = (sampleId: number) =>
+  request<{ template_url: string; preview_url: string | null }>(`${templatePath(sampleId)}/files`);
+
+export interface OrganizationFont {
+  id: number;
+  family: string;
+  filename: string;
+  size_bytes: number;
+  created_at: string;
+}
+
+export const listOrganizationFonts = () => request<OrganizationFont[]>("/organizations/me/fonts");
+
+export const uploadOrganizationFont = (file: File) => {
+  const body = new FormData();
+  body.append("file", file);
+  return request<OrganizationFont>("/organizations/me/fonts", { method: "POST", body });
+};
+
+export const deleteOrganizationFont = (fontId: number) =>
+  request<void>(`/organizations/me/fonts/${fontId}`, { method: "DELETE" });
 
 export interface Workflow {
   work_samples?: WorkflowWorkSample[];

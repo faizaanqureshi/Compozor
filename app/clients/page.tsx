@@ -58,7 +58,6 @@ import {
 } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ClientImportModal } from "@/components/client-import-modal";
-import { WorkflowFormDialog } from "@/components/workflow-form-dialog";
 import { PackageFormDialog } from "@/components/package-form-dialog";
 import { AssignWorkflowDialog } from "@/components/assign-workflow-dialog";
 import { AssignQuestionnaireDialog } from "@/components/assign-questionnaire-dialog";
@@ -518,7 +517,10 @@ export default function ClientsPage() {
           )}
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
-          <WorkflowFormDialog onSaved={() => {}} variant="ghost" />
+          <Button variant="ghost" nativeButton={false} render={<Link href="/workflows/new?returnTo=/clients" />}>
+            <Plus />
+            New workflow
+          </Button>
           <PackageFormDialog onSaved={() => {}} variant="ghost" />
           <span aria-hidden className="mx-1 hidden h-5 w-px bg-border sm:block" />
           <ClientImportModal onImported={() => mutateClients()} />

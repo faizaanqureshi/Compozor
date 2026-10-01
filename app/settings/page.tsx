@@ -8,6 +8,7 @@ import { Loader2, Pencil } from "lucide-react";
 import { GmailIcon } from "@/components/icons/gmail";
 import { OutlookIcon } from "@/components/icons/outlook";
 import { Panel } from "@/components/panel";
+import { FirmFontsSection } from "@/components/firm-fonts-section";
 import { calendarConnectionsKey, inboxConnectionsKey, organizationKey } from "@/lib/swr-keys";
 import {
   ApiError,
@@ -43,7 +44,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-type SectionId = "profile" | "firm" | "sign-off" | "automation" | "connections";
+type SectionId = "profile" | "firm" | "sign-off" | "automation" | "connections" | "fonts";
 
 const SECTIONS: { id: SectionId; label: string }[] = [
   { id: "profile", label: "Profile" },
@@ -51,6 +52,7 @@ const SECTIONS: { id: SectionId; label: string }[] = [
   { id: "sign-off", label: "Email sign-off" },
   { id: "automation", label: "Automation" },
   { id: "connections", label: "Connections" },
+  { id: "fonts", label: "Fonts" },
 ];
 
 function errorMessage(e: unknown) {
@@ -995,6 +997,9 @@ export default function SettingsPage() {
               onDelete={onDeleteConnection}
               onSaveTimezone={(timezone) => void saveOrg("timezone", "connections", { timezone })}
             />
+          </div>
+          <div id="fonts">
+            <FirmFontsSection />
           </div>
 
           <footer className="flex flex-wrap gap-x-5 gap-y-2 border-t border-border/60 pt-5 text-xs text-muted-foreground">

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Archive, FileText, MoreHorizontal } from "lucide-react";
+import { Archive, FileText, MoreHorizontal, Plus } from "lucide-react";
 import {
   ApiError,
   type ClientWithChecklistSummary,
@@ -10,7 +10,7 @@ import {
   archiveWorkflow,
 } from "@/lib/api";
 import { cn, formatShortDate } from "@/lib/utils";
-import { WorkflowFormDialog } from "@/components/workflow-form-dialog";
+import Link from "next/link";
 import { Panel } from "@/components/panel";
 import { StatStrip, type StatStripItem } from "@/components/stat-strip";
 import { Button } from "@/components/ui/button";
@@ -123,7 +123,10 @@ export function WorkflowLibrary({
           </p>
         </div>
         <div className="self-start sm:self-auto">
-          <WorkflowFormDialog onSaved={onRefresh} />
+          <Button nativeButton={false} render={<Link href="/workflows/new" />}>
+            <Plus />
+            New workflow
+          </Button>
         </div>
       </header>
 
@@ -202,18 +205,12 @@ function WorkflowRow({ workflow, mix, onChange }: { workflow: Workflow; mix: Run
   return (
     <li className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-3 py-4 md:grid-cols-[minmax(0,1fr)_7rem_minmax(12rem,16rem)_6rem_2rem] md:items-start">
       <div className="flex min-w-0 flex-col gap-1">
-        <WorkflowFormDialog
-          workflow={workflow}
-          onSaved={onChange}
-          trigger={
-            <button
-              type="button"
-              className="w-fit max-w-full truncate text-left text-sm font-medium underline-offset-4 hover:underline"
-            >
-              {workflow.name}
-            </button>
-          }
-        />
+        <Link
+          href={`/workflows/${workflow.id}`}
+          className="w-fit max-w-full truncate text-sm font-medium underline-offset-4 hover:underline"
+        >
+          {workflow.name}
+        </Link>
         <p className="line-clamp-2 text-[0.8125rem] leading-relaxed text-pretty text-muted-foreground">
           {workflow.instructions}
         </p>
