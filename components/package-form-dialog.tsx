@@ -33,7 +33,7 @@ const emptyRow = (): DocRow => ({ doc_type_needed: "", description: "", is_requi
 
 // Shared between the Packages library page (create/edit) and any other
 // entry point that wants a "define a new package" affordance - one dialog,
-// same shape as WorkflowFormDialog.
+// one dialog shared by both entry points.
 export function PackageFormDialog({
   pkg,
   onSaved,
