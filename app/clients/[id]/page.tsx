@@ -133,6 +133,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { EmailActionsNote } from "@/components/email-actions-note";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   DropdownMenu,
@@ -1763,6 +1764,8 @@ function ConversationMessage({ entry, clientName }: { entry: EmailLogEntry; clie
           {entry.is_clarifying_question && <span>Clarifying question, awaiting the client&apos;s answer</span>}
         </div>
       )}
+
+      <EmailActionsNote actions={entry.actions} />
 
       {entry.tool_trajectory && entry.tool_trajectory.length > 0 && (
         <AgentActivityDisclosure trajectory={entry.tool_trajectory} />
