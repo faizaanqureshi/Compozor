@@ -67,10 +67,20 @@ export function publicPageMetadata(
   };
 }
 
+// When each public page's content last changed. Update a date by hand when that page
+// changes; a timestamp stamped on every build would teach search engines to ignore it.
+const PAGE_LAST_MODIFIED: Record<keyof typeof PUBLIC_SEARCH_PAGES, string> = {
+  "/": "2026-09-28",
+  "/waitlist": "2026-09-28",
+  "/privacy": "2026-09-28",
+  "/terms": "2026-09-28",
+  "/cookies": "2026-09-28",
+};
+
 export function publicSitemap(): MetadataRoute.Sitemap {
-  // Do not invent last-modified timestamps on every build.
-  return Object.keys(PUBLIC_SEARCH_PAGES).map((path) => ({
+  return (Object.keys(PUBLIC_SEARCH_PAGES) as (keyof typeof PUBLIC_SEARCH_PAGES)[]).map((path) => ({
     url: new URL(path, SITE_URL).href,
+    lastModified: PAGE_LAST_MODIFIED[path],
   }));
 }
 
