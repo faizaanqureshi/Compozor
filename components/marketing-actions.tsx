@@ -21,7 +21,8 @@ export function MarketingActions({
     >
       <Button
         nativeButton={false}
-        render={<Link href="/demo" />}
+        // Plain <a>: /demo redirects off-site (Cal.com), which <Link>'s background fetch can't follow.
+        render={<a href="/demo" />}
         size="lg"
         className={cn(
           "h-11 gap-4 px-5",
