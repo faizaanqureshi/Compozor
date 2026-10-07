@@ -40,12 +40,13 @@ export default function WaitlistPage() {
           </p>
           <p className="mt-7 text-sm text-muted-foreground">
             Want a closer look first?{" "}
-            <Link
+            {/* Plain <a>: /demo redirects off-site (Cal.com). */}
+            <a
               href="/demo"
               className="text-foreground underline underline-offset-4"
             >
               Book a demo
-            </Link>
+            </a>
             .
           </p>
         </div>

@@ -121,7 +121,8 @@ export function LandingNav() {
           </Show>
           <Button
             nativeButton={false}
-            render={<Link href="/demo" />}
+            // Plain <a>: /demo redirects off-site (Cal.com), which <Link>'s background fetch can't follow.
+            render={<a href="/demo" />}
             className={`${depth.primaryAction} h-9 bg-marketing-forest px-4 text-sm text-sidebar-foreground hover:bg-marketing-forest/90 max-sm:hidden`}
           >
             Book a demo
@@ -164,7 +165,7 @@ export function LandingNav() {
               <div className="mt-auto flex flex-col gap-3">
                 <Button
                   nativeButton={false}
-                  render={<Link href="/demo" onClick={closeMenu} />}
+                  render={<a href="/demo" onClick={closeMenu} />}
                   size="lg"
                   className="h-12 bg-marketing-forest text-base text-sidebar-foreground hover:bg-marketing-forest/90"
                 >
