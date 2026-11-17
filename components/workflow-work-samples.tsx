@@ -141,7 +141,7 @@ function SampleCard({ sample, disabled, onRemove, onStatusChange }: {
     detail = <p className="text-xs leading-relaxed text-warning-foreground">{problems[0]}</p>;
     action = <Button type="button" size="sm" disabled={disabled} onClick={() => setEditing(true)}>Review fields</Button>;
   } else if (hasTemplate && (status === "draft" || status === "approved")) {
-    line = <span className="inline-flex items-center gap-2"><span className="size-1.5 shrink-0 rounded-full bg-success" aria-hidden />{status === "draft" ? "Template ready" : "Template in use"}{learned && <> · {learned}</>}</span>;
+    line = <span className="inline-flex items-start gap-2"><span className="mt-[0.4rem] size-1.5 shrink-0 rounded-full bg-success" aria-hidden /><span>{status === "draft" ? "Template ready" : "Template in use"}{learned && <> · {learned}</>}</span></span>;
     action = <Button type="button" size="sm" variant="ghost" disabled={disabled} onClick={() => setEditing(true)}>{status === "draft" ? "Review" : "Edit fields"}</Button>;
   } else if (hasTemplate && status === "failed") {
     line = <span className="text-destructive">{template?.error ?? "Template setup failed."}</span>;
