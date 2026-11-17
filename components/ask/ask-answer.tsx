@@ -2,7 +2,7 @@
 
 import { Fragment } from "react";
 import Link from "next/link";
-import { ClipboardList, FileText, Mail, User, Workflow } from "lucide-react";
+import { BookOpen, ClipboardList, FileText, Mail, User, Workflow } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { AskCitation } from "@/lib/ask";
 import { parseAnswer, type AnswerSegment } from "@/lib/ask-answer";
@@ -14,6 +14,7 @@ const KIND_ICON = {
   email: Mail,
   run: Workflow,
   questionnaire: ClipboardList,
+  knowledge: BookOpen,
 } as const;
 
 // A source the answer relied on, inline right after the fact it supports.

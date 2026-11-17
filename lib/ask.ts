@@ -3,7 +3,7 @@
 import { API_BASE_URL, ApiError, getAuthToken, json, request, responseError } from "./api";
 import { readEventStream } from "./event-stream";
 
-export type AskCitationKind = "client" | "document" | "email" | "run" | "questionnaire";
+export type AskCitationKind = "client" | "document" | "email" | "run" | "questionnaire" | "knowledge";
 
 export interface AskCitation {
   key: string;
