@@ -35,7 +35,7 @@ const FORMAT_ICONS: Record<SampleFormat["kind"], typeof FileText> = {
 };
 
 function canTemplate(format: SampleFormat) {
-  return format.kind === "word" || format.kind === "slides" || format.kind === "rebuilt";
+  return format.kind === "word" || format.kind === "slides" || format.kind === "sheet" || format.kind === "rebuilt";
 }
 
 function sizeLabel(bytes: number) {
@@ -351,8 +351,8 @@ export function WorkflowWorkSamples({ value, onChange, disabled, onBusyChange }:
       {!compact && (
         <dl className="grid gap-3 pt-1 text-xs sm:grid-cols-3">
           {[
-            ["Word & PowerPoint", "Set up as a template as soon as you add them, so the formatting stays exact."],
-            ["Excel", "Filled in place, keeping formulas, charts and styles."],
+            ["Word, PowerPoint & Excel", "Set up as a template as soon as you add them, so the formatting stays exact."],
+            ["Excel tables", "Grow row by row for each client, with totals and charts following."],
             ["PDF & images", "Recreated from the layout. A template rebuilds it once as an editable file."],
           ].map(([term, detail]) => (
             <div key={term} className="flex flex-col gap-0.5">

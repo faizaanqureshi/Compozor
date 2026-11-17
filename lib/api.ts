@@ -1126,10 +1126,11 @@ export const uploadWorkflowWorkSample = (file: File) => {
 export const getWorkflowWorkSampleDownload = (sampleId: number) =>
   request<{ download_url: string }>(`/workflows/work-samples/${sampleId}/download`);
 
-export type TemplateSlotKind = "text" | "list" | "table_rows";
+export type TemplateSlotKind = "text" | "list" | "table_rows" | "cell";
 
 // A part of the sample that changes per client. Location fields (find,
-// part, paragraph, table, row, count) are kept as-is when saving edits.
+// part, paragraph, table, row, count; sheet and cell for workbooks) are kept
+// as-is when saving edits.
 export interface TemplateSlot {
   id?: string;
   label: string;
@@ -1138,7 +1139,7 @@ export interface TemplateSlot {
   find?: string;
   example?: string | string[] | string[][];
   occurrences?: number;
-  columns?: number;
+  columns?: number | { column: string; header: string | null; type: string }[];
   // Left out cleanly (paragraph or row removed) when a client has no value.
   optional?: boolean;
   // Text fields: set by the server when the field is a whole paragraph or
@@ -1182,7 +1183,8 @@ export const deleteSampleTemplate = (sampleId: number) =>
   request<void>(templatePath(sampleId), { method: "DELETE" });
 
 export const getSampleTemplateDocument = (sampleId: number) =>
-  request<import("@/lib/template-document").DocumentView>(`${templatePath(sampleId)}/document`);
+  request<import("@/lib/template-document").DocumentView | import("@/lib/template-workbook").WorkbookView>(
+    `${templatePath(sampleId)}/document`);
 
 export const getSampleTemplateFiles = (sampleId: number) =>
   request<{ template_url: string; preview_url: string | null }>(`${templatePath(sampleId)}/files`);

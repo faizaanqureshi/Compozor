@@ -66,7 +66,7 @@ export function sampleFormat(filename: string): SampleFormat {
   const ext = filename.toLowerCase().split(".").pop() ?? "";
   if (ext === "docx") return { kind: "word", label: "Word", how: "Edited in place. A template locks its formatting." };
   if (ext === "pptx") return { kind: "slides", label: "PowerPoint", how: "Edited in place. A template locks its formatting." };
-  if (ext === "xlsx") return { kind: "sheet", label: "Excel", how: "Filled in place, keeping its formulas, charts and styles." };
+  if (ext === "xlsx") return { kind: "sheet", label: "Excel", how: "Filled in place. A template locks its formulas, charts and styles." };
   if (["pdf", "png", "jpg", "jpeg", "webp"].includes(ext)) {
     return { kind: "rebuilt", label: ext === "pdf" ? "PDF" : "Image", how: "Recreated from its layout. A template rebuilds it once as an editable file." };
   }
