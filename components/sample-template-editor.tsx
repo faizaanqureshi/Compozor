@@ -32,6 +32,13 @@ function kindText(slot: FieldSlot, view: DocumentView | null) {
   return places > 1 ? `Text · appears ${places} times` : "Text";
 }
 
+// Only a field that is a whole paragraph or row on its own can be left out;
+// leaving out an inline field (a year in a title) would delete its sentence.
+// The server marks text fields `standalone` when it saves them.
+function canLeaveOut(slot: FieldSlot) {
+  return slot.kind !== "text" || slot.standalone === true;
+}
+
 // Full-size editor for a sample's fill-in template: the document with every
 // field highlighted, and the list of fields beside it.
 export function SampleTemplateEditor({ sampleId, filename, open, onOpenChange, onChanged }: {
@@ -251,7 +258,7 @@ export function SampleTemplateEditor({ sampleId, filename, open, onOpenChange, o
                           onChange={(e) => change(slots.map((s, i) => (i === index ? { ...s, description: e.target.value } : s)))}
                           className="resize-none text-xs"
                         />
-                        <label className="flex items-center gap-2 text-[0.6875rem] text-muted-foreground">
+                        {canLeaveOut(slot) && <label className="flex items-center gap-2 text-[0.6875rem] text-muted-foreground">
                           <input
                             type="checkbox"
                             className="size-3.5 accent-foreground"
@@ -259,7 +266,7 @@ export function SampleTemplateEditor({ sampleId, filename, open, onOpenChange, o
                             onChange={(e) => change(slots.map((s, i) => (i === index ? { ...s, optional: e.target.checked } : s)))}
                           />
                           {slot.kind === "text" ? "Leave the paragraph out when a client has none" : "Can be empty for some clients"}
-                        </label>
+                        </label>}
                       </div>
                     )}
                   </li>

@@ -1141,6 +1141,9 @@ export interface TemplateSlot {
   columns?: number;
   // Left out cleanly (paragraph or row removed) when a client has no value.
   optional?: boolean;
+  // Text fields: set by the server when the field is a whole paragraph or
+  // row on its own, the only kind that can be optional.
+  standalone?: boolean;
   [location: string]: unknown;
 }
 
