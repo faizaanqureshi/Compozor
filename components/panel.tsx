@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 // meta beside it, actions on the right, and a hairline ring for an edge.
 // Shared by the Clients overview and the client details page.
 export function Panel({
+  id,
   title,
   meta,
   action,
@@ -11,6 +12,8 @@ export function Panel({
   className,
   children,
 }: {
+  // Anchor for deep links (e.g. /clients/1#documents); scroll-margin keeps it clear of the top edge.
+  id?: string;
   title: string;
   meta?: React.ReactNode;
   action?: React.ReactNode;
@@ -21,7 +24,7 @@ export function Panel({
   children: React.ReactNode;
 }) {
   return (
-    <section className={cn("flex min-w-0 flex-col gap-4 rounded-xl bg-card p-5 ring-1 ring-foreground/10", className)}>
+    <section id={id} className={cn("flex min-w-0 scroll-mt-6 flex-col gap-4 rounded-xl bg-card p-5 ring-1 ring-foreground/10", className)}>
       <div className="flex min-h-8 flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <div className="flex min-w-0 flex-wrap items-baseline gap-x-2.5 gap-y-1">
           <h2 className="text-[0.9375rem] font-medium tracking-tight">{title}</h2>

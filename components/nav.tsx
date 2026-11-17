@@ -13,6 +13,7 @@ import {
   LogOut,
   Mail,
   MailQuestion,
+  MessageCircleQuestion,
   Package,
   ClipboardList,
   Settings,
@@ -38,6 +39,7 @@ import { useMobileNav } from "@/components/mobile-nav-context";
 
 const links = [
   { href: "/clients", label: "Clients", icon: Users, tourId: "clients" },
+  { href: "/ask", label: "Ask", icon: MessageCircleQuestion, tourId: "ask" },
   { href: "/workflows", label: "Workflows", icon: Workflow, tourId: "workflows" },
   { href: "/packages", label: "Packages", icon: Package, tourId: "packages" },
   { href: "/questionnaires", label: "Questionnaires", icon: ClipboardList, tourId: "questionnaires" },
