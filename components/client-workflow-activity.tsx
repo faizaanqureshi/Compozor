@@ -1,14 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import useSWR from "swr";
-import { Check, Download, FileText, Loader2 } from "lucide-react";
-import { getClientWorkflowRun, type WorkflowRun } from "@/lib/api";
+import { Check, Download, FileText, Loader2, Upload } from "lucide-react";
+import { ApiError, getClientWorkflowRun, uploadCorrectedOutput, type LearningResult, type WorkflowRun } from "@/lib/api";
 import { formatDuration } from "@/lib/agent-activity";
 import { cn } from "@/lib/utils";
 import { runTimeline, useNow, WorkflowRunTimeline } from "@/components/workflow-run-timeline";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
+import { RulesFollowed, RunReview } from "@/components/run-review";
 
 const labels: Record<WorkflowRun["status"], string> = {
   queued: "Ready to run", running: "Running", completed: "Completed",
@@ -84,7 +85,28 @@ function RunFacts({ run, starting, now }: { run: WorkflowRun; starting?: boolean
   );
 }
 
-function OutputFiles({ run, draftOutputs }: { run: WorkflowRun; draftOutputs: WorkflowRun["outputs"] }) {
+type Output = WorkflowRun["outputs"][number];
+
+// Upload a corrected version of one output, from its row.
+function CorrectButton({ output, busy, onFile }: { output: Output; busy: boolean; onFile: (file: File) => void }) {
+  const input = useRef<HTMLInputElement>(null);
+  const extension = output.filename.includes(".") ? `.${output.filename.split(".").pop()}` : undefined;
+  return <>
+    <input ref={input} type="file" accept={extension} className="hidden" aria-hidden tabIndex={-1}
+      onChange={e => { const file = e.target.files?.[0]; e.target.value = ""; if (file) onFile(file); }} />
+    <button type="button" disabled={busy} onClick={() => input.current?.click()} title="Upload your corrected version"
+      aria-label={`Upload a corrected version of ${output.filename}`}
+      className="flex shrink-0 items-center gap-1.5 self-stretch border-l border-border/70 px-3.5 text-xs text-muted-foreground transition-colors outline-none hover:bg-muted/40 hover:text-foreground focus-visible:bg-muted/40 disabled:opacity-60">
+      {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Upload className="size-3.5" />}
+      <span className="hidden sm:inline">{busy ? "Comparing…" : "Upload corrected"}</span>
+    </button>
+  </>;
+}
+
+function OutputFiles({ run, draftOutputs, correcting, onCorrect }: {
+  run: WorkflowRun; draftOutputs: WorkflowRun["outputs"];
+  correcting?: number | null; onCorrect?: (output: Output, file: File) => void;
+}) {
   const outputs = (run.status === "completed" ? run.outputs : draftOutputs).filter(output => output.download_url);
   const isDraft = run.status !== "completed";
   if (outputs.length === 0) return null;
@@ -92,15 +114,19 @@ function OutputFiles({ run, draftOutputs }: { run: WorkflowRun; draftOutputs: Wo
     <div className="flex max-w-2xl flex-col gap-2">
       {isDraft && <p className="text-xs leading-relaxed text-muted-foreground"><span className="font-medium text-foreground/80">Draft available.</span> Checks are incomplete or need attention. Review the notes before using this file.</p>}
       <ul className="flex flex-col overflow-hidden rounded-lg ring-1 ring-foreground/10">
-        {outputs.map(output => <li key={output.id} className="not-first:border-t not-first:border-border/70">
+        {outputs.map(output => <li key={output.id} className="flex min-w-0 items-stretch not-first:border-t not-first:border-border/70">
           <a href={output.download_url!} target="_blank" rel="noreferrer" title={output.filename} aria-label={`Download ${isDraft ? "draft " : ""}${output.filename}`}
-            className="group flex min-w-0 items-center gap-3 px-3.5 py-3 text-[0.8125rem] !no-underline transition-colors outline-none hover:bg-muted/40 focus-visible:bg-muted/40">
+            className="group flex min-w-0 flex-1 items-center gap-3 px-3.5 py-3 text-[0.8125rem] !no-underline transition-colors outline-none hover:bg-muted/40 focus-visible:bg-muted/40">
             <FileText className="size-4 shrink-0 text-muted-foreground" />
-            <span className="min-w-0 flex-1 break-all leading-snug text-foreground/90">{output.filename}</span>
+            <span className="min-w-0 flex-1 break-all leading-snug text-foreground/90">
+              {output.filename}
+              {output.edited && <span className="ml-2 text-xs text-muted-foreground">Your version</span>}
+            </span>
             <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground transition-colors group-hover:text-foreground">
               <Download className="size-3.5" /><span className="hidden sm:inline">Download</span>
             </span>
           </a>
+          {onCorrect && <CorrectButton output={output} busy={correcting === output.id} onFile={file => onCorrect(output, file)} />}
         </li>)}
       </ul>
     </div>
@@ -142,7 +168,12 @@ function checksSummary(run: WorkflowRun) {
   return `${checks.filter(c => c.passed).length} of ${checks.length} checks passed`;
 }
 
-function RunContents({ run, loadDetails = false, starting }: { run: WorkflowRun; loadDetails?: boolean; starting?: boolean }) {
+// Present on the latest run: where staff approve, correct and teach.
+type ReviewProps = { clientName: string; onChange: () => void };
+
+function RunContents({ run, loadDetails = false, starting, review }: {
+  run: WorkflowRun; loadDetails?: boolean; starting?: boolean; review?: ReviewProps;
+}) {
   const { data, error, isLoading, mutate } = useSWR(
     loadDetails && run.details_loaded === false
       ? ["workflow-run", run.client_id, run.id, run.started_at, run.completed_at, run.status] : null,
@@ -162,6 +193,22 @@ function RunContents({ run, loadDetails = false, starting }: { run: WorkflowRun;
     setOpen(prev => prev.includes("timeline") ? prev : [...prev, "timeline"]);
   }
   const now = useNow(running);
+  const [learning, setLearning] = useState<{ value: LearningResult; source: "edit" | "note" } | null>(null);
+  const [correcting, setCorrecting] = useState<number | null>(null);
+  const [correctError, setCorrectError] = useState<string | null>(null);
+  const reviewable = review && (run.status === "completed" || run.status === "needs_review");
+  const onCorrect = async (output: Output, file: File) => {
+    setCorrecting(output.id);
+    setCorrectError(null);
+    try {
+      setLearning({ value: await uploadCorrectedOutput(run.client_id, run.id, output.id, file), source: "edit" });
+      review?.onChange();
+    } catch (e) {
+      setCorrectError(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setCorrecting(null);
+    }
+  };
   const currentFor = current?.start !== undefined ? formatDuration(now - current.start) : null;
 
   if (run.status === "queued" && !hasTrace) {
@@ -186,7 +233,12 @@ function RunContents({ run, loadDetails = false, starting }: { run: WorkflowRun;
           ? <p className="max-w-3xl border-l border-border pl-3 text-[0.8125rem] leading-relaxed text-muted-foreground">{run.review_reason}</p>
           : <p className="max-w-3xl border-l border-destructive/40 pl-3 text-[0.8125rem] leading-relaxed text-destructive">{run.review_reason}</p>
       )}
-      <OutputFiles run={run} draftOutputs={detail?.draft_outputs ?? run.draft_outputs ?? []} />
+      {detail?.rules_applied?.length ? <RulesFollowed rules={detail.rules_applied} /> : null}
+      <OutputFiles run={run} draftOutputs={detail?.draft_outputs ?? run.draft_outputs ?? []}
+        correcting={correcting} onCorrect={reviewable ? onCorrect : undefined} />
+      {correctError && <p role="alert" className="text-xs text-destructive">{correctError}</p>}
+      {reviewable && detail && <RunReview run={detail} clientName={review.clientName} result={learning}
+        onResult={value => { setLearning(value); review.onChange(); }} onChange={review.onChange} />}
       {run.status === "completed" && Boolean(detail?.verification?.warnings?.length) && (
         <div className="max-w-3xl space-y-1.5 text-xs leading-relaxed text-muted-foreground">
           <p className="font-medium text-foreground/80">Completion notes</p>
@@ -269,8 +321,10 @@ function RunHistory({ runs }: { runs: WorkflowRun[] }) {
 }
 
 /** A single workflow, with its latest result first and its audit history below. */
-export function ClientWorkflowActivity({ workflowId, name, archived, runs, actions, assigned, awaitingFirstRun, executionMode, readiness, starting }: {
+export function ClientWorkflowActivity({ workflowId, name, archived, runs, actions, assigned, awaitingFirstRun, executionMode, readiness, starting, review }: {
   workflowId: number; name: string; archived: boolean; runs: WorkflowRun[]; actions: React.ReactNode;
+  // Lets staff approve, correct and teach the latest run.
+  review?: ReviewProps;
   assigned?: boolean; awaitingFirstRun?: boolean; executionMode?: "manual" | "auto"; readiness?: string;
   // A run was just requested here and hasn't been picked up yet.
   starting?: boolean;
@@ -301,7 +355,7 @@ export function ClientWorkflowActivity({ workflowId, name, archived, runs, actio
       {hasLatest && <section aria-label="Latest run" className="flex min-w-0 flex-col gap-5 pt-1 pb-6">
         <span className={eyebrow}>Latest run</span>
         <RunFacts run={latest} starting={starting && latest.status === "queued"} now={now} />
-        <RunContents run={latest} starting={starting} />
+        <RunContents run={latest} starting={starting} review={archived ? undefined : review} />
       </section>}
       {runs.length > 1 && <div className="pb-4"><RunHistory runs={runs.slice(1)} /></div>}
     </AccordionContent>

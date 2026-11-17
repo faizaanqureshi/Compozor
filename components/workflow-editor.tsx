@@ -21,6 +21,7 @@ import { organizationKey, workflowsKey } from "@/lib/swr-keys";
 import { cn } from "@/lib/utils";
 import { canAutoDraft, countWords, instructionTips, sampleFormat, startersFor, templateProgress } from "@/lib/workflow-editor";
 import { WorkflowWorkSamples } from "@/components/workflow-work-samples";
+import { WorkflowRules } from "@/components/workflow-rules";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -356,6 +357,7 @@ export function WorkflowEditor({ workflow, returnTo = "/workflows" }: { workflow
               })}
             </div>
           </Step>
+          {isEdit && <WorkflowRules workflowId={workflow.id} />}
           {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         </div>
 
