@@ -1,7 +1,7 @@
 "use client";
 
 import { DocumentValidationResult } from "@/components/document-validation-result";
-import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { use, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { groupClientWorkflows, assignmentReadiness } from "@/lib/client-workflows";
 import { createSnapshotRefresh } from "@/lib/snapshot-refresh";
 import Link from "next/link";
@@ -95,6 +95,8 @@ import {
   waiveChecklistItem,
 } from "@/lib/api";
 import { cn, formatPhoneNumber, formatShortDate } from "@/lib/utils";
+import { deepLinkElementId, noSubscribe, readClientDeepLink, type ClientDeepLink } from "@/lib/deep-link";
+import { AskClientButton } from "@/components/ask/ask-client-button";
 import { computeTier, relativeDays, startOfDay, TIER_META } from "@/lib/checklist-urgency";
 import { ResumeWorkflowDialog } from "@/components/resume-workflow-dialog";
 import { AgentActivityDisclosure } from "@/components/agent-activity-disclosure";
@@ -250,6 +252,22 @@ export default function ClientDetailPage({
 
   const [workflowError, setWorkflowError] = useState<string | null>(null);
   const [assignPackageOpen, setAssignPackageOpen] = useState(false);
+  // Read once on mount: a link from an Ask citation to one document, email or run.
+  const search = useSyncExternalStore(noSubscribe, () => window.location.search, () => "");
+  const deepLink = useMemo<ClientDeepLink>(() => readClientDeepLink(search), [search]);
+  const deepLinkReady = deepLink.doc ? documents !== null : deepLink.email ? threads !== null : deepLink.run ? workflowRuns !== null : false;
+  useEffect(() => {
+    const elementId = deepLinkElementId(deepLink);
+    if (!elementId || !deepLinkReady) return;
+    const timer = setTimeout(() => {
+      const el = document.getElementById(elementId);
+      if (!el) return;
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.setAttribute("data-deep-link", "");
+      setTimeout(() => el.removeAttribute("data-deep-link"), 2400);
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [deepLink, deepLinkReady]);
   const router = useRouter();
   const workflowRefreshRef = useRef<ReturnType<typeof createSnapshotRefresh<[WorkflowRun[], ClientWorkflowAssignment[]]>> | null>(null);
 
@@ -339,6 +357,7 @@ export default function ClientDetailPage({
           <ClientQuestionnairesCard clientId={clientId} clientName={client?.name} />
 
           <WorkflowRunsCard
+            focusRunId={deepLink.run}
             clientId={clientId}
             runs={workflowRuns}
             assignments={workflowAssignments}
@@ -355,7 +374,7 @@ export default function ClientDetailPage({
             onChange={refresh}
           />
 
-          <CommunicationCard threads={threads} clientName={client?.name} loadError={loadErrors.threads} />
+          <CommunicationCard threads={threads} clientName={client?.name} loadError={loadErrors.threads} focusEmailId={deepLink.email} />
         </div>
 
         {/* Grid on tablets (cards top-aligned), a full-width column beside the main content on xl. */}
@@ -460,6 +479,7 @@ function ClientHeader({
                 <Plus />
                 Assign package
               </Button>
+              <AskClientButton clientId={clientId} clientName={client.name} />
               <Button onClick={onSendReminder} disabled={sending}>
                 {sending ? <Loader2 className="animate-spin" /> : <Mail />}
                 {sending ? "Sending…" : "Send reminder"}
@@ -1622,13 +1642,16 @@ function CommunicationCard({
   threads,
   clientName,
   loadError,
+  focusEmailId,
 }: {
   threads: EmailThread[] | null;
   clientName?: string;
   loadError?: string | null;
+  focusEmailId?: number;
 }) {
   return (
     <Panel
+      id="conversation"
       title="Conversation"
       meta={threads && threads.length > 0 ? `${threads.length} thread${threads.length === 1 ? "" : "s"}` : undefined}
       loadError={loadError}
@@ -1638,13 +1661,26 @@ function CommunicationCard({
         </Button>
       }
     >
-      <ThreadsList threads={threads} clientName={clientName} />
+      <ThreadsList threads={threads} clientName={clientName} focusEmailId={focusEmailId} />
     </Panel>
   );
 }
 
-function ThreadsList({ threads, clientName }: { threads: EmailThread[] | null; clientName?: string }) {
-  const [expandedThread, setExpandedThread] = useState<string | null>(null);
+function ThreadsList({
+  threads,
+  clientName,
+  focusEmailId,
+}: {
+  threads: EmailThread[] | null;
+  clientName?: string;
+  focusEmailId?: number;
+}) {
+  // Until staff toggle a thread, the one holding a deep-linked email is open.
+  const [toggledThread, setExpandedThread] = useState<string | null | undefined>(undefined);
+  const focusThread = focusEmailId
+    ? threads?.find((t) => t.messages.some((m) => m.id === focusEmailId))?.thread_key
+    : undefined;
+  const expandedThread = toggledThread === undefined ? focusThread ?? null : toggledThread;
 
   if (threads === null) {
     return (
@@ -1712,7 +1748,7 @@ function ConversationMessage({ entry, clientName }: { entry: EmailLogEntry; clie
   const inbound = entry.direction === "inbound";
   const unresolved = entry.status === "needs_human_attention" && !entry.resolved_at;
   return (
-    <article className="flex min-w-0 flex-col gap-3 px-4 py-4">
+    <article id={`email-${entry.id}`} className="flex min-w-0 scroll-mt-24 flex-col gap-3 px-4 py-4 transition-colors duration-700 data-[deep-link]:bg-accent/8">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <span className="text-sm font-medium">{inbound ? clientName ?? entry.from_email ?? "Client" : "Your firm"}</span>
         <span className="flex items-center gap-3">
@@ -1872,6 +1908,7 @@ function DocumentVaultCard({
       </div>
     )}
     <Panel
+      id="documents"
       title="Files"
       meta={
         documents && documents.length > 0
@@ -1984,7 +2021,11 @@ function DocumentVaultCard({
                 ? itemsById[doc.checklist_item_id]
                 : undefined;
             return (
-              <tr key={doc.id} className="border-b border-border/50 last:border-0">
+              <tr
+                key={doc.id}
+                id={`document-${doc.id}`}
+                className="scroll-mt-24 border-b border-border/50 transition-colors duration-700 last:border-0 data-[deep-link]:bg-accent/8"
+              >
                 <td className="py-3 pr-4 font-medium [overflow-wrap:anywhere]">
                   {doc.resolved_display_name}
                   {doc.classified_type && doc.classified_type !== doc.resolved_display_name && (
@@ -2359,6 +2400,7 @@ function UploadLinkCard({ clientId }: { clientId: number }) {
 
 
 function WorkflowRunsCard({
+  focusRunId,
   clientId,
   runs,
   assignments,
@@ -2366,6 +2408,7 @@ function WorkflowRunsCard({
   onChange,
   clientName,
 }: {
+  focusRunId?: number;
   clientId: number;
   runs: WorkflowRun[] | null;
   assignments: ClientWorkflowAssignment[] | null;
@@ -2378,6 +2421,13 @@ function WorkflowRunsCard({
   const [requestedIds, setRequestedIds] = useState<number[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [openWorkflowIds, setOpenWorkflowIds] = useState<number[]>([]);
+  // A deep-linked run keeps its workflow's history open until staff close it.
+  const [focusClosed, setFocusClosed] = useState(false);
+  const focusWorkflowId = focusRunId ? runs?.find((r) => r.id === focusRunId)?.workflow_id : undefined;
+  const shownWorkflowIds =
+    focusWorkflowId && !focusClosed && !openWorkflowIds.includes(focusWorkflowId)
+      ? [...openWorkflowIds, focusWorkflowId]
+      : openWorkflowIds;
   // Refs, not state, for values the live-event handler only needs to read
   // at event time - putting them in the effect's dependency array would
   // tear down and reopen the SSE connection on every refetch/rerender.
@@ -2477,6 +2527,7 @@ function WorkflowRunsCard({
 
   return (
     <Panel
+      id="workflows"
       title="Workflows"
       action={
         <AssignWorkflowDialog
@@ -2504,8 +2555,11 @@ function WorkflowRunsCard({
         </p>
       ) : (
         <Accordion
-          value={openWorkflowIds}
-          onValueChange={(v) => setOpenWorkflowIds(v as number[])}
+          value={shownWorkflowIds}
+          onValueChange={(v) => {
+            if (focusWorkflowId && !(v as number[]).includes(focusWorkflowId)) setFocusClosed(true);
+            setOpenWorkflowIds(v as number[]);
+          }}
           multiple
           className="border-t border-border/70"
         >

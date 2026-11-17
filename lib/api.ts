@@ -1,7 +1,7 @@
 import { subscribeSSE } from "./sse";
 import { signInRedirect } from "./auth-redirects";
 import type { Answers, Condition, QuestionnaireDefinition } from "./questionnaire-logic";
-const API_BASE_URL =
+export const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
 export class ApiError extends Error {
@@ -16,7 +16,7 @@ export class ApiError extends Error {
   }
 }
 
-async function responseError(res: Response): Promise<ApiError> {
+export async function responseError(res: Response): Promise<ApiError> {
   let message = `${res.status} ${res.statusText}`;
   try {
     const body = await res.json();
@@ -52,7 +52,7 @@ async function waitForClerkGlobal(timeoutMs = 3000): Promise<ClerkGlobal | undef
   }
 }
 
-async function getAuthToken(skipCache = false): Promise<string | null> {
+export async function getAuthToken(skipCache = false): Promise<string | null> {
   if (typeof window === "undefined") return null;
   const clerk = await waitForClerkGlobal();
   if (!clerk) throw new ApiError(503, "Sign-in is still loading. Please try again.");
@@ -72,7 +72,7 @@ function redirectSignedOutUser() {
   if (destination) window.location.replace(destination);
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const token = await getAuthToken();
   if (typeof window !== "undefined" && !token) {
     redirectSignedOutUser();
@@ -103,7 +103,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-function json(method: string, body: unknown): RequestInit {
+export function json(method: string, body: unknown): RequestInit {
   return {
     method,
     headers: { "Content-Type": "application/json" },

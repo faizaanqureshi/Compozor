@@ -59,3 +59,5 @@ export const adminOrganizationUsageKey = (organizationId: number, bucket: UsageB
 
 export const adminClientUsageKey = (organizationId: number, clientId: number, bucket: UsageBucket, range: RangePreset) =>
   ["admin-client-usage", organizationId, clientId, bucket, range] as const;
+
+export const askConversationsKey = () => ["ask-conversations"] as const;

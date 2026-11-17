@@ -297,7 +297,7 @@ function RunHistory({ runs }: { runs: WorkflowRun[] }) {
         <span className="text-[0.6875rem] text-muted-foreground/60 tabular-nums">{runs.length}</span>
       </div>
       <Accordion multiple value={openRuns} onValueChange={value => setOpenRuns(value as number[])}>
-        {shown.map(run => <AccordionItem key={run.id} value={run.id} className="border-border/50">
+        {shown.map(run => <AccordionItem key={run.id} id={`workflow-run-${run.id}`} value={run.id} className="scroll-mt-24 border-border/50 transition-colors duration-700 data-[deep-link]:bg-accent/8">
           <AccordionTrigger className={cn(quietTrigger, "items-center gap-3 py-3")}>
             <span className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 sm:grid-cols-[8rem_minmax(0,1fr)_5rem_5rem]">
               <RunStatus status={run.status} />
