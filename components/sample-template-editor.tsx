@@ -38,6 +38,21 @@ function kindText(slot: FieldSlot, view: DocumentView | WorkbookView | null) {
   return places > 1 ? `Text · appears ${places} times` : "Text";
 }
 
+// Only a field that is a whole paragraph or row on its own can be left out;
+// leaving out an inline field (a year in a title) would delete its sentence.
+// The server marks text fields `standalone` when it saves them. A workbook
+// cell is never removed: its row and column hold the sheet's layout.
+function canLeaveOut(slot: FieldSlot) {
+  if (slot.kind === "cell") return false;
+  return slot.kind !== "text" || slot.standalone === true;
+}
+
+function leaveOutText(slot: FieldSlot) {
+  if (slot.kind === "text") return "Leave the paragraph out when a client has none";
+  if (slot.kind === "table_rows" && slot.sheet) return "Can have no rows for some clients (totals show 0)";
+  return "Can be empty for some clients";
+}
+
 // Full-size editor for a sample's fill-in template: the document with every
 // field highlighted, and the list of fields beside it.
 export function SampleTemplateEditor({ sampleId, filename, open, onOpenChange, onChanged }: {
@@ -152,6 +167,7 @@ export function SampleTemplateEditor({ sampleId, filename, open, onOpenChange, o
   };
 
   const approved = template?.status === "approved";
+  const problems = dirty ? [] : template?.problems ?? [];
 
   return (
     <Dialog open={open} onOpenChange={requestClose}>
@@ -201,13 +217,14 @@ export function SampleTemplateEditor({ sampleId, filename, open, onOpenChange, o
               <p className="text-[0.6875rem] tracking-widest text-muted-foreground uppercase">
                 Fields · {slots.length}
               </p>
+              {template?.summary && !dirty && <p className="text-sm text-pretty">{template.summary}</p>}
               <p className="text-xs text-muted-foreground">
-                {approved ? "Approved. New runs fill this template." : "Draft. Review the fields, then approve to use it."}
+                {approved ? "In use. New runs fill this template." : "Approved when you save the workflow, or approve it here."}
                 {template?.source === "converted" && template.similarity !== null && (
                   <> Rebuilt as an editable file, {Math.round(template.similarity * 100)}% match with the original.</>
                 )}
               </p>
-              {!approved && template?.warnings.map((warning) => (
+              {!approved && [...problems, ...(template?.warnings ?? [])].map((warning) => (
                 <p key={warning} className="text-xs leading-relaxed text-warning-foreground">{warning}</p>
               ))}
               <ul className="mt-2 flex flex-col gap-1.5 rounded-lg bg-muted/50 px-3 py-2.5 text-[0.6875rem] leading-relaxed text-muted-foreground">
@@ -267,7 +284,7 @@ export function SampleTemplateEditor({ sampleId, filename, open, onOpenChange, o
                       </Button>
                     </div>
                     {isActive && (
-                      <div className="px-5 pb-3 pl-10">
+                      <div className="flex flex-col gap-2.5 px-5 pb-3 pl-10">
                         <Textarea
                           aria-label="What goes here"
                           rows={2}
@@ -276,6 +293,15 @@ export function SampleTemplateEditor({ sampleId, filename, open, onOpenChange, o
                           onChange={(e) => change(slots.map((s, i) => (i === index ? { ...s, description: e.target.value } : s)))}
                           className="resize-none text-xs"
                         />
+                        {canLeaveOut(slot) && <label className="flex items-center gap-2 text-[0.6875rem] text-muted-foreground">
+                          <input
+                            type="checkbox"
+                            className="size-3.5 accent-foreground"
+                            checked={!!slot.optional}
+                            onChange={(e) => change(slots.map((s, i) => (i === index ? { ...s, optional: e.target.checked } : s)))}
+                          />
+                          {leaveOutText(slot)}
+                        </label>}
                       </div>
                     )}
                   </li>
@@ -306,7 +332,7 @@ export function SampleTemplateEditor({ sampleId, filename, open, onOpenChange, o
                       Save changes
                     </Button>
                   ) : !approved ? (
-                    <Button type="button" disabled={!!busy || slots.length === 0 || !template} onClick={approve}>
+                    <Button type="button" disabled={!!busy || slots.length === 0 || !template || problems.length > 0} onClick={approve}>
                       {busy === "approve" && <Loader2 className="animate-spin" />}
                       Approve template
                     </Button>
