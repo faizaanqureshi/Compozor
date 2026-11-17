@@ -458,7 +458,9 @@ function ClientHeader({
           <Skeleton className="h-4 w-20" />
         </div>
       ) : (
-        <div className="flex flex-col gap-4 animate-fade-in lg:flex-row lg:items-end lg:justify-between">
+        // Actions wrap below the name when they don't fit beside it (e.g. with
+        // Ask docked), so the name is never squeezed onto several lines.
+        <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4 animate-fade-in">
           <div className="flex min-w-0 flex-col gap-2">
             <h1 className="text-4xl leading-tight font-light tracking-tight text-balance [font-family:var(--font-display)] md:text-5xl">
               {client.name}
