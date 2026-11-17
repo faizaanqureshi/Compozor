@@ -11,6 +11,8 @@ export const emailLogKey = (status?: EmailStatus, resolved?: boolean) =>
 
 export const organizationKey = () => ["organization"] as const;
 
+export const teamKey = () => ["team"] as const;
+
 export const inboxConnectionsKey = () => ["inbox-connections"] as const;
 
 export const calendarConnectionsKey = () => ["calendar-connections"] as const;
@@ -30,7 +32,7 @@ export const clientKey = (clientId: number) => ["client", clientId] as const;
 export const clientChecklistKey = (clientId: number) => ["client-checklist", clientId] as const;
 export const clientThreadsKey = (clientId: number) => ["client-threads", clientId] as const;
 export const clientDocumentsKey = (clientId: number) => ["client-documents", clientId] as const;
-export const clientMemoryNotesKey = (clientId: number) => ["client-memory-notes", clientId] as const;
+export const clientFactsKey = (clientId: number) => ["client-facts", clientId] as const;
 export const clientCommitmentsKey = (clientId: number) => ["client-commitments", clientId] as const;
 // Written by the page's live workflow refresher (SSE + polling), not fetched by SWR.
 export const clientWorkflowSnapshotKey = (clientId: number) => ["client-workflow-snapshot", clientId] as const;

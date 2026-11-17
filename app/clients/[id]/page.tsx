@@ -12,7 +12,7 @@ import {
   clientDocumentsKey,
   clientKey,
   clientMeetingsKey,
-  clientMemoryNotesKey,
+  clientFactsKey,
   clientThreadsKey,
   clientWorkflowSnapshotKey,
   organizationKey,
@@ -43,7 +43,6 @@ import {
   ChecklistSummary,
   ClientCommitment,
   ClientDetail,
-  ClientMemoryNote,
   ClientStatus,
   ClientUploadLink,
   CommitmentStatus,
@@ -60,7 +59,6 @@ import {
   listClientWorkflowAssignments,
   startAssignedWorkflow,
   deleteClient,
-  deleteClientMemoryNote,
   deleteDocument,
   downloadClientDocumentsZip,
   getClient,
@@ -71,7 +69,7 @@ import {
   listClientCommitments,
   listClientDocuments,
   listClientMeetings,
-  listClientMemoryNotes,
+  listClientFacts,
   listClientUploadLinkEvents,
   listClientWorkflowRuns,
   listEmailThreads,
@@ -112,6 +110,7 @@ import {
   filterDocumentsByCategory,
 } from "@/lib/document-categories";
 import { ClientQuestionnairesCard } from "@/components/client-questionnaires-card";
+import { ClientFactsCard } from "@/components/client-facts-card";
 import { QuestionnairePdfAccess } from "@/components/questionnaire-pdf-access";
 import { ChecklistItemFormDialog } from "@/components/checklist-item-form-dialog";
 import { ChecklistItemFiles } from "@/components/checklist-item-files";
@@ -220,7 +219,7 @@ export default function ClientDetailPage({
   const checklistQuery = useSWR(clientChecklistKey(clientId), () => listChecklistItems(clientId));
   const threadsQuery = useSWR(clientThreadsKey(clientId), () => listEmailThreads(clientId));
   const documentsQuery = useSWR(clientDocumentsKey(clientId), () => listClientDocuments(clientId));
-  const memoryNotesQuery = useSWR(clientMemoryNotesKey(clientId), () => listClientMemoryNotes(clientId));
+  const factsQuery = useSWR(clientFactsKey(clientId), () => listClientFacts(clientId));
   const commitmentsQuery = useSWR(clientCommitmentsKey(clientId), () => listClientCommitments(clientId));
   const meetingsQuery = useSWR(clientMeetingsKey(clientId), () => listClientMeetings(clientId));
   // Workflows keep their live refresher (SSE + polling, serialized); it writes
@@ -233,7 +232,7 @@ export default function ClientDetailPage({
   const checklist = checklistQuery.data ?? null;
   const threads = threadsQuery.data ?? null;
   const documents = documentsQuery.data ?? null;
-  const memoryNotes = memoryNotesQuery.data ?? null;
+  const facts = factsQuery.data ?? null;
   const commitments = commitmentsQuery.data ?? null;
   const meetings = meetingsQuery.data ?? null;
   const workflowRuns = workflowSnapshot?.[0] ?? null;
@@ -247,7 +246,7 @@ export default function ClientDetailPage({
     checklist: sectionError(checklistQuery),
     threads: sectionError(threadsQuery),
     documents: sectionError(documentsQuery),
-    memoryNotes: sectionError(memoryNotesQuery),
+    facts: sectionError(factsQuery),
     commitments: sectionError(commitmentsQuery),
     meetings: sectionError(meetingsQuery),
   };
@@ -306,7 +305,7 @@ export default function ClientDetailPage({
     void checklistQuery.mutate();
     void threadsQuery.mutate();
     void documentsQuery.mutate();
-    void memoryNotesQuery.mutate();
+    void factsQuery.mutate();
     void commitmentsQuery.mutate();
     void meetingsQuery.mutate();
   };
@@ -359,16 +358,19 @@ export default function ClientDetailPage({
 
           <ClientQuestionnairesCard clientId={clientId} clientName={client?.name} />
 
+          <div id="workflows" className="min-w-0 scroll-mt-6">
           <WorkflowRunsCard
             focusRunId={deepLink.run}
             clientId={clientId}
             runs={workflowRuns}
             assignments={workflowAssignments}
             loadError={workflowError}
-            onChange={refreshWorkflowRuns}
+            onChange={() => { refreshWorkflowRuns(); void factsQuery.mutate(); }}
             clientName={client?.name}
           />
+          </div>
 
+          <div id="documents" className="min-w-0 scroll-mt-6">
           <DocumentVaultCard
             clientId={clientId}
             documents={documents}
@@ -376,8 +378,11 @@ export default function ClientDetailPage({
             loadError={loadErrors.documents}
             onChange={refresh}
           />
+          </div>
 
-          <CommunicationCard threads={threads} clientName={client?.name} loadError={loadErrors.threads} focusEmailId={deepLink.email} />
+          <div id="communication" className="min-w-0 scroll-mt-6">
+            <CommunicationCard threads={threads} clientName={client?.name} loadError={loadErrors.threads} focusEmailId={deepLink.email} />
+          </div>
         </div>
 
         {/* Grid on tablets (cards top-aligned), a full-width column beside the main content on xl. */}
@@ -401,10 +406,11 @@ export default function ClientDetailPage({
 
           <UploadLinkCard clientId={clientId} />
 
-          <MemoryNotesCard
+          <ClientFactsCard
             clientId={clientId}
-            notes={memoryNotes}
-            loadError={loadErrors.memoryNotes}
+            facts={facts}
+            documents={documents}
+            loadError={loadErrors.facts}
             onChange={refresh}
           />
         </aside>
@@ -2698,131 +2704,6 @@ function RemoveWorkflowButton({
             </Button>
             <Button variant="destructive" onClick={onRemove} disabled={removing}>
               {removing ? "Removing…" : "Remove"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
-  );
-}
-
-function MemoryNotesCard({
-  clientId,
-  notes,
-  loadError,
-  onChange,
-}: {
-  clientId: number;
-  notes: ClientMemoryNote[] | null;
-  loadError?: string | null;
-  onChange: () => void;
-}) {
-  return (
-    <Panel title="What we know" loadError={loadError}>
-      {notes === null ? (
-        <div className="flex flex-col gap-2">
-          <Skeleton className="h-4 w-2/3" />
-          <Skeleton className="h-4 w-1/2" />
-        </div>
-      ) : (
-      <div
-        className="flex flex-col divide-y divide-border/60 animate-fade-in"
-      >
-        {notes.map((note) => (
-          <div
-            key={note.id}
-            className={cn(
-              "-mr-2 flex items-start justify-between gap-2 py-2.5 text-sm first:pt-0 last:pb-0",
-              note.superseded_at && "opacity-50"
-            )}
-          >
-            <div>
-              <p className="text-foreground/80">
-                {note.note}
-                {note.superseded_at && (
-                  <span className="ml-2 inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                    superseded
-                  </span>
-                )}
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Learned {formatShortDate(note.created_at, true)}
-              </p>
-            </div>
-            <DeleteMemoryNoteButton
-              clientId={clientId}
-              note={note}
-              onChange={onChange}
-            />
-          </div>
-        ))}
-        {notes.length === 0 && (
-          <p className="text-sm text-muted-foreground">
-            Nothing yet. Facts learned from this client&apos;s emails appear here.
-          </p>
-        )}
-      </div>
-      )}
-    </Panel>
-  );
-}
-
-function DeleteMemoryNoteButton({
-  clientId,
-  note,
-  onChange,
-}: {
-  clientId: number;
-  note: ClientMemoryNote;
-  onChange: () => void;
-}) {
-  const [confirming, setConfirming] = useState(false);
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const onDelete = async () => {
-    setPending(true);
-    setError(null);
-    try {
-      await deleteClientMemoryNote(clientId, note.id);
-      setConfirming(false);
-      onChange();
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : String(e));
-    } finally {
-      setPending(false);
-    }
-  };
-
-  return (
-    <>
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        className="shrink-0 text-muted-foreground hover:text-destructive"
-        onClick={() => setConfirming(true)}
-      >
-        <Trash2 className="size-3.5" />
-        <span className="sr-only">Delete note</span>
-      </Button>
-
-      <Dialog open={confirming} onOpenChange={(open) => !pending && setConfirming(open)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete this memory note?</DialogTitle>
-            <DialogDescription>
-              This removes “{note.note}” from what the AI knows about this
-              client. Use this to correct something wrong - it won&apos;t be
-              suggested again.
-            </DialogDescription>
-          </DialogHeader>
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirming(false)} disabled={pending}>
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={onDelete} disabled={pending}>
-              {pending ? "Deleting…" : "Delete note"}
             </Button>
           </DialogFooter>
         </DialogContent>

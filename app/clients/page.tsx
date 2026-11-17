@@ -69,6 +69,7 @@ import { OutstandingDocuments, outstandingRows } from "@/components/outstanding-
 import { BacklogBreakdown } from "@/components/backlog-breakdown";
 import { CorrespondenceChart } from "@/components/correspondence-chart";
 import { RecentActivity } from "@/components/recent-activity";
+import { useIsFirmAdmin } from "@/lib/use-firm-role";
 
 type WorkflowTone = "success" | "warning" | "attention" | "neutral";
 type SortKey = "name" | "documents" | "activity" | "status";
@@ -353,6 +354,8 @@ export default function ClientsPage() {
   // than on the Workflows page, so picking who a workflow runs for happens in
   // the same place you're already looking at/sorting/searching clients.
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  // Deleting clients in bulk is admin-only; members archive one at a time.
+  const isFirmAdmin = useIsFirmAdmin();
   // The exact selection at the moment "Assign questionnaire" is clicked.
   const [questionnaireTargets, setQuestionnaireTargets] = useState<number[] | null>(null);
   const toggleSelected = (clientId: number) => {
@@ -700,13 +703,15 @@ export default function ClientsPage() {
                 <QuestionnaireIcon />
                 Assign questionnaire
               </Button>
-              <BulkDeleteClientsButton
-                clientIds={Array.from(selectedIds)}
-                onDeleted={() => {
-                  setSelectedIds(new Set());
-                  mutateClients();
-                }}
-              />
+              {isFirmAdmin && (
+                <BulkDeleteClientsButton
+                  clientIds={Array.from(selectedIds)}
+                  onDeleted={() => {
+                    setSelectedIds(new Set());
+                    mutateClients();
+                  }}
+                />
+              )}
               <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>
                 <XIcon />
                 Clear

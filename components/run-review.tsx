@@ -143,7 +143,8 @@ export function RunReview({ run, clientName, result, onResult, onChange }: {
             <Button variant="ghost" size="xs" className="text-muted-foreground" onClick={toggleApproval} disabled={approving}>Undo</Button>
           </span>
         ) : (
-          <Button variant="outline" size="sm" onClick={toggleApproval} disabled={approving}>
+          <Button variant="outline" size="sm" onClick={toggleApproval} disabled={approving}
+            title="Lets the assistant tell the client this is done, with its summary">
             {approving ? <Loader2 className="animate-spin" /> : <Check />}Approve
           </Button>
         ))}
