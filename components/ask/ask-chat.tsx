@@ -9,13 +9,14 @@ import { AskAnswer } from "@/components/ask/ask-answer";
 import { ApiError } from "@/lib/api";
 import {
   getAskConversation,
-  recordAskActionResult,
   streamAskQuestion,
   type AskAction,
   type AskCitation,
   type AskMessage,
+  type AskScope,
 } from "@/lib/ask";
 import { cn } from "@/lib/utils";
+import { scopedStarters } from "@/lib/ask-starters";
 
 type Turn = {
   key: string;
@@ -52,34 +53,17 @@ function withQuestions(messages: AskMessage[]): Turn[] {
   });
 }
 
-export const GLOBAL_STARTERS = [
-  "Who's still missing their T4?",
-  "Which workflow runs need review?",
-  "Who hasn't replied in two weeks?",
-  "Which drafts are waiting for my approval?",
-];
-
-export function clientStarters(firstName: string): string[] {
-  return [
-    `When did we last follow up with ${firstName}, and what has come in?`,
-    `What's still outstanding for ${firstName}?`,
-    `Summarise ${firstName}'s documents on file`,
-    `Anything in ${firstName}'s workflow runs that needs review?`,
-  ];
-}
-
 export function AskChat({
   conversationId,
   onConversationChange,
-  clientId,
-  clientName,
+  scope = null,
   variant = "page",
   onNavigate,
 }: {
   conversationId: number | null;
   onConversationChange?: (id: number | null) => void;
-  clientId?: number;
-  clientName?: string;
+  /** What the staff member is looking at; sent with each question. */
+  scope?: AskScope | null;
   variant?: "page" | "panel";
   onNavigate?: () => void;
 }) {
@@ -146,7 +130,12 @@ export function AskChat({
       abortRef.current = controller;
       try {
         await streamAskQuestion(
-          { question: text, conversation_id: activeId.current, client_id: activeId.current ? null : clientId ?? null },
+          {
+            question: text,
+            conversation_id: activeId.current,
+            client_id: !activeId.current && scope?.kind === "client" ? scope.id : null,
+            scope: scope ? { kind: scope.kind, id: scope.id } : null,
+          },
           (event) => {
             switch (event.type) {
               case "conversation":
@@ -190,7 +179,7 @@ export function AskChat({
         updateLast((t) => (t.state === "working" || t.state === "streaming" ? { ...t, state: "complete" } : t));
       }
     },
-    [busy, clientId, onConversationChange, updateLast],
+    [busy, scope, onConversationChange, updateLast],
   );
 
   const stop = () => {
@@ -199,8 +188,7 @@ export function AskChat({
     setBusy(false);
   };
 
-  const firstName = clientName?.split(/\s+/)[0];
-  const starters = firstName ? clientStarters(firstName) : GLOBAL_STARTERS;
+  const starters = scopedStarters(scope);
   const empty = turns.length === 0 && !loading && !loadError;
   const panel = variant === "panel";
 
@@ -210,7 +198,7 @@ export function AskChat({
         {empty ? (
           <AskEmptyState
             starters={starters}
-            clientName={clientName}
+            scope={scope}
             panel={panel}
             onPick={(s) => void ask(s)}
           />
@@ -240,11 +228,7 @@ export function AskChat({
                     setTurns((current) => current.slice(0, -2));
                     void ask(turn.question!);
                   } : undefined}
-                  onActionResolved={(actionId, status, results) => {
-                    if (activeId.current && turn.messageId) {
-                      void recordAskActionResult(activeId.current, turn.messageId, actionId, status, results).catch(() => {});
-                    }
-                  }}
+                  conversationId={activeId.current}
                 />
               )
             )}
@@ -262,11 +246,13 @@ export function AskChat({
             onStop={stop}
             busy={busy}
             inputRef={inputRef}
-            placeholder={clientName ? `Ask about ${firstName}…` : "Ask about any client…"}
+            placeholder={scope ? `Ask about ${scope.kind === "client" ? scope.label.split(/\s+/)[0] : `this ${scope.kind === "email" ? "thread" : scope.kind}`}…` : "Ask about any client…"}
           />
-          <p className="mt-2 hidden text-center text-xs text-muted-foreground sm:block">
-            Ask reads your firm&apos;s data and links every source. It never sends anything without your confirmation.
-          </p>
+          {!panel && (
+            <p className="mt-2 hidden text-center text-xs text-muted-foreground sm:block">
+              Ask reads your firm&apos;s data and links every source. It never changes anything without your confirmation.
+            </p>
+          )}
         </div>
       </div>
     </div>
@@ -277,12 +263,12 @@ function AssistantTurn({
   turn,
   onNavigate,
   onRetry,
-  onActionResolved,
+  conversationId,
 }: {
   turn: Turn;
   onNavigate?: () => void;
   onRetry?: () => void;
-  onActionResolved: (actionId: string, status: "done" | "failed", results: { client_id: number; ok: boolean; detail: string }[]) => void;
+  conversationId: number | null;
 }) {
   if (turn.state === "error") {
     return (
@@ -312,9 +298,11 @@ function AssistantTurn({
       )}
       {turn.actions.map((action) => (
         <AskActionCard
-          key={action.id}
+          key={`${turn.messageId ?? turn.key}-${action.id}`}
           action={action}
-          onResolved={(status, results) => onActionResolved(action.id, status, results)}
+          conversationId={conversationId}
+          messageId={turn.messageId}
+          onNavigate={onNavigate}
         />
       ))}
       {turn.state === "capped" && (
@@ -328,21 +316,30 @@ function AssistantTurn({
 
 function AskEmptyState({
   starters,
-  clientName,
+  scope,
   panel,
   onPick,
 }: {
   starters: string[];
-  clientName?: string;
+  scope: AskScope | null;
   panel: boolean;
   onPick: (starter: string) => void;
 }) {
+  const clientName = scope?.kind === "client" ? scope.label : undefined;
   return (
     <div className={cn("mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center gap-8", panel ? "py-8" : "py-10 md:py-16")}>
       <div className="flex flex-col gap-3">
         {panel ? (
           <p className="text-xl font-light tracking-tight text-balance">
-            Ask anything about {clientName?.split(/\s+/)[0] ?? "this client"}.
+            {scope
+              ? scope.kind === "client"
+                ? `Ask anything about ${scope.label.split(/\s+/)[0]}.`
+                : scope.kind === "run"
+                  ? "Ask about this run."
+                  : scope.kind === "workflow"
+                    ? `Ask about ${scope.label}.`
+                    : "Ask about this thread."
+              : "Ask anything about your clients."}
           </p>
         ) : (
           <h1 className="text-4xl leading-tight font-light tracking-tight text-balance [font-family:var(--font-display)] md:text-5xl">
@@ -353,6 +350,7 @@ function AskEmptyState({
           {clientName
             ? "Answers come from their checklist, documents, emails and workflow runs, with a link to every source."
             : "Answers come from your clients' checklists, documents, emails and workflow runs, with a link to every source."}
+          {panel && " Ask can also prepare emails, reminders and workflow runs for you to confirm."}
         </p>
       </div>
       <div className={cn("grid gap-2.5", !panel && "sm:grid-cols-2")}>

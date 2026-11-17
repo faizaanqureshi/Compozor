@@ -1,7 +1,7 @@
 "use client";
 
 import { DocumentValidationResult } from "@/components/document-validation-result";
-import { use, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { groupClientWorkflows, assignmentReadiness } from "@/lib/client-workflows";
 import { createSnapshotRefresh } from "@/lib/snapshot-refresh";
 import Link from "next/link";
@@ -17,7 +17,7 @@ import {
   clientWorkflowSnapshotKey,
   organizationKey,
 } from "@/lib/swr-keys";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -95,7 +95,8 @@ import {
   waiveChecklistItem,
 } from "@/lib/api";
 import { cn, formatPhoneNumber, formatShortDate } from "@/lib/utils";
-import { deepLinkElementId, noSubscribe, readClientDeepLink, type ClientDeepLink } from "@/lib/deep-link";
+import { deepLinkElementId, readClientDeepLink, type ClientDeepLink } from "@/lib/deep-link";
+import { useAskScope } from "@/components/ask/ask-panel-context";
 import { AskClientButton } from "@/components/ask/ask-client-button";
 import { computeTier, relativeDays, startOfDay, TIER_META } from "@/lib/checklist-urgency";
 import { ResumeWorkflowDialog } from "@/components/resume-workflow-dialog";
@@ -236,6 +237,7 @@ export default function ClientDetailPage({
   const commitments = commitmentsQuery.data ?? null;
   const meetings = meetingsQuery.data ?? null;
   const workflowRuns = workflowSnapshot?.[0] ?? null;
+  useAskScope(client ? { kind: "client", id: client.id, label: client.name, clientName: client.name } : null);
   const workflowAssignments = workflowSnapshot?.[1] ?? null;
   const error = clientQuery.error ? errorMessage(clientQuery.error) : null;
   // A section only shows its error when there's nothing cached to show.
@@ -253,7 +255,8 @@ export default function ClientDetailPage({
   const [workflowError, setWorkflowError] = useState<string | null>(null);
   const [assignPackageOpen, setAssignPackageOpen] = useState(false);
   // Read once on mount: a link from an Ask citation to one document, email or run.
-  const search = useSyncExternalStore(noSubscribe, () => window.location.search, () => "");
+  // Updates on in-app navigation too (an Ask citation can point elsewhere on this same page).
+  const search = useSearchParams().toString();
   const deepLink = useMemo<ClientDeepLink>(() => readClientDeepLink(search), [search]);
   const deepLinkReady = deepLink.doc ? documents !== null : deepLink.email ? threads !== null : deepLink.run ? workflowRuns !== null : false;
   useEffect(() => {
@@ -479,7 +482,7 @@ function ClientHeader({
                 <Plus />
                 Assign package
               </Button>
-              <AskClientButton clientId={clientId} clientName={client.name} />
+              <AskClientButton clientName={client.name} />
               <Button onClick={onSendReminder} disabled={sending}>
                 {sending ? <Loader2 className="animate-spin" /> : <Mail />}
                 {sending ? "Sending…" : "Send reminder"}
