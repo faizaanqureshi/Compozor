@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
@@ -8,6 +8,7 @@ import { ArrowLeft, Check, Circle, Loader2, Sparkles, Undo2 } from "lucide-react
 
 import {
   ApiError,
+  approveSampleTemplate,
   buildWorkflowInstructions,
   createWorkflow,
   getMyOrganization,
@@ -18,7 +19,7 @@ import {
 } from "@/lib/api";
 import { organizationKey, workflowsKey } from "@/lib/swr-keys";
 import { cn } from "@/lib/utils";
-import { countWords, instructionTips, sampleFormat, startersFor } from "@/lib/workflow-editor";
+import { canAutoDraft, countWords, instructionTips, sampleFormat, startersFor, templateProgress } from "@/lib/workflow-editor";
 import { WorkflowWorkSamples } from "@/components/workflow-work-samples";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -68,8 +69,9 @@ function Readiness({ done, label, note }: { done: boolean; label: string; note?:
 }
 
 // Full-page create/edit for a workflow, in the order the work is set up:
-// the outcome, examples of finished work, the instructions (drafted from
-// both), and when it runs. A summary rail tracks what's ready.
+// an example of finished work, the outcome in a sentence, the instructions
+// (drafted from both on their own), and when it runs. Templates set
+// themselves up on upload and are approved when the workflow is saved.
 export function WorkflowEditor({ workflow, returnTo = "/workflows" }: { workflow?: Workflow; returnTo?: string }) {
   const isEdit = workflow !== undefined;
   const fieldId = useId();
@@ -85,6 +87,9 @@ export function WorkflowEditor({ workflow, returnTo = "/workflows" }: { workflow
   const [samples, setSamples] = useState<WorkflowWorkSample[]>(workflow?.work_samples ?? []);
   const [draftWarnings, setDraftWarnings] = useState<string[]>([]);
   const [building, setBuilding] = useState(false);
+  // A draft waits for templates still being set up, so it can use their fields.
+  const [draftQueued, setDraftQueued] = useState(false);
+  const autoDrafted = useRef(isEdit);
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -106,8 +111,8 @@ export function WorkflowEditor({ workflow, returnTo = "/workflows" }: { workflow
   const starters = startersFor(org?.practice_type);
   const tips = useMemo(() => instructionTips(instructions), [instructions]);
   const words = countWords(instructions);
-  const templates = samples.filter((s) => s.template_status);
-  const pendingTemplates = templates.filter((s) => s.template_status !== "approved").length;
+  const progress = templateProgress(samples);
+  const needsLook = samples.filter((s) => s.template_status === "draft" && s.template_problems).length;
   const formats = [...new Set(samples.map((s) => sampleFormat(s.filename).label))];
   const ready = !!name.trim() && !!instructions.trim();
 
@@ -119,7 +124,8 @@ export function WorkflowEditor({ workflow, returnTo = "/workflows" }: { workflow
     setSamples(next);
   };
 
-  const onDraft = async () => {
+  const onDraft = useCallback(async () => {
+    setDraftQueued(false);
     if (!description.trim() && !name.trim()) return;
     setBuilding(true);
     setDraftWarnings([]);
@@ -137,7 +143,26 @@ export function WorkflowEditor({ workflow, returnTo = "/workflows" }: { workflow
     } finally {
       setBuilding(false);
     }
+  }, [description, name, instructions, samples]);
+
+  const queueDraft = () => {
+    autoDrafted.current = true;
+    setDraftQueued(true);
   };
+
+  // Draft on its own once the outcome is a real sentence and the writer
+  // pauses or moves on. Only once: later drafts are the staff's call.
+  useEffect(() => {
+    if (!canAutoDraft(description, instructions, autoDrafted.current)) return;
+    const timer = setTimeout(queueDraft, 2500);
+    return () => clearTimeout(timer);
+  }, [description, instructions]);
+
+  useEffect(() => {
+    if (!draftQueued || progress.settingUp > 0 || uploading || building || submitting) return;
+    const timer = setTimeout(() => void onDraft(), 0);
+    return () => clearTimeout(timer);
+  }, [draftQueued, progress.settingUp, uploading, building, submitting, onDraft]);
 
   const onSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -146,6 +171,11 @@ export function WorkflowEditor({ workflow, returnTo = "/workflows" }: { workflow
     setError(null);
     const input = { name: name.trim(), instructions, execution_mode: executionMode, work_sample_ids: samples.map((s) => s.id) };
     try {
+      // Saving approves templates that passed their self-test. One that needs
+      // a look stays a draft, and runs use that sample as a plain example.
+      await Promise.all(samples
+        .filter((s) => s.template_status === "draft" && !s.template_problems)
+        .map((s) => approveSampleTemplate(s.id).catch(() => undefined)));
       if (isEdit) await updateWorkflow(workflow.id, input);
       else await createWorkflow(input);
       await mutate(workflowsKey());
@@ -176,21 +206,19 @@ export function WorkflowEditor({ workflow, returnTo = "/workflows" }: { workflow
 
       <form onSubmit={onSubmit} className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start xl:gap-8">
         <div className="flex min-w-0 flex-col gap-6">
-          <Step number={1} title="Outcome" description="Name the work and say, in a sentence or two, what it should produce.">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor={`${fieldId}-name`}>Name</Label>
-              <Input
-                id={`${fieldId}-name`}
-                required
-                placeholder={`e.g. ${starters[0].name}`}
-                value={name}
-                onChange={(e) => touch(setName)(e.target.value)}
-                disabled={busy}
-              />
-            </div>
+          <Step
+            number={1}
+            optional
+            title="Example of finished work"
+            description="Add one you've already delivered. Word and PowerPoint files become fill-in templates on their own, so every run keeps your exact formatting while clients' documents supply the facts."
+          >
+            <WorkflowWorkSamples value={samples} onChange={onSamplesChange} disabled={submitting} onBusyChange={setUploading} />
+          </Step>
+
+          <Step number={2} title="Outcome" description="Say, in a sentence, what it should produce. The instructions are drafted from this and your example.">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor={`${fieldId}-outcome`}>
-                What should it produce? <span className="font-normal text-muted-foreground">Used to draft the instructions</span>
+                What should it produce? <span className="font-normal text-muted-foreground">A sentence is enough</span>
               </Label>
               <Textarea
                 id={`${fieldId}-outcome`}
@@ -198,7 +226,8 @@ export function WorkflowEditor({ workflow, returnTo = "/workflows" }: { workflow
                 placeholder={starters[0].description}
                 value={description}
                 onChange={(e) => touch(setDescription)(e.target.value)}
-                disabled={busy}
+                onBlur={() => canAutoDraft(description, instructions, autoDrafted.current) && queueDraft()}
+                disabled={submitting}
                 className="resize-y leading-relaxed"
               />
             </div>
@@ -214,6 +243,7 @@ export function WorkflowEditor({ workflow, returnTo = "/workflows" }: { workflow
                       setDescription(starter.description);
                       if (!name.trim()) setName(starter.name);
                       setDirty(true);
+                      if (canAutoDraft(starter.description, instructions, autoDrafted.current)) queueDraft();
                     }}
                     className="rounded-4xl border border-border px-3 py-1.5 text-xs text-foreground/85 transition-colors hover:bg-muted disabled:opacity-50"
                   >
@@ -222,15 +252,17 @@ export function WorkflowEditor({ workflow, returnTo = "/workflows" }: { workflow
                 ))}
               </div>
             </div>
-          </Step>
-
-          <Step
-            number={2}
-            optional
-            title="Work samples"
-            description="Examples of finished work. The agent copies their layout and style; your clients' documents supply the facts. Add them before drafting instructions."
-          >
-            <WorkflowWorkSamples value={samples} onChange={onSamplesChange} disabled={submitting || building} onBusyChange={setUploading} />
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor={`${fieldId}-name`}>Name</Label>
+              <Input
+                id={`${fieldId}-name`}
+                required
+                placeholder={instructions.trim() ? `e.g. ${starters[0].name}` : "Suggested with the instructions"}
+                value={name}
+                onChange={(e) => touch(setName)(e.target.value)}
+                disabled={busy}
+              />
+            </div>
           </Step>
 
           <Step
@@ -238,21 +270,23 @@ export function WorkflowEditor({ workflow, returnTo = "/workflows" }: { workflow
             title="Instructions"
             description="What the agent follows on every run: what to produce, from which documents, and how to handle exceptions."
             action={
-              <Button type="button" variant="outline" size="sm" onClick={onDraft} disabled={busy || (!description.trim() && !name.trim())}>
-                {building ? <Loader2 className="animate-spin" /> : <Sparkles />}
-                {building ? (samples.length ? "Reading samples…" : "Drafting…") : instructions.trim() ? "Redraft with AI" : "Draft with AI"}
+              <Button type="button" variant="outline" size="sm" onClick={queueDraft} disabled={busy || draftQueued || (!description.trim() && !name.trim())}>
+                {building || draftQueued ? <Loader2 className="animate-spin" /> : <Sparkles />}
+                {building ? (samples.length ? "Reading your example…" : "Drafting…") : draftQueued ? "Drafting soon…" : instructions.trim() ? "Redraft with AI" : "Draft with AI"}
               </Button>
             }
           >
-            {!description.trim() && !name.trim() && !instructions.trim() && (
-              <p className="text-xs text-muted-foreground">Describe the outcome in step 1 to draft these with AI, or write them yourself.</p>
-            )}
+            {draftQueued && progress.settingUp > 0 ? (
+              <p role="status" className="text-xs text-muted-foreground">Drafting as soon as the template is ready, so the instructions use its fields.</p>
+            ) : !description.trim() && !name.trim() && !instructions.trim() && !building ? (
+              <p className="text-xs text-muted-foreground">Describe the outcome in step 2 and these draft themselves, or write them yourself.</p>
+            ) : null}
             <Textarea
               id={`${fieldId}-instructions`}
               aria-label="Instructions"
               required
               rows={14}
-              placeholder="Write the instructions here, or draft them with AI."
+              placeholder={building ? "Drafting from your sentence and example…" : "Write the instructions here, or draft them with AI."}
               value={instructions}
               onChange={(e) => touch(setInstructions)(e.target.value)}
               disabled={busy}
@@ -336,14 +370,14 @@ export function WorkflowEditor({ workflow, returnTo = "/workflows" }: { workflow
             <dt className="text-muted-foreground">Samples</dt>
             <dd>{samples.length ? `${samples.length} · ${formats.join(", ")}` : "None"}</dd>
             <dt className="text-muted-foreground">Templates</dt>
-            <dd>{templates.length ? `${templates.length - pendingTemplates} of ${templates.length} approved` : "None"}</dd>
+            <dd>{progress.total ? (progress.settingUp ? "Setting up…" : `${progress.ready} of ${progress.total} ready`) : "None"}</dd>
           </dl>
           <ul className="flex flex-col gap-3 border-t border-border/60 pt-4">
             <Readiness done={!!name.trim()} label="Named" />
             <Readiness done={!!instructions.trim()} label="Instructions written" note={instructions.trim() ? `${tips.filter((t) => t.met).length} of ${tips.length} tips covered` : undefined} />
             <Readiness done={samples.length > 0} label="Work samples" note={samples.length ? undefined : "Optional, but they make output match your firm's format."} />
-            {pendingTemplates > 0 && (
-              <Readiness done={false} label="Templates to review" note="Runs use those samples as plain examples until their templates are approved." />
+            {needsLook > 0 && (
+              <Readiness done={false} label="Template needs a look" note="Runs use that sample as a plain example until its fields are fixed." />
             )}
           </ul>
           <div className="flex flex-col gap-2 border-t border-border/60 pt-4">
@@ -359,7 +393,7 @@ export function WorkflowEditor({ workflow, returnTo = "/workflows" }: { workflow
 
         <div className="fixed inset-x-0 bottom-0 z-20 flex items-center justify-between gap-3 border-t border-border bg-background/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] backdrop-blur lg:hidden">
           <p className="min-w-0 truncate text-xs text-muted-foreground">
-            {ready ? (pendingTemplates ? `${pendingTemplates} template${pendingTemplates === 1 ? "" : "s"} to review` : "Ready to save") : "Add a name and instructions"}
+            {ready ? (needsLook ? "A template needs a look" : "Ready to save") : progress.settingUp ? "Setting up your template…" : "Add a name and instructions"}
           </p>
           <div className="flex shrink-0 gap-2">
             <Button type="button" variant="ghost" size="sm" disabled={submitting} onClick={() => router.push(returnTo)}>Cancel</Button>
