@@ -251,3 +251,35 @@ test('questionnaire PDF uses authenticated, explicit, uncached access', async ()
     } finally { globalThis.fetch = originalFetch; }
   },
 ));
+
+test('client facts and run approval use the profile endpoints', async () => {
+  const api = await import('../lib/api.ts');
+  const originalFetch = globalThis.fetch;
+  const fact = { id: 12, statement: 'Works at Acme', status: 'active', source_type: 'document', source_label: 'T4 slip (2025)' };
+  const requests = [];
+  globalThis.fetch = async (url, init) => {
+    const request = new Request(url, init);
+    const body = request.method === 'GET' ? '' : await request.text();
+    requests.push([new URL(request.url).pathname, request.method, body ? JSON.parse(body) : null]);
+    if (request.method === 'DELETE' && request.url.includes('/facts/')) return new Response(null, { status: 204 });
+    return Response.json(request.url.includes('/facts') ? (request.method === 'GET' ? [fact] : fact) : { id: 3, approved_at: null });
+  };
+  try {
+    assert.deepEqual(await api.listClientFacts(7), [fact]);
+    await api.addClientFact(7, 'Prefers calls');
+    await api.updateClientFact(7, 12, { resolve: true });
+    await api.deleteClientFact(7, 12);
+    await api.approveWorkflowRun(7, 3);
+    await api.approveWorkflowRun(7, 3, false);
+    assert.deepEqual(requests, [
+      ['/clients/7/facts', 'GET', null],
+      ['/clients/7/facts', 'POST', { statement: 'Prefers calls' }],
+      ['/clients/7/facts/12', 'PATCH', { resolve: true }],
+      ['/clients/7/facts/12', 'DELETE', null],
+      ['/clients/7/workflow-runs/3/approve', 'POST', null],
+      ['/clients/7/workflow-runs/3/approve', 'DELETE', null],
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

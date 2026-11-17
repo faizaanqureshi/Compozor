@@ -520,6 +520,8 @@ function AutomationSection({
   savingInterval,
   onChangeAutomation,
   onSaveInterval,
+  savingNotify,
+  onToggleNotify,
 }: {
   current: Organization | null;
   error: string | null;
@@ -527,6 +529,8 @@ function AutomationSection({
   savingInterval: boolean;
   onChangeAutomation: (level: AutomationLevel) => void;
   onSaveInterval: (days: number | null) => void;
+  savingNotify: boolean;
+  onToggleNotify: (on: boolean) => void;
 }) {
   const [enabled, setEnabled] = useState(() => current !== null && current.reminder_interval_days !== null);
   const [days, setDays] = useState(() =>
@@ -549,7 +553,7 @@ function AutomationSection({
   return (
     <Panel
       title="Automation"
-      meta={savingAutomation || savingInterval ? "Saving…" : "Saved as you change it"}
+      meta={savingAutomation || savingInterval || savingNotify ? "Saving…" : "Saved as you change it"}
     >
       {error && <p className="text-sm text-destructive">{error}</p>}
       {!current ? (
@@ -643,6 +647,20 @@ function AutomationSection({
                 <span className="text-sm text-foreground/80">days since the last reminder</span>
               </div>
             </div>
+          </SettingRow>
+
+          <SettingRow
+            label="Tell clients when work is approved"
+            description="When you approve a workflow result, email the client that it's done. Follows your sending level above: a draft for you to send unless drafts send themselves."
+          >
+            <label className="flex w-fit cursor-pointer items-center gap-3">
+              <Switch
+                checked={Boolean(current.notify_client_on_run_approval)}
+                onCheckedChange={onToggleNotify}
+                disabled={savingNotify}
+              />
+              <span className="text-sm">{current.notify_client_on_run_approval ? "On" : "Off"}</span>
+            </label>
           </SettingRow>
         </div>
       )}
@@ -844,7 +862,7 @@ const legalLinks = [
 
 export default function SettingsPage() {
   const { data: org, error: orgFetchError, mutate: mutateOrg } = useSWR(organizationKey(), getMyOrganization);
-  const [saving, setSaving] = useState<Partial<Record<"profile" | "firm" | "sign-off" | "automation" | "interval" | "timezone", boolean>>>({});
+  const [saving, setSaving] = useState<Partial<Record<"profile" | "firm" | "sign-off" | "automation" | "interval" | "notify" | "timezone", boolean>>>({});
   // Errors stay with the section whose save failed.
   const [errors, setErrors] = useState<Partial<Record<SectionId, string | null>>>({});
 
@@ -988,6 +1006,8 @@ export default function SettingsPage() {
               savingInterval={!!saving.interval}
               onChangeAutomation={(level) => void saveOrg("automation", "automation", { automation_level: level })}
               onSaveInterval={(days) => void saveOrg("interval", "automation", { reminder_interval_days: days })}
+              savingNotify={!!saving.notify}
+              onToggleNotify={(on) => void saveOrg("notify", "automation", { notify_client_on_run_approval: on })}
             />
           </div>
           <div id="connections">

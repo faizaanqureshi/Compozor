@@ -157,6 +157,8 @@ export interface Organization {
   // don't run until this is set.
   timezone: string | null;
   onboarding_completed_at: string | null;
+  // Opt-in: email the client when staff approve a workflow result.
+  notify_client_on_run_approval?: boolean;
 }
 
 export interface Client {
@@ -344,13 +346,28 @@ export interface EmailThread {
   messages: EmailLogEntry[];
 }
 
-export interface ClientMemoryNote {
+// What the assistant knows about a client (see the API's client_facts.py).
+// source_type orders trust: staff > document / run > email. A 'conflict' is
+// a different value from a less trusted source, waiting for staff; it is
+// never used by the assistant.
+export type ClientFactSource = "staff" | "document" | "run" | "email";
+
+export interface ClientFact {
   id: number;
   client_id: number;
-  note: string;
-  source_email_log_id: number | null;
-  superseded_at: string | null;
+  statement: string;
+  category: string;
+  status: "active" | "conflict";
+  verified: boolean;
+  source_type: ClientFactSource;
+  // The email / document / workflow run it came from, while it still exists.
+  source_id: number | null;
+  source_label: string;
+  source_date: string | null;
+  as_of: string | null;
+  conflicts_with_id: number | null;
   created_at: string;
+  updated_at: string;
 }
 
 export interface ClientCommitment {
@@ -552,6 +569,7 @@ export const updateMyOrganization = (input: {
   email_signature?: string;
   timezone?: string;
   onboarding_completed?: boolean;
+  notify_client_on_run_approval?: boolean;
 }) => request<Organization>("/organizations/me", json("PATCH", input));
 
 export const deleteMyOrganization = () =>
@@ -949,15 +967,19 @@ export function subscribeToEmailLogStream(
     event => onEvent(event as EmailLogStreamEvent), onError, onConnect);
 }
 
-// ---------- Client memory notes ----------
+// ---------- Client facts ----------
 
-export const listClientMemoryNotes = (clientId: number) =>
-  request<ClientMemoryNote[]>(`/clients/${clientId}/memory-notes`);
+export const listClientFacts = (clientId: number) =>
+  request<ClientFact[]>(`/clients/${clientId}/facts`);
 
-export const deleteClientMemoryNote = (clientId: number, noteId: number) =>
-  request<void>(`/clients/${clientId}/memory-notes/${noteId}`, {
-    method: "DELETE",
-  });
+export const addClientFact = (clientId: number, statement: string) =>
+  request<ClientFact>(`/clients/${clientId}/facts`, json("POST", { statement }));
+
+export const updateClientFact = (clientId: number, factId: number, change: { statement?: string; resolve?: boolean }) =>
+  request<ClientFact>(`/clients/${clientId}/facts/${factId}`, json("PATCH", change));
+
+export const deleteClientFact = (clientId: number, factId: number) =>
+  request<void>(`/clients/${clientId}/facts/${factId}`, { method: "DELETE" });
 
 // ---------- Client commitments ----------
 
@@ -1314,6 +1336,7 @@ export interface WorkflowRun {
   started_at: string | null;
   completed_at: string | null;
   created_at: string;
+  // Staff approved this result: only approved results are described to the client.
   approved_at?: string | null;
   rules_applied?: AppliedRule[];
   rule_proposals?: WorkflowRule[];
