@@ -15,7 +15,9 @@ import {
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { fieldColor, occurrences, slotKey, type DocumentView, type FieldSlot } from "@/lib/template-document";
+import { isWorkbookView, workbookOccurrences, type WorkbookView } from "@/lib/template-workbook";
 import { TemplateDocumentViewer } from "@/components/template-document-viewer";
+import { TemplateWorkbookViewer } from "@/components/template-workbook-viewer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -25,10 +27,14 @@ function message(e: unknown) {
   return e instanceof ApiError ? e.message : "Something went wrong. Try again.";
 }
 
-function kindText(slot: FieldSlot, view: DocumentView | null) {
+function kindText(slot: FieldSlot, view: DocumentView | WorkbookView | null) {
+  if (slot.kind === "cell") return `Cell · ${String(slot.sheet)}!${String(slot.cell)}`;
+  if (slot.kind === "table_rows" && slot.sheet) {
+    return `Table rows · ${slot.count ?? 1} example row${slot.count === 1 ? "" : "s"}, one per record`;
+  }
   if (slot.kind === "list") return `List · ${slot.count ?? 1} example item${slot.count === 1 ? "" : "s"}`;
   if (slot.kind === "table_rows") return `Table rows · ${slot.count ?? 1} example row${slot.count === 1 ? "" : "s"}`;
-  const places = view && slot.find ? occurrences(view, slot.find) : 0;
+  const places = !view || !slot.find ? 0 : isWorkbookView(view) ? workbookOccurrences(view, slot.find) : occurrences(view, slot.find);
   return places > 1 ? `Text · appears ${places} times` : "Text";
 }
 
@@ -42,7 +48,7 @@ export function SampleTemplateEditor({ sampleId, filename, open, onOpenChange, o
   onChanged: (template: SampleTemplate) => void;
 }) {
   const [template, setTemplate] = useState<SampleTemplate | null>(null);
-  const [view, setView] = useState<DocumentView | null>(null);
+  const [view, setView] = useState<DocumentView | WorkbookView | null>(null);
   const [slots, setSlots] = useState<FieldSlot[]>([]);
   const [active, setActive] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
@@ -124,7 +130,7 @@ export function SampleTemplateEditor({ sampleId, filename, open, onOpenChange, o
       const url = which === "preview" ? files.preview_url : files.template_url;
       if (!url) {
         tab?.close();
-        setNotice("The exact-layout preview isn't available right now. Download the template to check it in Word or PowerPoint.");
+        setNotice("The exact-layout preview isn't available right now. Download the template to check it in Word, Excel or PowerPoint.");
       } else if (tab) {
         tab.opener = null;
         tab.location.href = url;
@@ -159,7 +165,19 @@ export function SampleTemplateEditor({ sampleId, filename, open, onOpenChange, o
 
         <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
           <div className="min-h-0 flex-1 overflow-y-auto bg-muted/50">
-            {view ? (
+            {view && isWorkbookView(view) ? (
+              <TemplateWorkbookViewer
+                view={view}
+                slots={slots}
+                active={active}
+                onActivate={activate}
+                onCreate={(slot) => {
+                  const next = [...slots, slot];
+                  change(next);
+                  setActive(slotKey(slot, next.length - 1));
+                }}
+              />
+            ) : view ? (
               <TemplateDocumentViewer
                 view={view}
                 slots={slots}
@@ -193,8 +211,17 @@ export function SampleTemplateEditor({ sampleId, filename, open, onOpenChange, o
                 <p key={warning} className="text-xs leading-relaxed text-warning-foreground">{warning}</p>
               ))}
               <ul className="mt-2 flex flex-col gap-1.5 rounded-lg bg-muted/50 px-3 py-2.5 text-[0.6875rem] leading-relaxed text-muted-foreground">
-                <li><span className="text-foreground/80">Select text</span> on the page to make it a field.</li>
-                <li><span className="text-foreground/80">Use the handle</span> beside a table row or paragraph to repeat it per record.</li>
+                {isWorkbookView(view) ? (
+                  <>
+                    <li><span className="text-foreground/80">Click a cell</span>, or select text in it, to make it a field.</li>
+                    <li><span className="text-foreground/80">Click row numbers</span> to repeat those rows per record. Totals and charts grow with them.</li>
+                  </>
+                ) : (
+                  <>
+                    <li><span className="text-foreground/80">Select text</span> on the page to make it a field.</li>
+                    <li><span className="text-foreground/80">Use the handle</span> beside a table row or paragraph to repeat it per record.</li>
+                  </>
+                )}
                 <li><span className="text-foreground/80">Click a highlight</span> to rename it or say what goes there.</li>
               </ul>
             </div>

@@ -17,7 +17,7 @@ export type DocumentView = { format: string; parts: DocPart[] };
 export type FieldSlot = {
   id?: string;
   label: string;
-  kind: "text" | "list" | "table_rows";
+  kind: "text" | "list" | "table_rows" | "cell";
   find?: string;
   part?: string;
   paragraph?: number;
