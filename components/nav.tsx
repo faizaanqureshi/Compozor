@@ -36,6 +36,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils";
 import { isAdminEmail } from "@/lib/admin";
 import { useMobileNav } from "@/components/mobile-nav-context";
+import { useAskPanel } from "@/components/ask/ask-panel-context";
 
 const links = [
   { href: "/clients", label: "Clients", icon: Users, tourId: "clients" },
@@ -70,8 +71,11 @@ export function Nav() {
   // your name or firm name there updates this instantly everywhere else,
   // with no polling or extra plumbing needed.
   const { data: org } = useSWR(isLoaded && isSignedIn ? organizationKey() : null, getMyOrganization);
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsedByUser, setCollapsed] = useState(false);
   const { mobileOpen, setMobileOpen } = useMobileNav();
+  const askPanel = useAskPanel();
+  // While Ask is docked beside the page, the rail folds to icons to give the page its width back.
+  const collapsed = collapsedByUser || askPanel.open;
   const visibleLinks = isAdminEmail(user?.primaryEmailAddress?.emailAddress)
     ? [...links, adminLink]
     : links;
@@ -171,13 +175,21 @@ export function Nav() {
       <nav className="flex flex-1 flex-col gap-1.5">
         {visibleLinks.map((link) => {
           const Icon = link.icon;
-          const active = pathname.startsWith(link.href);
+          // Ask opens beside the current page (⌘K) instead of navigating away.
+          const opensPanel = link.href === "/ask" && askPanel.available;
+          const active = opensPanel ? askPanel.open : pathname.startsWith(link.href);
           return (
             <Tooltip key={link.href}>
               <TooltipTrigger
                 render={
                   <Link
                     href={link.href}
+                    onClick={opensPanel ? (e) => {
+                      e.preventDefault();
+                      setMobileOpen(false);
+                      askPanel.toggle();
+                    } : undefined}
+                    aria-expanded={opensPanel ? askPanel.open : undefined}
                     aria-label={link.label}
                     data-tour-nav={link.tourId}
                     className={cn(
@@ -202,6 +214,11 @@ export function Nav() {
                 <span className={cn("truncate md:hidden", !collapsed && "xl:inline")}>
                   {link.label}
                 </span>
+                {link.href === "/ask" && (
+                  <kbd className={cn("ml-auto hidden font-sans text-xs text-sidebar-foreground/45", !collapsed && "xl:inline")}>
+                    ⌘K
+                  </kbd>
+                )}
               </TooltipTrigger>
               {/* Labels are hidden only on the collapsed rail; tooltips stand in there. */}
               <TooltipContent
@@ -210,6 +227,7 @@ export function Nav() {
                 className={cn("max-md:hidden", !collapsed && "xl:hidden")}
               >
                 {link.label}
+                {link.href === "/ask" && <span className="ml-1.5 opacity-60">⌘K</span>}
               </TooltipContent>
             </Tooltip>
           );

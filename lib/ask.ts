@@ -15,31 +15,65 @@ export interface AskCitation {
   detail: string | null;
 }
 
+export interface AskScope {
+  kind: "client" | "workflow" | "run" | "email";
+  id: number;
+  label: string;
+  /** For starter questions ("What has Priya sent?"). */
+  clientName?: string;
+}
+
 export interface AskActionTarget {
   client_id: number;
   client_name: string;
-  item_ids?: number[];
-  items?: string[];
+  detail?: string | null;
   last_reminder?: string | null;
-  email_id?: number;
-  subject?: string;
-  preview?: string;
 }
 
 export interface AskActionResult {
-  client_id: number;
+  client_id: number | null;
+  client_name: string | null;
   ok: boolean;
   detail: string;
+  email_id?: number;
+  run_id?: number;
+  item_id?: number;
+  package_id?: number;
+  workflow_id?: number;
 }
+
+export interface AskEmailPreview {
+  to: string;
+  subject: string;
+  body: string;
+  in_reply_to?: string | null;
+  note?: string | null;
+}
+
+export interface AskPackagePreview {
+  name: string;
+  documents: { doc_type_needed: string; description: string | null; is_required: boolean; allows_multiple: boolean }[];
+  workflow: { name: string; instructions: string } | null;
+}
+
+export type AskActionKind =
+  | "send_reminder" | "send_draft" | "compose_email" | "reply_email" | "run_workflow" | "retry_run"
+  | "approve_run"
+  | "mark_received" | "waive_item" | "request_document" | "create_package" | "assign_package";
 
 export interface AskAction {
   id: string;
-  kind: "send_reminder" | "send_draft";
+  kind: AskActionKind;
   title: string;
   description: string | null;
+  admin_only: boolean;
+  confirm_label: string;
   targets: AskActionTarget[];
-  state?: "done" | "failed" | "dismissed";
+  preview: (AskEmailPreview | AskPackagePreview | { documents: string[] } | Record<string, unknown>) | null;
+  editable: ("subject" | "body")[];
+  state?: "running" | "done" | "partial" | "failed" | "dismissed";
   results?: AskActionResult[];
+  edited?: boolean;
 }
 
 export interface AskMessage {
@@ -83,20 +117,30 @@ export const getAskConversation = (conversationId: number) =>
 export const deleteAskConversation = (conversationId: number) =>
   request<void>(`/ask/conversations/${conversationId}`, { method: "DELETE" });
 
-export const recordAskActionResult = (
+export const executeAskAction = (
   conversationId: number,
   messageId: number,
   actionId: string,
-  status: "done" | "failed" | "dismissed",
-  results: AskActionResult[],
+  edits: { subject?: string; body?: string; mode?: "send" | "draft" } = {},
 ) =>
   request<AskMessage>(
+    `/ask/conversations/${conversationId}/messages/${messageId}/actions/${actionId}/execute`,
+    json("POST", edits),
+  );
+
+export const dismissAskAction = (conversationId: number, messageId: number, actionId: string) =>
+  request<AskMessage>(
     `/ask/conversations/${conversationId}/messages/${messageId}/actions/${actionId}`,
-    json("POST", { status, results }),
+    json("POST", { status: "dismissed" }),
   );
 
 export async function streamAskQuestion(
-  body: { question: string; conversation_id?: number | null; client_id?: number | null },
+  body: {
+    question: string;
+    conversation_id?: number | null;
+    client_id?: number | null;
+    scope?: { kind: AskScope["kind"]; id: number } | null;
+  },
   onEvent: (event: AskStreamEvent) => void,
   signal?: AbortSignal,
 ): Promise<void> {

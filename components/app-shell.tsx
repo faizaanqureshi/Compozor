@@ -10,6 +10,8 @@ import { MobileNavProvider } from "@/components/mobile-nav-context";
 import { OnboardingGate } from "@/components/onboarding-gate";
 import { ProductTour } from "@/components/product-tour";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { AskPanel } from "@/components/ask/ask-panel";
+import { AskPanelProvider } from "@/components/ask/ask-panel-context";
 
 import { isStandalonePublicPage } from "@/lib/public-routes";
 import { isOnboardingPage } from "@/lib/onboarding";
@@ -29,6 +31,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <SWRConfig key={userId ?? "signed-out"} value={{ provider: () => new Map() }}>
       <TooltipProvider>
         <MobileNavProvider>
+          <AskPanelProvider>
           <OnboardingGate>
             {isOnboardingPage(pathname) ? (
               // Full-screen page: see isOnboardingPage for why it skips the
@@ -47,10 +50,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     </div>
                   </main>
                 </div>
+                {/* Ask follows you across pages; docked beside the page on wide screens. */}
+                <AskPanel />
               </div>
             )}
             <ProductTour key={`${userId}:${pathname}`} />
           </OnboardingGate>
+          </AskPanelProvider>
         </MobileNavProvider>
       </TooltipProvider>
     </SWRConfig>

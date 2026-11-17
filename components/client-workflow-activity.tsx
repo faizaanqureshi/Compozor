@@ -10,6 +10,7 @@ import { runTimeline, useNow, WorkflowRunTimeline } from "@/components/workflow-
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { RulesFollowed, RunReview } from "@/components/run-review";
+import { useAskScope } from "@/components/ask/ask-panel-context";
 
 const labels: Record<WorkflowRun["status"], string> = {
   queued: "Ready to run", running: "Running", completed: "Completed",
@@ -174,6 +175,11 @@ type ReviewProps = { clientName: string; onChange: () => void };
 function RunContents({ run, loadDetails = false, starting, review }: {
   run: WorkflowRun; loadDetails?: boolean; starting?: boolean; review?: ReviewProps;
 }) {
+  // An open run is what Ask is about while it's on screen ("why did this need review?").
+  useAskScope({
+    kind: "run", id: run.id,
+    label: `${run.workflow_name} · ${new Date(run.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`,
+  });
   const { data, error, isLoading, mutate } = useSWR(
     loadDetails && run.details_loaded === false
       ? ["workflow-run", run.client_id, run.id, run.started_at, run.completed_at, run.status] : null,

@@ -6,11 +6,13 @@ import useSWR from "swr";
 import { ApiError, getWorkflow } from "@/lib/api";
 import { WorkflowEditor } from "@/components/workflow-editor";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useAskScope } from "@/components/ask/ask-panel-context";
 
 export default function EditWorkflowPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const workflowId = Number(id);
   const { data: workflow, error } = useSWR(Number.isInteger(workflowId) ? ["workflow", workflowId] : null, () => getWorkflow(workflowId));
+  useAskScope(workflow ? { kind: "workflow", id: workflow.id, label: workflow.name } : null);
 
   if (error || !Number.isInteger(workflowId)) {
     return (

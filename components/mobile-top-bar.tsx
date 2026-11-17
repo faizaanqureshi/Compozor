@@ -3,13 +3,15 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu } from "lucide-react";
+import { Menu, MessageCircleQuestion } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useMobileNav } from "@/components/mobile-nav-context";
+import { useAskPanel } from "@/components/ask/ask-panel-context";
 
 export function MobileTopBar() {
   const pathname = usePathname();
   const { setMobileOpen } = useMobileNav();
+  const askPanel = useAskPanel();
 
   if (
     pathname === "/" ||
@@ -42,6 +44,12 @@ export function MobileTopBar() {
           className="h-5.5 w-auto"
         />
       </Link>
+      {askPanel.available && (
+        <Button variant="ghost" size="icon-sm" className="ml-auto" onClick={askPanel.openForPage}>
+          <MessageCircleQuestion />
+          <span className="sr-only">Ask</span>
+        </Button>
+      )}
     </div>
   );
 }

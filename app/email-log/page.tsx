@@ -47,6 +47,7 @@ import {
 } from "@/components/ui/dialog";
 import { EmailActionsNote } from "@/components/email-actions-note";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useAskScope } from "@/components/ask/ask-panel-context";
 import {
   Tooltip,
   TooltipContent,
@@ -530,6 +531,13 @@ export default function EmailLogPage() {
   }, [view]);
 
   const selectedThread = threads.find((t) => t.key === selectedKey) ?? null;
+  // The open thread is what Ask is about while it's selected.
+  const askThreadEmail = selectedThread ? selectedThread.messages[selectedThread.messages.length - 1] : null;
+  useAskScope(askThreadEmail ? {
+    kind: "email", id: askThreadEmail.id,
+    label: selectedThread?.subject || "(no subject)",
+    clientName: clientsById[askThreadEmail.client_id]?.name,
+  } : null);
   const loading = entriesLoading;
 
   const onSend = async (entry: EmailLogEntry, confirmResend = false) => {
