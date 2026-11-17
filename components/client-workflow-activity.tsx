@@ -180,7 +180,12 @@ function RunContents({ run, loadDetails = false, starting }: { run: WorkflowRun;
         </p>
       )}
       {run.summary && <p className="max-w-3xl text-pretty text-[0.8125rem] leading-relaxed text-foreground/80">{run.summary}</p>}
-      {run.review_reason && <p className="max-w-3xl border-l border-destructive/40 pl-3 text-[0.8125rem] leading-relaxed text-destructive">{run.review_reason}</p>}
+      {run.review_reason && (
+        // An outage (provider/backend) is not a problem with the client's work: keep it neutral.
+        detail?.can_retry || run.status === "queued"
+          ? <p className="max-w-3xl border-l border-border pl-3 text-[0.8125rem] leading-relaxed text-muted-foreground">{run.review_reason}</p>
+          : <p className="max-w-3xl border-l border-destructive/40 pl-3 text-[0.8125rem] leading-relaxed text-destructive">{run.review_reason}</p>
+      )}
       <OutputFiles run={run} draftOutputs={detail?.draft_outputs ?? run.draft_outputs ?? []} />
       {run.status === "completed" && Boolean(detail?.verification?.warnings?.length) && (
         <div className="max-w-3xl space-y-1.5 text-xs leading-relaxed text-muted-foreground">

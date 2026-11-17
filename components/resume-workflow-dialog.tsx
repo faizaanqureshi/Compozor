@@ -12,6 +12,21 @@ export function ResumeWorkflowDialog({ run, onResumed }: { run: WorkflowRun; onR
   const [context, setContext] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState(false);
+  const [retryError, setRetryError] = useState<string | null>(null);
+  // An outage stopped this run, not missing information: continue from saved work.
+  const retry = async () => {
+    setRetrying(true);
+    setRetryError(null);
+    try {
+      await resumeWorkflowRun(run.client_id, run.id, "", true);
+      onResumed();
+    } catch (e) {
+      setRetryError(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setRetrying(false);
+    }
+  };
   const resume = async () => {
     setPending(true);
     setError(null);
@@ -27,7 +42,13 @@ export function ResumeWorkflowDialog({ run, onResumed }: { run: WorkflowRun; onR
     }
   };
   return <>
-    <Button variant="secondary" size="sm" onClick={() => setOpen(true)}>Resume</Button>
+    {run.can_retry && (
+      <Button variant="secondary" size="sm" onClick={retry} disabled={retrying} title={retryError ?? "Continue from saved work"}>
+        {retrying ? "Retrying…" : "Retry"}
+      </Button>
+    )}
+    {retryError && <span role="alert" className="text-xs text-destructive">{retryError}</span>}
+    <Button variant={run.can_retry ? "outline" : "secondary"} size="sm" onClick={() => setOpen(true)}>Resume</Button>
     <Dialog open={open} onOpenChange={(value) => { if (!pending) setOpen(value); }}>
       <DialogContent>
         <DialogHeader>

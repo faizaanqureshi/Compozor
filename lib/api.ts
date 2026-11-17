@@ -1245,6 +1245,8 @@ export interface WorkflowRun {
   step_results: Record<string, string>;
   verification: { passed: boolean; checks: { criterion_id: string; passed: boolean; evidence: string }[]; issues: string[]; warnings?: string[]; method: string } | null;
   can_resume: boolean;
+  // Stopped by an AI provider/backend outage: Retry continues from saved work.
+  can_retry?: boolean;
   tool_trajectory: { round?: number; tool: string; arguments?: Record<string, unknown>; result?: string; started_at?: string; completed_at?: string }[] | null;
   id: number;
   workflow_id: number;
@@ -1322,10 +1324,10 @@ export const runQueuedWorkflowRun = (clientId: number, runId: number) =>
 export const rerunWorkflowRun = (clientId: number, runId: number) =>
   request<WorkflowRun>(`/clients/${clientId}/workflow-runs/${runId}/rerun`, { method: "POST" });
 
-export const resumeWorkflowRun = (clientId: number, runId: number, context: string) =>
+export const resumeWorkflowRun = (clientId: number, runId: number, context: string, retry = false) =>
   request<WorkflowRun>(
     `/clients/${clientId}/workflow-runs/${runId}/resume`,
-    json("POST", { context })
+    json("POST", retry ? { context, retry } : { context })
   );
 
 // ---------- Packages ----------
