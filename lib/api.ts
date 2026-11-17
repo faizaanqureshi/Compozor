@@ -159,7 +159,15 @@ export interface Organization {
   onboarding_completed_at: string | null;
   // Opt-in: email the client when staff approve a workflow result.
   notify_client_on_run_approval?: boolean;
+  // The firm's Clerk Organization, null until linked. The app makes it the
+  // session's active organization so every request names this firm.
+  clerk_org_id: string | null;
+  // The signed-in staff member's role in this firm. Admins manage billing,
+  // mailboxes, firm-wide settings and the team; members do everything else.
+  current_user_role: TeamRole;
 }
+
+export type TeamRole = "admin" | "member";
 
 export interface Client {
   id: number;
@@ -551,9 +559,9 @@ export interface ClientUsageBreakdownOut {
 
 // ---------- Organizations ----------
 //
-// One Clerk user = one org. The backend derives "your" org from the
-// session token, auto-provisioning it on first authenticated call — there
-// is no org list/picker/id anymore.
+// A firm is a Clerk Organization shared by its staff. The backend derives
+// the firm from the session's active organization (see OnboardingGate,
+// which activates it) and checks membership on every request.
 
 export const getMyOrganization = () => request<Organization>("/organizations/me");
 
@@ -574,6 +582,49 @@ export const updateMyOrganization = (input: {
 
 export const deleteMyOrganization = () =>
   request<void>("/organizations/me", { method: "DELETE" });
+
+// ---------- Team ----------
+
+export interface TeamMember {
+  user_id: string;
+  name: string | null;
+  email: string | null;
+  image_url: string | null;
+  role: TeamRole;
+  joined_at: string;
+  is_you: boolean;
+}
+
+export interface TeamInvitation {
+  id: string;
+  email: string;
+  role: TeamRole;
+  invited_at: string;
+}
+
+export interface Team {
+  members: TeamMember[];
+  invitations: TeamInvitation[];
+  // Members plus pending invitations, against the firm's seat limit.
+  seats_used: number;
+  seat_limit: number;
+  // False until the firm is linked to a Clerk Organization.
+  enabled: boolean;
+}
+
+export const getTeam = () => request<Team>("/organizations/me/team");
+
+export const inviteTeamMember = (input: { email: string; role: TeamRole }) =>
+  request<TeamInvitation>("/organizations/me/team/invitations", json("POST", input));
+
+export const revokeTeamInvitation = (invitationId: string) =>
+  request<void>(`/organizations/me/team/invitations/${encodeURIComponent(invitationId)}`, { method: "DELETE" });
+
+export const changeTeamMemberRole = (userId: string, role: TeamRole) =>
+  request<void>(`/organizations/me/team/members/${encodeURIComponent(userId)}`, json("PATCH", { role }));
+
+export const removeTeamMember = (userId: string) =>
+  request<void>(`/organizations/me/team/members/${encodeURIComponent(userId)}`, { method: "DELETE" });
 
 // ---------- Clients ----------
 

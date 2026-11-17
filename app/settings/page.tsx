@@ -9,6 +9,7 @@ import { GmailIcon } from "@/components/icons/gmail";
 import { OutlookIcon } from "@/components/icons/outlook";
 import { Panel } from "@/components/panel";
 import { FirmFontsSection } from "@/components/firm-fonts-section";
+import { TeamSection } from "@/components/team-section";
 import { calendarConnectionsKey, inboxConnectionsKey, organizationKey } from "@/lib/swr-keys";
 import {
   ApiError,
@@ -44,11 +45,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-type SectionId = "profile" | "firm" | "sign-off" | "automation" | "connections" | "fonts";
+type SectionId = "profile" | "firm" | "team" | "sign-off" | "automation" | "connections" | "fonts";
 
 const SECTIONS: { id: SectionId; label: string }[] = [
   { id: "profile", label: "Profile" },
   { id: "firm", label: "Firm" },
+  { id: "team", label: "Team" },
   { id: "sign-off", label: "Email sign-off" },
   { id: "automation", label: "Automation" },
   { id: "connections", label: "Connections" },
@@ -130,6 +132,9 @@ function RowsSkeleton({ rows }: { rows: number }) {
   );
 }
 
+// Panel meta for staff who can see a firm-wide setting but not change it.
+const ADMINS_EDIT = "Admins can change this";
+
 const automationOptions: { value: AutomationLevel; label: string; description: string }[] = [
   {
     value: "no_automation",
@@ -150,11 +155,15 @@ const automationOptions: { value: AutomationLevel; label: string; description: s
 
 function ProfileSection({
   current,
+  canEdit,
   error,
   saving,
   onSave,
 }: {
   current: Organization | null;
+  // The saved name and phone sign the firm's client emails, so only admins
+  // edit them; members see their own account here instead.
+  canEdit: boolean;
   error: string | null;
   saving: boolean;
   onSave: (fields: { contact_name: string; phone: string }) => Promise<boolean>;
@@ -199,11 +208,18 @@ function ProfileSection({
     <Panel
       title="Profile"
       meta="Your own details"
-      action={current && !edit ? <EditButton onClick={startEdit} /> : undefined}
+      action={current && !edit && canEdit ? <EditButton onClick={startEdit} /> : undefined}
     >
       {error && <p className="text-sm text-destructive">{error}</p>}
       {!current ? (
         <RowsSkeleton rows={3} />
+      ) : !canEdit ? (
+        <div className="flex flex-col">
+          <SettingRow label="Name">
+            <Value>{user?.fullName}</Value>
+          </SettingRow>
+          {accountEmail}
+        </div>
       ) : !edit ? (
         <div className="flex flex-col">
           <SettingRow label="Name">
@@ -252,11 +268,13 @@ function ProfileSection({
 
 function FirmSection({
   current,
+  canEdit,
   error,
   saving,
   onSave,
 }: {
   current: Organization | null;
+  canEdit: boolean;
   error: string | null;
   saving: boolean;
   onSave: (fields: { name: string; practice_type: string; practice_description: string; jurisdiction: string }) => Promise<boolean>;
@@ -327,8 +345,8 @@ function FirmSection({
     <>
       <Panel
         title="Firm"
-        meta="Set during onboarding"
-        action={current && !edit ? <EditButton onClick={startEdit} /> : undefined}
+        meta={canEdit ? "Set during onboarding" : ADMINS_EDIT}
+        action={current && !edit && canEdit ? <EditButton onClick={startEdit} /> : undefined}
       >
         {error && <p className="text-sm text-destructive">{error}</p>}
         {!current ? (
@@ -436,11 +454,13 @@ function FirmSection({
 
 function SignOffSection({
   current,
+  canEdit,
   error,
   saving,
   onSave,
 }: {
   current: Organization | null;
+  canEdit: boolean;
   error: string | null;
   saving: boolean;
   onSave: (signature: string) => Promise<boolean>;
@@ -464,9 +484,9 @@ function SignOffSection({
   return (
     <Panel
       title="Email sign-off"
-      meta="On every email"
+      meta={canEdit ? "On every email" : ADMINS_EDIT}
       action={
-        current && !edit ? (
+        current && !edit && canEdit ? (
           <EditButton
             onClick={() => {
               setSignature(current?.email_signature ?? "");
@@ -515,6 +535,7 @@ function SignOffSection({
 
 function AutomationSection({
   current,
+  canEdit,
   error,
   savingAutomation,
   savingInterval,
@@ -524,6 +545,7 @@ function AutomationSection({
   onToggleNotify,
 }: {
   current: Organization | null;
+  canEdit: boolean;
   error: string | null;
   savingAutomation: boolean;
   savingInterval: boolean;
@@ -553,7 +575,7 @@ function AutomationSection({
   return (
     <Panel
       title="Automation"
-      meta={savingAutomation || savingInterval || savingNotify ? "Saving…" : "Saved as you change it"}
+      meta={!canEdit ? ADMINS_EDIT : savingAutomation || savingInterval || savingNotify ? "Saving…" : "Saved as you change it"}
     >
       {error && <p className="text-sm text-destructive">{error}</p>}
       {!current ? (
@@ -581,8 +603,8 @@ function AutomationSection({
                   <label
                     key={opt.value}
                     className={cn(
-                      "flex cursor-pointer items-start gap-3 px-4 py-3 transition-colors",
-                      selected ? "bg-muted/50" : "hover:bg-muted/30"
+                      "flex items-start gap-3 px-4 py-3 transition-colors",
+                      selected ? "bg-muted/50" : canEdit && "cursor-pointer hover:bg-muted/30"
                     )}
                   >
                     <input
@@ -590,7 +612,7 @@ function AutomationSection({
                       name="automation_level"
                       className="sr-only"
                       checked={selected}
-                      disabled={savingAutomation}
+                      disabled={savingAutomation || !canEdit}
                       onChange={() => onChangeAutomation(opt.value)}
                     />
                     <span
@@ -618,7 +640,7 @@ function AutomationSection({
           >
             <div className="flex flex-col gap-3">
               <label className="flex w-fit cursor-pointer items-center gap-3">
-                <Switch checked={enabled} onCheckedChange={onToggle} disabled={savingInterval} />
+                <Switch checked={enabled} onCheckedChange={onToggle} disabled={savingInterval || !canEdit} />
                 <span className="text-sm">{enabled ? "On" : "Off"}</span>
               </label>
               <div
@@ -640,7 +662,7 @@ function AutomationSection({
                       commitDays();
                     }
                   }}
-                  disabled={!enabled || savingInterval}
+                  disabled={!enabled || savingInterval || !canEdit}
                   aria-label="Remind every, in days"
                   className="w-20 text-center"
                 />
@@ -657,7 +679,7 @@ function AutomationSection({
               <Switch
                 checked={Boolean(current.notify_client_on_run_approval)}
                 onCheckedChange={onToggleNotify}
-                disabled={savingNotify}
+                disabled={savingNotify || !canEdit}
               />
               <span className="text-sm">{current.notify_client_on_run_approval ? "On" : "Off"}</span>
             </label>
@@ -708,6 +730,7 @@ function mergeConnections(
 
 function ConnectionsSection({
   organization,
+  canEdit,
   inboxConnections,
   calendarConnections,
   error,
@@ -719,6 +742,9 @@ function ConnectionsSection({
   onSaveTimezone,
 }: {
   organization: Organization | null;
+  // The firm's mailboxes serve every client; only admins connect or
+  // disconnect them (the backend refuses members too).
+  canEdit: boolean;
   inboxConnections: InboxConnection[] | null;
   calendarConnections: CalendarConnection[] | null;
   error: string | null;
@@ -745,7 +771,7 @@ function ConnectionsSection({
   }, []);
 
   return (
-    <Panel title="Connections" meta="Mail and calendar">
+    <Panel title="Connections" meta={canEdit ? "Mail and calendar" : "Mail and calendar · Admins can change this"}>
       {error && <p className="text-sm text-destructive">{error}</p>}
       <div className="flex flex-col">
         <SettingRow
@@ -785,7 +811,7 @@ function ConnectionsSection({
                             )}
                           </span>
                         </div>
-                        <div className="flex items-center gap-1">
+                        {canEdit && <div className="flex items-center gap-1">
                           {conn.needsReauth && (
                             <Button variant="outline" size="sm" disabled={connecting} onClick={() => onConnect(conn.provider)}>
                               {connecting ? "Redirecting…" : "Reconnect"}
@@ -800,7 +826,7 @@ function ConnectionsSection({
                           >
                             {deletingId === id ? "Removing…" : "Disconnect"}
                           </Button>
-                        </div>
+                        </div>}
                       </li>
                     );
                   })}
@@ -808,7 +834,10 @@ function ConnectionsSection({
               ) : (
                 <p className="text-muted-foreground">Nothing connected yet.</p>
               )}
-              {missingProviders.length > 0 && (
+              {!canEdit && merged.some((c) => c.needsReauth) && (
+                <p className="text-xs text-muted-foreground">Ask a firm admin to reconnect this mailbox.</p>
+              )}
+              {canEdit && missingProviders.length > 0 && (
                 <div className="flex flex-wrap gap-2">
                   {missingProviders.map((provider) => (
                     <Button key={provider} variant="outline" onClick={() => onConnect(provider)} disabled={connecting}>
@@ -818,7 +847,7 @@ function ConnectionsSection({
                   ))}
                 </div>
               )}
-              {missingProviders.includes("outlook") && (
+              {canEdit && missingProviders.includes("outlook") && (
                 <p className="text-xs text-muted-foreground">
                   Outlook works with Microsoft 365 work accounts and personal Outlook or Hotmail accounts.
                 </p>
@@ -836,7 +865,7 @@ function ConnectionsSection({
             id="org-timezone"
             className="max-w-sm"
             value={organization?.timezone ?? ""}
-            disabled={savingTimezone || !organization}
+            disabled={savingTimezone || !organization || !canEdit}
             onChange={(e) => onSaveTimezone(e.target.value)}
           >
             <option value="" disabled>
@@ -942,6 +971,7 @@ export default function SettingsPage() {
   };
 
   const current = org ?? null;
+  const isAdmin = current?.current_user_role === "admin";
 
   return (
     <div className="mx-auto flex w-full max-w-[96rem] flex-col gap-8">
@@ -974,6 +1004,7 @@ export default function SettingsPage() {
             <ProfileSection
               key={`profile-${org?.id ?? "loading"}`}
               current={current}
+              canEdit={isAdmin}
               error={errorFor("profile")}
               saving={!!saving.profile}
               onSave={(fields) => saveOrg("profile", "profile", fields)}
@@ -983,15 +1014,20 @@ export default function SettingsPage() {
             <FirmSection
               key={`firm-${org?.id ?? "loading"}`}
               current={current}
+              canEdit={isAdmin}
               error={errorFor("firm")}
               saving={!!saving.firm}
               onSave={(fields) => saveOrg("firm", "firm", fields)}
             />
           </div>
+          <div id="team">
+            {current ? <TeamSection firmName={current.name} isAdmin={isAdmin} /> : null}
+          </div>
           <div id="sign-off">
             <SignOffSection
               key={`sign-off-${org?.id ?? "loading"}`}
               current={current}
+              canEdit={isAdmin}
               error={errorFor("sign-off")}
               saving={!!saving["sign-off"]}
               onSave={(signature) => saveOrg("sign-off", "sign-off", { email_signature: signature })}
@@ -1001,6 +1037,7 @@ export default function SettingsPage() {
             <AutomationSection
               key={`automation-${org?.id ?? "loading"}`}
               current={current}
+              canEdit={isAdmin}
               error={errorFor("automation")}
               savingAutomation={!!saving.automation}
               savingInterval={!!saving.interval}
@@ -1013,6 +1050,7 @@ export default function SettingsPage() {
           <div id="connections">
             <ConnectionsSection
               organization={current}
+              canEdit={isAdmin}
               inboxConnections={connections ?? null}
               calendarConnections={calendarConnections ?? null}
               error={connectionsError}

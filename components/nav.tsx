@@ -37,6 +37,7 @@ import { cn } from "@/lib/utils";
 import { isAdminEmail } from "@/lib/admin";
 import { useMobileNav } from "@/components/mobile-nav-context";
 import { useAskPanel } from "@/components/ask/ask-panel-context";
+import { FirmSwitcher } from "@/components/firm-switcher";
 
 const links = [
   { href: "/clients", label: "Clients", icon: Users, tourId: "clients" },
@@ -83,7 +84,8 @@ export function Nav() {
   // contact_name/org name are unset until someone visits Settings (or,
   // for the org name, sets a firm name during onboarding) - Clerk's own
   // name is the only thing guaranteed to exist for a brand-new account.
-  const displayName = org?.contact_name || user?.fullName || "Account";
+  // contact_name is the firm's signer (an admin's name), so other staff see their own.
+  const displayName = (org?.current_user_role === "admin" && org?.contact_name) || user?.fullName || "Account";
   const orgLabel = org?.name || null;
 
   useEffect(() => {
@@ -255,6 +257,7 @@ export function Nav() {
           </SignUpButton>
         </Show>
         <Show when="signed-in">
+          <FirmSwitcher labelClassName={cn("md:hidden", !collapsed && "xl:inline")} />
           <div
             className={cn(
               "flex items-center gap-3 px-1 md:flex-col md:gap-3 md:px-0",
