@@ -20,6 +20,7 @@ export const clientMeetingsKey = (clientId: number) => ["client-meetings", clien
 export const workflowsKey = () => ["workflows"] as const;
 
 export const packagesKey = () => ["packages"] as const;
+export const knowledgeKey = (includeArchived = false) => ["knowledge", includeArchived] as const;
 export const questionnairesKey = (includeArchived = false) => ["questionnaires", includeArchived] as const;
 
 // Client detail page sections. Cached so reopening a client renders the last

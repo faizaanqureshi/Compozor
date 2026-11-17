@@ -1687,3 +1687,66 @@ export const resolveQuestionnaireReviewProposal = (
   json("POST", { action, target_item_id: targetItemId }));
 export const createQuestionnairePortalEmail = (clientId: number) =>
   request<EmailLogEntry>(`/clients/${clientId}/questionnaire-portal-email`, { method: "POST" });
+
+// ---------- Firm knowledge ----------
+
+export type KnowledgeAudience = "clients" | "internal";
+export type KnowledgeSource = "note" | "upload" | "saved_answer";
+
+export interface KnowledgeEntrySummary {
+  id: number;
+  title: string;
+  excerpt: string;
+  audience: KnowledgeAudience;
+  source: KnowledgeSource;
+  original_filename: string | null;
+  archived: boolean;
+  // False for a moment after saving, while it's indexed for meaning.
+  searchable: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface KnowledgeEntry extends KnowledgeEntrySummary {
+  body: string;
+  source_email_log_id: number | null;
+  created_by: string | null;
+}
+
+export interface KnowledgeInput {
+  title: string;
+  body: string;
+  audience: KnowledgeAudience;
+  source?: "note" | "saved_answer";
+  source_email_log_id?: number | null;
+}
+
+export interface KnowledgeSuggestion {
+  title: string;
+  body: string;
+  audience: KnowledgeAudience;
+  source_email_log_id: number;
+}
+
+export const listKnowledge = (includeArchived = false) =>
+  request<KnowledgeEntrySummary[]>(`/knowledge${includeArchived ? "?include_archived=true" : ""}`);
+
+export const getKnowledgeEntry = (entryId: number) => request<KnowledgeEntry>(`/knowledge/${entryId}`);
+
+export const createKnowledgeEntry = (input: KnowledgeInput) =>
+  request<KnowledgeEntry>("/knowledge", json("POST", input));
+
+export const updateKnowledgeEntry = (
+  entryId: number,
+  input: Partial<Pick<KnowledgeEntry, "title" | "body" | "audience" | "archived">>
+) => request<KnowledgeEntry>(`/knowledge/${entryId}`, json("PATCH", input));
+
+export const uploadKnowledgeDocument = (file: File, audience: KnowledgeAudience) => {
+  const body = new FormData();
+  body.append("file", file);
+  body.append("audience", audience);
+  return request<KnowledgeEntry>("/knowledge/upload", { method: "POST", body });
+};
+
+export const suggestKnowledgeFromEmail = (emailLogId: number) =>
+  request<KnowledgeSuggestion>(`/knowledge/suggestions/email/${emailLogId}`);
