@@ -1251,6 +1251,43 @@ export interface WorkflowRunOutput {
   id: number;
   filename: string;
   download_url: string | null;
+  // Staff replaced the agent's file with a corrected version.
+  edited?: boolean;
+}
+
+// A preference staff taught a workflow by correcting its output. It reaches
+// the agent only once someone confirms it ("active").
+export interface WorkflowRule {
+  id: number;
+  workflow_id: number;
+  text: string;
+  status: "proposed" | "active" | "paused" | "dismissed";
+  source: "edit" | "note" | string;
+  // Set when the rule applies to one client only.
+  client_id: number | null;
+  client_name: string | null;
+  run_id: number | null;
+  reason: string | null;
+  filename: string | null;
+  // The instruction or rule this one contradicts, quoted.
+  conflict: string | null;
+  confirmed_at: string | null;
+  created_at: string;
+}
+
+export interface AppliedRule {
+  id: number;
+  text: string;
+  // null until the reviewer checked it.
+  followed: boolean | null;
+}
+
+export interface LearningResult {
+  run: WorkflowRun;
+  proposals: WorkflowRule[];
+  // Changes that only fixed this output; nothing is learned from them.
+  one_off_count: number;
+  changes_found: number | null;
 }
 
 export interface WorkflowRun {
@@ -1277,6 +1314,9 @@ export interface WorkflowRun {
   started_at: string | null;
   completed_at: string | null;
   created_at: string;
+  approved_at?: string | null;
+  rules_applied?: AppliedRule[];
+  rule_proposals?: WorkflowRule[];
 }
 
 export interface WorkflowBuilderResult {
@@ -1337,6 +1377,31 @@ export const runQueuedWorkflowRun = (clientId: number, runId: number) =>
 // instructions and wanting to try again against the same client.
 export const rerunWorkflowRun = (clientId: number, runId: number) =>
   request<WorkflowRun>(`/clients/${clientId}/workflow-runs/${runId}/rerun`, { method: "POST" });
+
+export const approveWorkflowRun = (clientId: number, runId: number, approved = true) =>
+  request<WorkflowRun>(`/clients/${clientId}/workflow-runs/${runId}/approve`, { method: approved ? "POST" : "DELETE" });
+
+// Staff's corrected file becomes the output; the difference proposes rules.
+export const uploadCorrectedOutput = (clientId: number, runId: number, outputId: number, file: File) => {
+  const body = new FormData();
+  body.append("file", file);
+  return request<LearningResult>(`/clients/${clientId}/workflow-runs/${runId}/outputs/${outputId}/correction`, { method: "POST", body });
+};
+
+export const addWorkflowRunNote = (clientId: number, runId: number, text: string) =>
+  request<LearningResult>(`/clients/${clientId}/workflow-runs/${runId}/notes`, json("POST", { text }));
+
+export const listWorkflowRules = (workflowId: number) =>
+  request<WorkflowRule[]>(`/workflows/${workflowId}/rules`);
+
+export const updateWorkflowRule = (
+  workflowId: number,
+  ruleId: number,
+  input: { text?: string; status?: "active" | "paused" | "dismissed"; scope?: "workflow" | "client" },
+) => request<WorkflowRule>(`/workflows/${workflowId}/rules/${ruleId}`, json("PATCH", input));
+
+export const deleteWorkflowRule = (workflowId: number, ruleId: number) =>
+  request<void>(`/workflows/${workflowId}/rules/${ruleId}`, { method: "DELETE" });
 
 export const resumeWorkflowRun = (clientId: number, runId: number, context: string, retry = false) =>
   request<WorkflowRun>(

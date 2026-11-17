@@ -18,6 +18,7 @@ export const calendarConnectionsKey = () => ["calendar-connections"] as const;
 export const clientMeetingsKey = (clientId: number) => ["client-meetings", clientId] as const;
 
 export const workflowsKey = () => ["workflows"] as const;
+export const workflowRulesKey = (workflowId: number) => ["workflow-rules", workflowId] as const;
 
 export const packagesKey = () => ["packages"] as const;
 export const knowledgeKey = (includeArchived = false) => ["knowledge", includeArchived] as const;

@@ -344,6 +344,7 @@ export default function ClientDetailPage({
             assignments={workflowAssignments}
             loadError={workflowError}
             onChange={refreshWorkflowRuns}
+            clientName={client?.name}
           />
 
           <DocumentVaultCard
@@ -2363,12 +2364,14 @@ function WorkflowRunsCard({
   assignments,
   loadError,
   onChange,
+  clientName,
 }: {
   clientId: number;
   runs: WorkflowRun[] | null;
   assignments: ClientWorkflowAssignment[] | null;
   loadError: string | null;
   onChange: () => void;
+  clientName?: string;
 }) {
   const [runningId, setRunningId] = useState<number | null>(null);
   // Workflows whose run was just requested, until a worker picks it up.
@@ -2522,6 +2525,7 @@ function WorkflowRunsCard({
                 executionMode={group.assignment?.execution_mode}
                 readiness={group.assignment ? assignmentReadiness(group.assignment) : undefined}
                 starting={requestedIds.includes(group.workflowId)}
+                review={clientName ? { clientName, onChange } : undefined}
                 actions={<>
                     {awaitingFirstRun && group.assignment && !group.workflowArchived && (
                       <Button variant="outline" size="sm"
