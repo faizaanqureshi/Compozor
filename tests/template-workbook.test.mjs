@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  cellField, cellSlotAt, displayRows, isWorkbookView, mergeSpans, tableField, tableSlotAt, workbookOccurrences,
+  cellField, cellSlotAt, displayRows, isWorkbookView, mergeSpans, overflowSpans, tableField, tableSlotAt, workbookOccurrences,
 } from '../lib/template-workbook.ts';
 
 const sheet = {
@@ -57,4 +57,13 @@ test('picked rows and cells become fields, with the backend rules', () => {
   assert.match(cellField(sheet, 7, sheet.rows[5].cells[0], []).error, /Formulas/);
   assert.match(cellField(sheet, 20, sheet.rows[6].cells[0], slots).error, /Part of this cell/);
   assert.deepEqual(cellField(sheet, 4, sheet.rows[2].cells[1], []), { kind: 'cell', label: 'Amount', sheet: 'August 2026', cell: 'D4' });
+});
+
+test('left-aligned text runs on into empty cells, numbers and merged titles do not', () => {
+  const { spans, covered } = overflowSpans(sheet);
+  assert.equal(spans.get('A2'), 4);
+  assert.equal(covered.has('D2'), true);
+  assert.equal(spans.has('A1'), false); // already a merged title
+  assert.equal(spans.get('A4'), 3); // runs to the next filled cell (D4)
+  assert.equal(spans.has('D5'), false);
 });

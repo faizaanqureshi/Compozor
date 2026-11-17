@@ -11,6 +11,7 @@ import {
   displayRows,
   isFieldError,
   mergeSpans,
+  overflowSpans,
   tableField,
   tableSlotAt,
   type SheetCell,
@@ -44,7 +45,8 @@ export function TemplateWorkbookViewer({ view, slots, active, onActivate, onCrea
   const [rows, setRows] = useState<{ from: number; to: number } | null>(null);
   const sheet = view.sheets.find((s) => s.sheet === sheetName) ?? view.sheets[0];
   if (!sheet) return <p className="p-6 text-sm text-muted-foreground">This workbook has no sheets.</p>;
-  const { spans, covered } = mergeSpans(sheet);
+  const merged = mergeSpans(sheet);
+  const overflow = overflowSpans(sheet, merged);
 
   const position = (box: DOMRect) => {
     const origin = page.current!.getBoundingClientRect();
@@ -83,8 +85,8 @@ export function TemplateWorkbookViewer({ view, slots, active, onActivate, onCrea
 
   const renderCell = (row: number, column: string, cell: SheetCell | undefined, tableKey: string | undefined) => {
     const address = `${column}${row}`;
-    if (covered.has(address)) return null;
-    const span = spans.get(address);
+    if (merged.covered.has(address) || overflow.covered.has(address)) return null;
+    const span = merged.spans.get(address) ?? overflow.spans.get(address);
     const cellKey = cell ? cellSlotAt(sheet.sheet, column, row, slots) : undefined;
     const ranges = cell && !cell.f ? textRanges(cell.t, slots) : [];
     return (
@@ -97,7 +99,7 @@ export function TemplateWorkbookViewer({ view, slots, active, onActivate, onCrea
         className={cn("max-w-0 truncate border border-border/70 px-1.5 py-0.5 align-top",
           cell?.n && "text-right tabular-nums", cell?.align === "center" && "text-center", cell?.align === "right" && "text-right",
           cell?.b && "font-semibold", cell?.i && "italic", cell?.f && "text-muted-foreground",
-          cellKey && cn("cursor-pointer", fieldColor(slots, cellKey).block, active === cellKey && "outline-2 outline-foreground/50"),
+          cellKey && cn("cursor-pointer", fieldColor(slots, cellKey).block, active === cellKey && "ring-2 ring-inset ring-foreground/40"),
           cell && !tableKey && !cellKey && "cursor-text")}
         title={cell?.t}
       >
@@ -179,8 +181,9 @@ export function TemplateWorkbookViewer({ view, slots, active, onActivate, onCrea
                 <tr key={entry.row} data-field={tableKey}
                   onClick={tableKey ? () => onActivate(tableKey) : undefined}
                   className={cn(tableKey && cn("cursor-pointer", fieldColor(slots, tableKey).block),
-                    tableKey && active === tableKey && "outline-2 outline-foreground/50", inPick && "bg-foreground/5 outline-1 outline-foreground/30")}>
-                  <th scope="row" className="border border-border/70 bg-muted/60 p-0 text-[0.6875rem] font-normal text-muted-foreground">
+                    inPick && "bg-foreground/5")}>
+                  <th scope="row" className={cn("border border-border/70 bg-muted/60 p-0 text-[0.6875rem] font-normal text-muted-foreground",
+                    ((tableKey && active === tableKey) || inPick) && "bg-foreground/15 font-medium text-foreground")}>
                     {tableKey ? entry.row : (
                       <button type="button" className="h-full w-full px-1 py-0.5 hover:bg-muted hover:text-foreground"
                         title="Select rows to repeat for each record (shift-click to extend)"

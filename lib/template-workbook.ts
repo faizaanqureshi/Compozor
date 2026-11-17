@@ -103,6 +103,30 @@ export function mergeSpans(sheet: SheetView): { spans: Map<string, number>; cove
   return { spans, covered };
 }
 
+// Like Excel, left-aligned text runs on into the empty cells to its right,
+// so a long title or "Client: … · Period: …" line is shown whole.
+export function overflowSpans(sheet: SheetView, merged = mergeSpans(sheet)): { spans: Map<string, number>; covered: Set<string> } {
+  const spans = new Map<string, number>();
+  const covered = new Set<string>();
+  for (const row of sheet.rows) {
+    const filled = new Set(row.cells.map((c) => c.col));
+    for (const cell of row.cells) {
+      const address = `${cell.col}${row.row}`;
+      if (cell.n || cell.f || cell.align || merged.spans.has(address) || merged.covered.has(address)) continue;
+      let width = 1;
+      for (let i = sheet.columns.indexOf(cell.col) + 1; i < sheet.columns.length; i++) {
+        const next = `${sheet.columns[i]}${row.row}`;
+        if (filled.has(sheet.columns[i]) || merged.spans.has(next) || merged.covered.has(next)) break;
+        width++;
+      }
+      if (width < 2) continue;
+      spans.set(address, width);
+      for (let i = 1; i < width; i++) covered.add(`${sheet.columns[sheet.columns.indexOf(cell.col) + i]}${row.row}`);
+    }
+  }
+  return { spans, covered };
+}
+
 export function columnLetter(index: number): string {
   let out = "";
   for (let n = index; n > 0; n = Math.floor((n - 1) / 26)) out = String.fromCharCode(65 + ((n - 1) % 26)) + out;
