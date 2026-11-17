@@ -64,11 +64,32 @@ export type SampleFormat = { kind: "word" | "slides" | "sheet" | "rebuilt" | "da
 
 export function sampleFormat(filename: string): SampleFormat {
   const ext = filename.toLowerCase().split(".").pop() ?? "";
-  if (ext === "docx") return { kind: "word", label: "Word", how: "Edited in place. Make a template to lock its formatting." };
-  if (ext === "pptx") return { kind: "slides", label: "PowerPoint", how: "Edited in place. Make a template to lock its formatting." };
+  if (ext === "docx") return { kind: "word", label: "Word", how: "Edited in place. A template locks its formatting." };
+  if (ext === "pptx") return { kind: "slides", label: "PowerPoint", how: "Edited in place. A template locks its formatting." };
   if (ext === "xlsx") return { kind: "sheet", label: "Excel", how: "Filled in place, keeping its formulas, charts and styles." };
   if (["pdf", "png", "jpg", "jpeg", "webp"].includes(ext)) {
     return { kind: "rebuilt", label: ext === "pdf" ? "PDF" : "Image", how: "Recreated from its layout. A template rebuilds it once as an editable file." };
   }
   return { kind: "data", label: ext.toUpperCase() || "File", how: "Used as a reference for structure and wording." };
+}
+
+// Instructions draft themselves once, from the outcome sentence and the
+// samples, when there is a real sentence and nothing written yet.
+export const AUTO_DRAFT_MIN_WORDS = 4;
+
+export function canAutoDraft(description: string, instructions: string, alreadyDrafted: boolean): boolean {
+  return !alreadyDrafted && !instructions.trim() && countWords(description) >= AUTO_DRAFT_MIN_WORDS;
+}
+
+type TemplateStatus = "processing" | "draft" | "approved" | "failed" | null | undefined;
+
+// Where the samples' templates stand: still being set up, or ready
+// (drafts are approved when the workflow is saved).
+export function templateProgress(samples: { template_status?: TemplateStatus }[]) {
+  const withTemplate = samples.filter((s) => s.template_status);
+  return {
+    total: withTemplate.length,
+    settingUp: withTemplate.filter((s) => s.template_status === "processing").length,
+    ready: withTemplate.filter((s) => s.template_status === "draft" || s.template_status === "approved").length,
+  };
 }

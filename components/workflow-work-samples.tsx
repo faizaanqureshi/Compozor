@@ -56,7 +56,7 @@ function SampleCard({ sample, disabled, onRemove, onStatusChange }: {
   sample: WorkflowWorkSample;
   disabled: boolean;
   onRemove: () => void;
-  onStatusChange: (status: SampleTemplateStatus | null) => void;
+  onStatusChange: (status: SampleTemplateStatus | null, problems: string[]) => void;
 }) {
   const format = sampleFormat(sample.filename);
   const Icon = FORMAT_ICONS[format.kind];
@@ -65,27 +65,30 @@ function SampleCard({ sample, disabled, onRemove, onStatusChange }: {
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const startedHere = useRef(false);
   const status = template?.status ?? sample.template_status ?? null;
-
-  const apply = useCallback((next: SampleTemplate | null) => {
-    setTemplate(next);
-    onStatusChange(next?.status ?? null);
-  }, [onStatusChange]);
-
+  const notify = useRef(onStatusChange);
   useEffect(() => {
-    if (!sample.template_status) return;
-    getSampleTemplate(sample.id).then(setTemplate).catch(() => undefined);
-  }, [sample.id, sample.template_status]);
+    notify.current = onStatusChange;
+  });
+
+  const loaded = useRef(false);
+  const apply = useCallback((next: SampleTemplate | null) => {
+    loaded.current = true;
+    setTemplate(next);
+    notify.current(next?.status ?? null, next?.problems ?? []);
+  }, []);
+
+  // Setup starts on upload; the card follows it until the fields are found.
+  useEffect(() => {
+    if (loaded.current || !sample.template_status || sample.template_status === "processing") return;
+    getSampleTemplate(sample.id).then(apply).catch(() => undefined);
+  }, [sample.id, sample.template_status, apply]);
 
   useEffect(() => {
     if (status !== "processing") return;
     const timer = setInterval(() => {
       getSampleTemplate(sample.id).then((next) => {
-        if (next.status === "processing") return;
-        apply(next);
-        // Open the fields for review when setup the user started here finishes.
-        if (next.status === "draft" && startedHere.current) setEditing(true);
+        if (next.status !== "processing") apply(next);
       }).catch(() => undefined);
     }, POLL_MS);
     return () => clearInterval(timer);
@@ -103,10 +106,7 @@ function SampleCard({ sample, disabled, onRemove, onStatusChange }: {
     }
   };
 
-  const setUp = () => {
-    startedHere.current = true;
-    void run(() => startSampleTemplate(sample.id));
-  };
+  const setUp = () => void run(() => startSampleTemplate(sample.id));
 
   const download = async () => {
     const tab = window.open("", "_blank");
@@ -123,22 +123,27 @@ function SampleCard({ sample, disabled, onRemove, onStatusChange }: {
   };
 
   const slotCount = template?.slots.length ?? 0;
+  const problems = template?.problems ?? [];
+  const learned = template?.summary ?? (template ? fields(slotCount) : "");
+  const hasTemplate = templatable || !!sample.template_status;
   let line: React.ReactNode = format.how;
+  let detail: React.ReactNode = null;
   let action: React.ReactNode = null;
-  if (templatable && status === "processing") {
+  if (hasTemplate && status === "processing") {
     line = (
-      <span className="inline-flex items-center gap-2">
+      <span role="status" className="inline-flex items-center gap-2">
         <Loader2 className="size-3.5 shrink-0 animate-spin" />
         {format.kind === "rebuilt" ? "Rebuilding as an editable file and finding fields. This can take a few minutes." : "Finding the parts that change for each client…"}
       </span>
     );
-  } else if (templatable && status === "draft") {
-    line = <span className="inline-flex items-center gap-2"><span className="size-1.5 shrink-0 rounded-full bg-warning" aria-hidden />Template ready to review{template ? ` · ${fields(slotCount)}` : ""}</span>;
+  } else if (hasTemplate && status === "draft" && problems.length > 0) {
+    line = <span className="inline-flex items-center gap-2"><span className="size-1.5 shrink-0 rounded-full bg-warning" aria-hidden />Template needs a look before it can be used</span>;
+    detail = <p className="text-xs leading-relaxed text-warning-foreground">{problems[0]}</p>;
     action = <Button type="button" size="sm" disabled={disabled} onClick={() => setEditing(true)}>Review fields</Button>;
-  } else if (templatable && status === "approved") {
-    line = <span className="inline-flex items-center gap-2"><span className="size-1.5 shrink-0 rounded-full bg-success" aria-hidden />Template approved{template ? ` · ${fields(slotCount)}` : ""} · formatting is locked</span>;
-    action = <Button type="button" size="sm" variant="outline" disabled={disabled} onClick={() => setEditing(true)}>Edit fields</Button>;
-  } else if (templatable && status === "failed") {
+  } else if (hasTemplate && (status === "draft" || status === "approved")) {
+    line = <span className="inline-flex items-start gap-2"><span className="mt-[0.4rem] size-1.5 shrink-0 rounded-full bg-success" aria-hidden /><span>{status === "draft" ? "Template ready" : "Template in use"}{learned && <> · {learned}</>}</span></span>;
+    action = <Button type="button" size="sm" variant="ghost" disabled={disabled} onClick={() => setEditing(true)}>{status === "draft" ? "Review" : "Edit fields"}</Button>;
+  } else if (hasTemplate && status === "failed") {
     line = <span className="text-destructive">{template?.error ?? "Template setup failed."}</span>;
     action = <Button type="button" size="sm" variant="outline" disabled={disabled || busy} onClick={setUp}>Try again</Button>;
   } else if (templatable) {
@@ -169,9 +174,7 @@ function SampleCard({ sample, disabled, onRemove, onStatusChange }: {
             <span className="text-xs text-muted-foreground">{format.label} · {sizeLabel(sample.size_bytes)}</span>
           </p>
           <p className="text-xs leading-relaxed text-pretty text-muted-foreground">{line}</p>
-          {status === "draft" && template?.warnings.map((warning) => (
-            <p key={warning} className="text-xs leading-relaxed text-warning-foreground">{warning}</p>
-          ))}
+          {detail}
           {sample.missing_fonts && sample.missing_fonts.length > 0 && (
             <p className="text-xs leading-relaxed text-warning-foreground">
               Previews don&apos;t have {sample.missing_fonts.join(", ")}. <Link href="/settings#fonts" className="underline underline-offset-2">Upload fonts</Link>
@@ -246,7 +249,10 @@ export function WorkflowWorkSamples({ value, onChange, disabled, onBusyChange }:
     try {
       for (const file of selected) {
         setUploading(file.name);
-        saved.push(await uploadWorkflowWorkSample(file));
+        const sample = await uploadWorkflowWorkSample(file);
+        // The same file again is the same sample, already set up.
+        if (saved.some((item) => item.id === sample.id)) continue;
+        saved.push(sample);
         onChange([...saved]);
       }
     } catch (e) {
@@ -281,7 +287,9 @@ export function WorkflowWorkSamples({ value, onChange, disabled, onBusyChange }:
               sample={sample}
               disabled={locked}
               onRemove={() => onChange(value.filter((item) => item.id !== sample.id))}
-              onStatusChange={(status) => onChange(value.map((item) => (item.id === sample.id ? { ...item, template_status: status } : item)))}
+              onStatusChange={(status, problems) => onChange(value.map((item) => (
+                item.id === sample.id ? { ...item, template_status: status, template_problems: problems.length } : item
+              )))}
             />
           ))}
         </ul>
@@ -343,7 +351,7 @@ export function WorkflowWorkSamples({ value, onChange, disabled, onBusyChange }:
       {!compact && (
         <dl className="grid gap-3 pt-1 text-xs sm:grid-cols-3">
           {[
-            ["Word & PowerPoint", "Filled in place. A template locks the formatting exactly."],
+            ["Word & PowerPoint", "Set up as a template as soon as you add them, so the formatting stays exact."],
             ["Excel", "Filled in place, keeping formulas, charts and styles."],
             ["PDF & images", "Recreated from the layout. A template rebuilds it once as an editable file."],
           ].map(([term, detail]) => (

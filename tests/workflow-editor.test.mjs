@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { countWords, instructionTips, sampleFormat, startersFor } from '../lib/workflow-editor.ts';
+import { canAutoDraft, countWords, instructionTips, sampleFormat, startersFor, templateProgress } from '../lib/workflow-editor.ts';
 
 test('starters follow the practice type and fall back to general ideas', () => {
   assert.equal(startersFor('Accounting')[0].name, 'Monthly bookkeeping close');
@@ -37,4 +37,19 @@ test('return paths stay inside the app', async () => {
   for (const bad of [undefined, '', 'https://evil.test', '//evil.test', '/\\evil.test', 'clients']) {
     assert.equal(safeReturnPath(bad, '/workflows'), '/workflows');
   }
+});
+
+test('instructions draft themselves once, from a real sentence, never over written text', () => {
+  assert.equal(canAutoDraft('Engagement letter for each client', '', false), true);
+  assert.equal(canAutoDraft('Engagement letter', '', false), false);
+  assert.equal(canAutoDraft('Engagement letter for each client', 'Already written', false), false);
+  assert.equal(canAutoDraft('Engagement letter for each client', '', true), false);
+});
+
+test('template progress counts setup still running and templates ready to use', () => {
+  const progress = templateProgress([
+    { template_status: 'processing' }, { template_status: 'draft' }, { template_status: 'approved' },
+    { template_status: 'failed' }, { template_status: null }, {},
+  ]);
+  assert.deepEqual(progress, { total: 4, settingUp: 1, ready: 2 });
 });

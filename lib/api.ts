@@ -1111,6 +1111,8 @@ export interface WorkflowWorkSample {
   created_at: string;
   // null when no fill-in template was set up for this sample.
   template_status?: SampleTemplateStatus | null;
+  // Client-side only: how many self-test problems the template has.
+  template_problems?: number;
   // Fonts the sample uses that aren't available for previews; null = unknown.
   missing_fonts?: string[] | null;
 }
@@ -1137,6 +1139,11 @@ export interface TemplateSlot {
   example?: string | string[] | string[][];
   occurrences?: number;
   columns?: number;
+  // Left out cleanly (paragraph or row removed) when a client has no value.
+  optional?: boolean;
+  // Text fields: set by the server when the field is a whole paragraph or
+  // row on its own, the only kind that can be optional.
+  standalone?: boolean;
   [location: string]: unknown;
 }
 
@@ -1151,6 +1158,11 @@ export interface SampleTemplate {
   similarity: number | null;
   error: string | null;
   approved_at: string | null;
+  // One sentence about what changes per client; null until setup finishes.
+  summary?: string | null;
+  // Self-test findings (filled with its own examples, it must match the
+  // original). Any problem blocks approval.
+  problems?: string[];
 }
 
 const templatePath = (sampleId: number) => `/workflows/work-samples/${sampleId}/template`;
