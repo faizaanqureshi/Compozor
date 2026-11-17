@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import {
+  BadgeCheck,
   Check,
   FilePlus2,
   ListChecks,
@@ -48,6 +49,7 @@ const ICONS: Record<AskActionKind, LucideIcon> = {
   reply_email: Mail,
   run_workflow: Play,
   retry_run: RotateCcw,
+  approve_run: BadgeCheck,
   mark_received: ListChecks,
   waive_item: ListChecks,
   request_document: FilePlus2,
@@ -65,6 +67,8 @@ function effect(action: AskAction): string {
       return "Each run starts now with the client's current documents. Follow progress on the client's page.";
     case "retry_run":
       return "The run continues from its saved work. Nothing is sent to the client.";
+    case "approve_run":
+      return "Marks this result approved, the same as Approve on the client's page.";
     case "mark_received":
       return "These items are marked received, and the client won't be reminded about them.";
     case "waive_item":

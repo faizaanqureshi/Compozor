@@ -58,6 +58,7 @@ export interface AskPackagePreview {
 
 export type AskActionKind =
   | "send_reminder" | "send_draft" | "compose_email" | "reply_email" | "run_workflow" | "retry_run"
+  | "approve_run"
   | "mark_received" | "waive_item" | "request_document" | "create_package" | "assign_package";
 
 export interface AskAction {
