@@ -6,6 +6,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import useSWR from "swr";
 import {
+  BookOpen,
   ChevronsLeft,
   ChevronsRight,
   Landmark,
@@ -40,6 +41,7 @@ const links = [
   { href: "/workflows", label: "Workflows", icon: Workflow, tourId: "workflows" },
   { href: "/packages", label: "Packages", icon: Package, tourId: "packages" },
   { href: "/questionnaires", label: "Questionnaires", icon: ClipboardList, tourId: "questionnaires" },
+  { href: "/knowledge", label: "Knowledge", icon: BookOpen, tourId: "knowledge" },
   { href: "/email-log", label: "Email Log", icon: Mail, tourId: "email-log" },
   {
     href: "/unmatched-emails",

@@ -27,6 +27,8 @@ import {
 import { cn, formatRelativeTime } from "@/lib/utils";
 import { AgentActivityDisclosure, TraceStep } from "@/components/agent-activity-disclosure";
 import { EmailDraftEditor } from "@/components/email-draft-editor";
+import { SaveAnswerButton } from "@/components/save-answer-button";
+import { canSaveAsKnowledge } from "@/lib/knowledge";
 import { EmailBody } from "@/components/email-body";
 import { snippet } from "@/lib/email-content";
 import { StateLabel, messageState, threadMessagesState } from "@/components/email-state-label";
@@ -1133,6 +1135,7 @@ function MessageItem({
           <time dateTime={entry.created_at} title={new Date(entry.created_at).toLocaleString()} className="text-xs text-muted-foreground tabular-nums">
             {formatDateTime(entry.created_at)}
           </time>
+          {canSaveAsKnowledge(entry) && <SaveAnswerButton emailLogId={entry.id} />}
         </div>
       </div>
 
