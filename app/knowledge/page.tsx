@@ -11,7 +11,7 @@ import {
   uploadKnowledgeDocument,
 } from "@/lib/api";
 import { knowledgeKey } from "@/lib/swr-keys";
-import { KNOWLEDGE_EXAMPLES, KNOWLEDGE_UPLOAD_ACCEPT, audienceLabel, updatedLabel } from "@/lib/knowledge";
+import { KNOWLEDGE_EXAMPLES, KNOWLEDGE_UPLOAD_ACCEPT, audienceLabel, updatedLabel, validUntilLabel } from "@/lib/knowledge";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -61,10 +61,10 @@ export default function KnowledgePage() {
     }
   };
 
-  const setArchived = async (entry: KnowledgeEntrySummary, value: boolean) => {
+  const update = async (entry: KnowledgeEntrySummary, input: { archived?: boolean; valid_until?: null }) => {
     setError(null);
     try {
-      await updateKnowledgeEntry(entry.id, { archived: value });
+      await updateKnowledgeEntry(entry.id, input);
       await mutate();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : String(e));
@@ -137,7 +137,7 @@ export default function KnowledgePage() {
             <div className="flex flex-col">
               <div
                 aria-hidden
-                className="hidden border-b border-border/70 pb-2.5 text-[0.6875rem] tracking-wider text-muted-foreground uppercase md:grid md:grid-cols-[minmax(0,1fr)_7rem_8rem_2.5rem] md:gap-4"
+                className="hidden border-b border-border/70 pb-2.5 text-[0.6875rem] tracking-wider text-muted-foreground uppercase md:grid md:grid-cols-[minmax(0,1fr)_7rem_11rem_2.5rem] md:gap-4"
               >
                 <span>Entry</span>
                 <span>For</span>
@@ -150,7 +150,8 @@ export default function KnowledgePage() {
                     key={entry.id}
                     entry={entry}
                     onEdit={() => setDialog({ mode: "edit", entryId: entry.id })}
-                    onArchive={(value) => void setArchived(entry, value)}
+                    onArchive={(value) => void update(entry, { archived: value })}
+                    onStillCurrent={() => void update(entry, { valid_until: null })}
                   />
                 ))}
               </ul>
@@ -176,13 +177,16 @@ function KnowledgeRow({
   entry,
   onEdit,
   onArchive,
+  onStillCurrent,
 }: {
   entry: KnowledgeEntrySummary;
   onEdit: () => void;
   onArchive: (archived: boolean) => void;
+  onStillCurrent: () => void;
 }) {
+  const expired = entry.expired && !entry.archived;
   return (
-    <li className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-2 py-4 md:grid-cols-[minmax(0,1fr)_7rem_8rem_2.5rem] md:items-center">
+    <li className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-2 py-4 md:grid-cols-[minmax(0,1fr)_7rem_11rem_2.5rem] md:items-center">
       <button
         type="button"
         onClick={onEdit}
@@ -204,9 +208,24 @@ function KnowledgeRow({
         <span>
           <Badge variant={entry.audience === "clients" ? "secondary" : "outline"}>{audienceLabel(entry.audience)}</Badge>
         </span>
-        <span className="text-xs text-muted-foreground md:text-sm" title={new Date(entry.updated_at).toLocaleString()}>
-          {updatedLabel(entry.updated_at)}
-        </span>
+        {expired ? (
+          <span className="flex items-center gap-1.5">
+            <Badge
+              variant="outline"
+              className="border-destructive/40 text-destructive"
+              title={`Ended ${validUntilLabel(entry.valid_until!)}. Not used in replies or workflows.`}
+            >
+              Expired
+            </Badge>
+            <Button variant="ghost" size="xs" className="text-muted-foreground" onClick={onStillCurrent}>
+              Still current
+            </Button>
+          </span>
+        ) : (
+          <span className="text-xs text-muted-foreground md:text-sm" title={new Date(entry.updated_at).toLocaleString()}>
+            {updatedLabel(entry.updated_at)}
+          </span>
+        )}
       </div>
 
       <div className="hidden justify-end md:flex">

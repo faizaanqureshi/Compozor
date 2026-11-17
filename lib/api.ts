@@ -1701,6 +1701,10 @@ export interface KnowledgeEntrySummary {
   source: KnowledgeSource;
   original_filename: string | null;
   archived: boolean;
+  // Optional end date (YYYY-MM-DD). Entries are current unless they have one.
+  valid_until: string | null;
+  // Past valid_until: no longer used until staff extend or clear the date.
+  expired: boolean;
   // False for a moment after saving, while it's indexed for meaning.
   searchable: boolean;
   created_at: string;
@@ -1719,6 +1723,7 @@ export interface KnowledgeInput {
   audience: KnowledgeAudience;
   source?: "note" | "saved_answer";
   source_email_log_id?: number | null;
+  valid_until?: string | null;
 }
 
 export interface KnowledgeSuggestion {
@@ -1738,7 +1743,7 @@ export const createKnowledgeEntry = (input: KnowledgeInput) =>
 
 export const updateKnowledgeEntry = (
   entryId: number,
-  input: Partial<Pick<KnowledgeEntry, "title" | "body" | "audience" | "archived">>
+  input: Partial<Pick<KnowledgeEntry, "title" | "body" | "audience" | "archived" | "valid_until">>
 ) => request<KnowledgeEntry>(`/knowledge/${entryId}`, json("PATCH", input));
 
 export const uploadKnowledgeDocument = (file: File, audience: KnowledgeAudience) => {

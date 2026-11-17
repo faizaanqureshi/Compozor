@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { KNOWLEDGE_EXAMPLES, audienceLabel, canSaveAsKnowledge, updatedLabel } from "../lib/knowledge.ts";
+import { KNOWLEDGE_EXAMPLES, audienceLabel, canSaveAsKnowledge, updatedLabel, validUntilLabel } from "../lib/knowledge.ts";
 
 const reply = (extra = {}) => ({
   direction: "outbound",
@@ -36,4 +36,10 @@ test("updated label is relative for recent edits", () => {
   assert.equal(updatedLabel("2026-11-16T09:00:00", now), "Yesterday");
   assert.equal(updatedLabel("2026-11-13T09:00:00", now), "4 days ago");
   assert.match(updatedLabel("2025-03-02T09:00:00", now), /2025/);
+});
+
+test("valid-until dates read as the calendar day in any time zone", () => {
+  assert.match(validUntilLabel("2026-12-31"), /31/);
+  assert.match(validUntilLabel("2026-12-31"), /2026/);
+  assert.match(validUntilLabel("2027-01-01"), /2027/);
 });

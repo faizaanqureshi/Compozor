@@ -68,3 +68,13 @@ export function updatedLabel(iso: string, now: Date = new Date()): string {
     ...(then.getFullYear() !== now.getFullYear() ? { year: "numeric" } : {}),
   });
 }
+
+// "Dec 31, 2026" for a YYYY-MM-DD end date, read as a calendar day (no time zone shift).
+export function validUntilLabel(day: string): string {
+  return new Date(`${day}T00:00:00Z`).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}

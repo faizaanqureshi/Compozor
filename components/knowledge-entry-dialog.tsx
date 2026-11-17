@@ -28,6 +28,8 @@ export type KnowledgeDraft = {
   title: string;
   body: string;
   audience: KnowledgeAudience;
+  // "" = no end date (the usual case).
+  validUntil: string;
 };
 
 // One dialog for adding, editing and "Save this answer": title, the text
@@ -93,6 +95,7 @@ function KnowledgeForm({
     title: initial?.title ?? "",
     body: initial?.body ?? "",
     audience: initial?.audience ?? "clients",
+    validUntil: initial?.validUntil ?? "",
   });
   const [loading, setLoading] = useState(entryId !== undefined);
   const [error, setError] = useState<string | null>(null);
@@ -102,7 +105,8 @@ function KnowledgeForm({
     let cancelled = false;
     getKnowledgeEntry(entryId)
       .then((entry) => {
-        if (!cancelled) setDraft({ title: entry.title, body: entry.body, audience: entry.audience });
+        if (!cancelled)
+          setDraft({ title: entry.title, body: entry.body, audience: entry.audience, validUntil: entry.valid_until ?? "" });
       })
       .catch((e) => !cancelled && setError(e instanceof ApiError ? e.message : String(e)))
       .finally(() => !cancelled && setLoading(false));
@@ -117,11 +121,13 @@ function KnowledgeForm({
     setSaving(true);
     setError(null);
     try {
+      const { validUntil, ...fields } = draft;
+      const input = { ...fields, valid_until: validUntil || null };
       const entry =
         entryId !== undefined
-          ? await updateKnowledgeEntry(entryId, draft)
+          ? await updateKnowledgeEntry(entryId, input)
           : await createKnowledgeEntry({
-              ...draft,
+              ...input,
               ...(sourceEmailLogId !== undefined
                 ? { source: "saved_answer" as const, source_email_log_id: sourceEmailLogId }
                 : {}),
@@ -171,6 +177,22 @@ function KnowledgeForm({
             className="max-h-[50vh] min-h-40"
             onChange={(e) => setDraft({ ...draft, body: e.target.value })}
           />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor={`${id}-until`}>
+            Valid until <span className="font-normal text-muted-foreground">(optional)</span>
+          </Label>
+          <Input
+            id={`${id}-until`}
+            type="date"
+            value={draft.validUntil}
+            disabled={loading}
+            className="w-44"
+            onChange={(e) => setDraft({ ...draft, validUntil: e.target.value })}
+          />
+          <p className="text-xs text-muted-foreground">
+            For things that end, like this year&apos;s holiday closures. Leave blank if it stays true.
+          </p>
         </div>
         <div role="radiogroup" aria-label="Who it's for" className="grid gap-2 sm:grid-cols-2">
           {AUDIENCE_OPTIONS.map((option) => {
