@@ -1,4 +1,5 @@
 "use client";
+import { useAuth } from "@clerk/nextjs";
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -70,6 +71,7 @@ import { BacklogBreakdown } from "@/components/backlog-breakdown";
 import { CorrespondenceChart } from "@/components/correspondence-chart";
 import { RecentActivity } from "@/components/recent-activity";
 import { useIsFirmAdmin } from "@/lib/use-firm-role";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type WorkflowTone = "success" | "warning" | "attention" | "neutral";
 type SortKey = "name" | "documents" | "activity" | "status";
@@ -152,6 +154,9 @@ export default function ClientsPage() {
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
+  // "mine" = clients assigned to the signed-in staff member.
+  const [scope, setScope] = useState<"all" | "mine">("all");
+  const { userId } = useAuth();
   const [sort, setSort] = useState<Sort>({ key: "name", direction: "asc" });
 
   const [name, setName] = useState("");
@@ -379,10 +384,11 @@ export default function ClientsPage() {
     const q = search.trim().toLowerCase();
     const filtered = (clients ?? []).filter(
       (c) =>
-        !q ||
+        (scope === "all" || c.assigned_user_id === userId) &&
+        (!q ||
         c.name.toLowerCase().includes(q) ||
         c.email.toLowerCase().includes(q) ||
-        !!c.company_name?.toLowerCase().includes(q)
+        !!c.company_name?.toLowerCase().includes(q))
     );
     const dir = sort.direction === "asc" ? 1 : -1;
     return filtered.sort((a, b) => {
@@ -406,7 +412,9 @@ export default function ClientsPage() {
           );
       }
     });
-  }, [clients, lastActivity, search, sort]);
+  }, [clients, lastActivity, search, sort, scope, userId]);
+  // The filter appears once the firm starts assigning clients to people.
+  const showScope = scope === "mine" || (clients ?? []).some((c) => c.assigned_user_id);
 
   const allVisibleSelected = rows.length > 0 && rows.every((c) => selectedIds.has(c.id));
   const toggleSelectAll = () => {
@@ -634,10 +642,18 @@ export default function ClientsPage() {
       </div>
 
       <Panel
-        title="All clients"
-        meta={loading ? undefined : `${clients?.length ?? 0}`}
+        title={scope === "mine" ? "My clients" : "All clients"}
+        meta={loading ? undefined : `${scope === "mine" ? rows.length : clients?.length ?? 0}`}
         action={
           <>
+            {showScope && (
+              <Tabs value={scope} onValueChange={(value) => setScope(value as "all" | "mine")}>
+                <TabsList aria-label="Which clients">
+                  <TabsTrigger value="mine" className="px-2.5">Mine</TabsTrigger>
+                  <TabsTrigger value="all" className="px-2.5">All</TabsTrigger>
+                </TabsList>
+              </Tabs>
+            )}
             <div className="relative flex items-center">
               <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-foreground/50" />
               <Input

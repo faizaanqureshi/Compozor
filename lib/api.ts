@@ -176,6 +176,9 @@ export interface Client {
   email: string;
   phone: string | null;
   company_name: string | null;
+  // Clerk user id of the staff member who looks after this client; their
+  // own mailbox (when connected) sends this client's email.
+  assigned_user_id: string | null;
   status: ClientStatus;
   last_reminder_sent_at: string | null;
   created_at: string;
@@ -412,6 +415,8 @@ export interface InboxConnection {
   id: number;
   organization_id: number;
   email_address: string;
+  // null = the firm's shared mailbox; otherwise the Clerk user it belongs to.
+  owner_user_id: string | null;
   status: InboxConnectionStatus;
 }
 
@@ -709,6 +714,11 @@ export const executeClientImport = (clients: ClientImportRowIn[], idempotencyKey
     "/clients/import/execute",
     { ...json("POST", { clients }), headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey } }
   );
+
+// Admins assign anyone in the firm (or no one); members take an unassigned
+// client or hand back their own. The backend enforces the same rule.
+export const setClientAssignee = (clientId: number, userId: string | null) =>
+  request<Client>(`/clients/${clientId}/assignee`, json("PUT", { user_id: userId }));
 
 export const updateClient = (
   clientId: number,
@@ -1098,11 +1108,15 @@ export const createClientFromUnmatchedInboundEmail = (
 
 // Credentials let the API set the one-use consent cookie that its OAuth
 // callback checks, binding the grant to this browser and organization.
-export const getGmailConnectUrl = () =>
-  request<{ authorization_url: string }>("/organizations/me/gmail/connect", { credentials: "include" });
+// "firm" connects the shared firm mailbox (admins only); "personal" connects
+// the signed-in staff member's own mailbox.
+export type MailboxKind = "firm" | "personal";
 
-export const getOutlookConnectUrl = () =>
-  request<{ authorization_url: string }>("/organizations/me/outlook/connect", { credentials: "include" });
+export const getGmailConnectUrl = (mailbox: MailboxKind = "firm") =>
+  request<{ authorization_url: string }>(`/organizations/me/gmail/connect?mailbox=${mailbox}`, { credentials: "include" });
+
+export const getOutlookConnectUrl = (mailbox: MailboxKind = "firm") =>
+  request<{ authorization_url: string }>(`/organizations/me/outlook/connect?mailbox=${mailbox}`, { credentials: "include" });
 
 export const listInboxConnections = () =>
   request<InboxConnection[]>("/inbox-connections");

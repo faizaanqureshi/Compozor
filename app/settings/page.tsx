@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
-import { useClerk, useUser } from "@clerk/nextjs";
+import { useAuth, useClerk, useUser } from "@clerk/nextjs";
 import { Loader2, Pencil } from "lucide-react";
 import { GmailIcon } from "@/components/icons/gmail";
 import { OutlookIcon } from "@/components/icons/outlook";
@@ -16,6 +16,7 @@ import {
   AutomationLevel,
   CalendarConnection,
   InboxConnection,
+  MailboxKind,
   Organization,
   deleteCalendarConnection,
   deleteInboxConnection,
@@ -695,6 +696,7 @@ type MailProvider = "gmail" | "outlook";
 interface MergedConnection {
   provider: MailProvider;
   email: string;
+  ownerUserId: string | null;
   inboxId: number | null;
   calendarId: number | null;
   needsReauth: boolean;
@@ -721,6 +723,7 @@ function mergeConnections(
     return {
       provider,
       email: inbox.email_address,
+      ownerUserId: inbox.owner_user_id ?? null,
       inboxId: inbox.id,
       calendarId: calendar?.id ?? null,
       needsReauth: inbox.status === "needs_reauth" || calendar?.status === "needs_reauth",
@@ -728,9 +731,117 @@ function mergeConnections(
   });
 }
 
+// One list of mailboxes (yours, the firm's, or teammates') with its connect
+// and disconnect controls.
+function MailboxList({
+  connections,
+  canEdit,
+  canConnect,
+  connecting,
+  deletingId,
+  emptyText,
+  reauthHint,
+  single = false,
+  onConnect,
+  onDelete,
+}: {
+  connections: MergedConnection[];
+  // One mailbox per person; the firm may have a Google and an Outlook one.
+  single?: boolean;
+  canEdit: boolean;
+  canConnect: boolean;
+  connecting: boolean;
+  deletingId: number | null;
+  emptyText: string;
+  reauthHint?: string;
+  onConnect: (provider: MailProvider) => void;
+  onDelete: (connection: MergedConnection) => void;
+}) {
+  const missingProviders = single && connections.length > 0
+    ? []
+    : (["gmail", "outlook"] as const).filter((provider) => !connections.some((c) => c.provider === provider));
+  return (
+    <div className="flex flex-col gap-3">
+      {connections.length > 0 ? (
+        <ul className="flex flex-col divide-y divide-border/60 rounded-lg ring-1 ring-foreground/10">
+          {connections.map((conn) => {
+            const id = conn.inboxId ?? conn.calendarId;
+            return (
+              <li key={`${conn.provider}:${conn.email}`} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
+                {conn.provider === "outlook" ? (
+                  <OutlookIcon className="size-5 shrink-0 text-foreground" />
+                ) : (
+                  <GmailIcon className="size-5 shrink-0" />
+                )}
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate font-medium">{conn.email}</span>
+                  <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    {conn.provider === "outlook" ? "Outlook" : "Google"}
+                    <span aria-hidden className="text-muted-foreground/50">·</span>
+                    {conn.needsReauth ? (
+                      <span className="inline-flex items-center gap-1.5 text-destructive">
+                        <span className="size-1.5 rounded-full bg-destructive" />
+                        Needs reconnecting
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="size-1.5 rounded-full bg-success" />
+                        Connected
+                      </span>
+                    )}
+                  </span>
+                </div>
+                {canEdit && (
+                  <div className="flex items-center gap-1">
+                    {conn.needsReauth && canConnect && (
+                      <Button variant="outline" size="sm" disabled={connecting} onClick={() => onConnect(conn.provider)}>
+                        {connecting ? "Redirecting…" : "Reconnect"}
+                      </Button>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-muted-foreground"
+                      disabled={deletingId === id}
+                      onClick={() => onDelete(conn)}
+                    >
+                      {deletingId === id ? "Removing…" : "Disconnect"}
+                    </Button>
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <p className="text-muted-foreground">{emptyText}</p>
+      )}
+      {!canEdit && reauthHint && connections.some((c) => c.needsReauth) && (
+        <p className="text-xs text-muted-foreground">{reauthHint}</p>
+      )}
+      {canEdit && canConnect && missingProviders.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {missingProviders.map((provider) => (
+            <Button key={provider} variant="outline" onClick={() => onConnect(provider)} disabled={connecting}>
+              {provider === "gmail" ? <GmailIcon className="size-4" /> : <OutlookIcon className="size-4" />}
+              {connecting ? "Redirecting…" : `Connect ${provider === "gmail" ? "Google" : "Outlook"}`}
+            </Button>
+          ))}
+        </div>
+      )}
+      {canEdit && canConnect && missingProviders.includes("outlook") && (
+        <p className="text-xs text-muted-foreground">
+          Outlook works with Microsoft 365 work accounts and personal Outlook or Hotmail accounts.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function ConnectionsSection({
   organization,
   canEdit,
+  userId,
   inboxConnections,
   calendarConnections,
   error,
@@ -742,24 +853,25 @@ function ConnectionsSection({
   onSaveTimezone,
 }: {
   organization: Organization | null;
-  // The firm's mailboxes serve every client; only admins connect or
-  // disconnect them (the backend refuses members too).
+  // The firm mailbox serves every client; only admins connect or disconnect
+  // it (the backend refuses members too). Everyone manages their own.
   canEdit: boolean;
+  userId: string | null;
   inboxConnections: InboxConnection[] | null;
   calendarConnections: CalendarConnection[] | null;
   error: string | null;
   connecting: boolean;
   deletingId: number | null;
   savingTimezone: boolean;
-  onConnect: (provider: MailProvider) => void;
+  onConnect: (provider: MailProvider, mailbox: MailboxKind) => void;
   onDelete: (connection: MergedConnection) => void;
   onSaveTimezone: (timezone: string) => void;
 }) {
   const loaded = inboxConnections !== null && calendarConnections !== null;
   const merged = loaded ? mergeConnections(inboxConnections!, calendarConnections!) : [];
-  const missingProviders = loaded
-    ? (["gmail", "outlook"] as const).filter((provider) => !merged.some((c) => c.provider === provider))
-    : [];
+  const yours = merged.filter((c) => c.ownerUserId !== null && c.ownerUserId === userId);
+  const firm = merged.filter((c) => c.ownerUserId === null);
+  const teammates = merged.filter((c) => c.ownerUserId !== null && c.ownerUserId !== userId);
   // Every IANA name the browser knows; matches the backend's own
   // zoneinfo.available_timezones() check without bundling timezone data.
   const timezones = useMemo(() => {
@@ -769,92 +881,64 @@ function ConnectionsSection({
       return [];
     }
   }, []);
+  const common = { connecting, deletingId, onDelete };
 
   return (
-    <Panel title="Connections" meta={canEdit ? "Mail and calendar" : "Mail and calendar · Admins can change this"}>
+    <Panel title="Connections" meta="Mail and calendar">
       {error && <p className="text-sm text-destructive">{error}</p>}
       <div className="flex flex-col">
         <SettingRow
-          label="Mailboxes"
-          description="Compozor reads and replies to client email here, and proposes meeting times from the same account's calendar."
+          label="Your mailbox"
+          description="Clients assigned to you are emailed from here, and meetings go on this account's calendar."
         >
           {!loaded ? (
             <Skeleton className="h-14 w-full rounded-lg" />
           ) : (
-            <div className="flex flex-col gap-3">
-              {merged.length > 0 ? (
-                <ul className="flex flex-col divide-y divide-border/60 rounded-lg ring-1 ring-foreground/10">
-                  {merged.map((conn) => {
-                    const id = conn.inboxId ?? conn.calendarId;
-                    return (
-                      <li key={`${conn.provider}:${conn.email}`} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
-                        {conn.provider === "outlook" ? (
-                          <OutlookIcon className="size-5 shrink-0 text-foreground" />
-                        ) : (
-                          <GmailIcon className="size-5 shrink-0" />
-                        )}
-                        <div className="flex min-w-0 flex-1 flex-col">
-                          <span className="truncate font-medium">{conn.email}</span>
-                          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                            {conn.provider === "outlook" ? "Outlook" : "Google"}
-                            <span aria-hidden className="text-muted-foreground/50">·</span>
-                            {conn.needsReauth ? (
-                              <span className="inline-flex items-center gap-1.5 text-destructive">
-                                <span className="size-1.5 rounded-full bg-destructive" />
-                                Needs reconnecting
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1.5">
-                                <span className="size-1.5 rounded-full bg-success" />
-                                Connected
-                              </span>
-                            )}
-                          </span>
-                        </div>
-                        {canEdit && <div className="flex items-center gap-1">
-                          {conn.needsReauth && (
-                            <Button variant="outline" size="sm" disabled={connecting} onClick={() => onConnect(conn.provider)}>
-                              {connecting ? "Redirecting…" : "Reconnect"}
-                            </Button>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-muted-foreground"
-                            disabled={deletingId === id}
-                            onClick={() => onDelete(conn)}
-                          >
-                            {deletingId === id ? "Removing…" : "Disconnect"}
-                          </Button>
-                        </div>}
-                      </li>
-                    );
-                  })}
-                </ul>
-              ) : (
-                <p className="text-muted-foreground">Nothing connected yet.</p>
-              )}
-              {!canEdit && merged.some((c) => c.needsReauth) && (
-                <p className="text-xs text-muted-foreground">Ask a firm admin to reconnect this mailbox.</p>
-              )}
-              {canEdit && missingProviders.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {missingProviders.map((provider) => (
-                    <Button key={provider} variant="outline" onClick={() => onConnect(provider)} disabled={connecting}>
-                      {provider === "gmail" ? <GmailIcon className="size-4" /> : <OutlookIcon className="size-4" />}
-                      {connecting ? "Redirecting…" : `Connect ${provider === "gmail" ? "Google" : "Outlook"}`}
-                    </Button>
-                  ))}
-                </div>
-              )}
-              {canEdit && missingProviders.includes("outlook") && (
-                <p className="text-xs text-muted-foreground">
-                  Outlook works with Microsoft 365 work accounts and personal Outlook or Hotmail accounts.
-                </p>
-              )}
-            </div>
+            <MailboxList
+              {...common}
+              connections={yours}
+              canEdit
+              canConnect
+              single
+              emptyText="Not connected. Your clients are emailed from the firm mailbox."
+              onConnect={(provider) => onConnect(provider, "personal")}
+            />
           )}
         </SettingRow>
+        <SettingRow
+          label="Firm mailbox"
+          description={
+            canEdit
+              ? "Compozor reads and replies to client email here when a client has no assigned staff member with their own mailbox."
+              : "Used for clients with no assigned staff member. Admins can change this."
+          }
+        >
+          {!loaded ? (
+            <Skeleton className="h-14 w-full rounded-lg" />
+          ) : (
+            <MailboxList
+              {...common}
+              connections={firm}
+              canEdit={canEdit}
+              canConnect={canEdit}
+              emptyText="Nothing connected yet."
+              reauthHint="Ask a firm admin to reconnect this mailbox."
+              onConnect={(provider) => onConnect(provider, "firm")}
+            />
+          )}
+        </SettingRow>
+        {canEdit && teammates.length > 0 && (
+          <SettingRow label="Team mailboxes" description="Mailboxes your staff connected for their own clients.">
+            <MailboxList
+              {...common}
+              connections={teammates}
+              canEdit
+              canConnect={false}
+              emptyText=""
+              onConnect={() => undefined}
+            />
+          </SettingRow>
+        )}
 
         <SettingRow
           label="Timezone"
@@ -940,11 +1024,11 @@ export default function SettingsPage() {
   };
 
   // One click grants both mail and calendar scopes together.
-  const onConnect = async (provider: MailProvider) => {
+  const onConnect = async (provider: MailProvider, mailbox: MailboxKind) => {
     setConnecting(true);
     setErrors((prev) => ({ ...prev, connections: null }));
     try {
-      const { authorization_url } = await (provider === "outlook" ? getOutlookConnectUrl() : getGmailConnectUrl());
+      const { authorization_url } = await (provider === "outlook" ? getOutlookConnectUrl(mailbox) : getGmailConnectUrl(mailbox));
       window.location.href = authorization_url;
     } catch (e) {
       setErrors((prev) => ({ ...prev, connections: errorMessage(e) }));
@@ -972,6 +1056,7 @@ export default function SettingsPage() {
 
   const current = org ?? null;
   const isAdmin = current?.current_user_role === "admin";
+  const { userId } = useAuth();
 
   return (
     <div className="mx-auto flex w-full max-w-[96rem] flex-col gap-8">
@@ -1051,6 +1136,7 @@ export default function SettingsPage() {
             <ConnectionsSection
               organization={current}
               canEdit={isAdmin}
+              userId={userId ?? null}
               inboxConnections={connections ?? null}
               calendarConnections={calendarConnections ?? null}
               error={connectionsError}
