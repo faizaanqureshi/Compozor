@@ -423,7 +423,10 @@ and workflow output; the reminder row and workflow steps are hidden. On phones
 the "How it works" tabs unroll into a scrolling Collect → Check → Prepare
 sequence, each step showing its outcome with the shared `*Example` card bodies
 from `landing-story.tsx`. Wider screens keep the interactive tabs; edit the
-shared bodies so both stay in sync. Phone section titles are all Fraunces.
+shared bodies so both stay in sync. An example switcher above the walkthrough
+(bookkeeping, personal tax, immigration, year-end) swaps the client, documents,
+correction and output together; the fictional data lives in
+`components/landing-story-examples.ts`. Phone section titles are all Fraunces.
 Report/practice cards drop decorative micro-labels and footers on phones but
 keep their fictional-data labels. The nav uses `public/compozor-wordmark.png`
 (lowercase sans lockup, #122023, cropped from the brand export). Give mobile navigation and report tabs
