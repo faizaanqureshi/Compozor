@@ -53,6 +53,8 @@ export interface UploadLinkInfo {
   organization_name: string;
   // Server-calculated portal state; absent on older API versions.
   portal?: PortalBootstrap | null;
+  supported_extensions: string[];
+  supported_formats_description: string;
 }
 
 export interface UploadBatchCreated {
@@ -72,8 +74,12 @@ export interface UploadItemStatusOut {
   filename: string;
   status:
     | "awaiting_upload"
-    | "uploaded"
     | "queued"
+    | "scanning"
+    | "cleared"
+    | "rejected"
+    | "canceled"
+    | "submitted"
     | "processing"
     | "completed"
     | "failed";
@@ -133,9 +139,14 @@ export const completeUploadItem = (
     { method: "POST" }
   );
 
-export const finalizeUploadBatch = (token: string, batchId: number) =>
+export const removeUploadItem = (token: string, batchId: number, itemId: number) =>
+  request<void>(`/public/uploads/${token}/batches/${batchId}/items/${itemId}`, {
+    method: "DELETE",
+  });
+
+export const finalizeUploadBatch = (token: string, batchId: number, itemIds: number[]) =>
   request<void>(`/public/uploads/${token}/batches/${batchId}/finalize`, {
-    method: "POST",
+    ...json("POST", { item_ids: itemIds }),
   });
 
 export const getUploadBatchStatus = (token: string, batchId: number) =>
@@ -145,11 +156,11 @@ let directUploadsUnavailable = false;
 
 export async function uploadClientFile(
   token: string, batchId: number, item: InitUploadItemResult,
-  file: File, onProgress: (fraction: number) => void
+  file: File, onProgress: (fraction: number) => void, signal?: AbortSignal
 ): Promise<void> {
   if (!directUploadsUnavailable) {
     try {
-      await uploadFileToR2(item.upload_url, item.headers, file, onProgress);
+      await uploadFileToR2(item.upload_url, item.headers, file, onProgress, signal);
       return;
     } catch {
       // Avoid repeating a failed storage preflight for every remaining file.
@@ -158,7 +169,7 @@ export async function uploadClientFile(
   }
   await request<void>(`/public/uploads/${token}/batches/${batchId}/items/${item.item_id}/content`, {
     method: "PUT", body: file,
-    headers: { "Content-Type": file.type || "application/octet-stream" },
+    headers: { "Content-Type": file.type || "application/octet-stream" }, signal,
   });
   onProgress(1);
 }
@@ -170,7 +181,8 @@ export function uploadFileToR2(
   uploadUrl: string,
   headers: Record<string, string>,
   file: File,
-  onProgress: (fraction: number) => void
+  onProgress: (fraction: number) => void,
+  signal?: AbortSignal
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -186,6 +198,12 @@ export function uploadFileToR2(
       else reject(new Error(`Upload failed (${xhr.status})`));
     };
     xhr.onerror = () => reject(new Error("Upload failed (network error)"));
+    xhr.onabort = () => reject(new DOMException("Upload canceled", "AbortError"));
+    if (signal?.aborted) {
+      reject(new DOMException("Upload canceled", "AbortError"));
+      return;
+    }
+    signal?.addEventListener("abort", () => xhr.abort(), { once: true });
     xhr.send(file);
   });
 }

@@ -33,15 +33,9 @@ import {
   getUploadBatchStatus,
   getUploadLinkInfo,
   initUploadItem,
+  removeUploadItem,
   uploadClientFile,
 } from "@/lib/public-upload-api";
-
-// Same set of extensions the authenticated document vault accepts (see
-// app/clients/[id]/page.tsx's DocumentVaultCard) - this feature is another
-// entry point into the same document pipeline, not a separate file-type
-// policy.
-const ACCEPT =
-  ".pdf,.csv,.tsv,.xls,.xlsx,.xlsm,.ods,.rtf,.docx,.odt,.pptx,.md,.txt,.json,.xml,.html,.htm,.png,.jpg,.jpeg,.gif,.webp,.tif,.tiff,.bmp";
 
 const UPLOAD_CONCURRENCY = 5;
 
@@ -64,6 +58,7 @@ interface QueueEntry {
   // Filled in once polling picks up this item's server-side status.
   serverStatus: UploadItemStatusOut["status"] | null;
   serverError: string | null;
+  abortController: AbortController | null;
 }
 
 async function runWithConcurrency<T>(
@@ -101,6 +96,7 @@ export default function PublicUploadPage({
   const [finalized, setFinalized] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const batchIdRef = useRef<number | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -140,7 +136,7 @@ export default function PublicUploadPage({
     refreshChecklist();
     // The checklist updates as background processing matches uploaded
     // files to requirements - a light, independent poll (not tied to the
-    // upload-batch poll below, which only starts after finalize) keeps it
+    // upload-batch poll below) keeps it
     // current for as long as the client has the page open, per "the
     // simplest sensible refresh mechanism" rather than adding sockets.
     const id = setInterval(refreshChecklist, 8000);
@@ -168,18 +164,31 @@ export default function PublicUploadPage({
 
   const uploadOne = useCallback(
     async (entry: QueueEntry, id: number) => {
-      updateEntry(entry.key, { clientPhase: "uploading", clientError: null });
+      const abortController = new AbortController();
+      updateEntry(entry.key, { clientPhase: "uploading", clientError: null, abortController });
+      let itemId: number | null = null;
+      // A file removed before its server id reached the queue would otherwise stay
+      // on the server and block submission. Cancellation is idempotent.
+      const cancelIfRemoved = () => {
+        if (!abortController.signal.aborted || itemId === null) return false;
+        void removeUploadItem(token, id, itemId).catch(() => {});
+        return true;
+      };
       try {
         const init = await initUploadItem(token, id, entry.file);
+        itemId = init.item_id;
+        if (cancelIfRemoved()) return;
         updateEntry(entry.key, { itemId: init.item_id });
-        await uploadClientFile(token, id, init, entry.file, (fraction) =>
-          updateEntry(entry.key, { progress: fraction })
-        );
+        await uploadClientFile(token, id, init, entry.file,
+          (fraction) => updateEntry(entry.key, { progress: fraction }), abortController.signal);
         await completeUploadItem(token, id, init.item_id);
-        updateEntry(entry.key, { clientPhase: "uploaded", progress: 1 });
+        if (cancelIfRemoved()) return;
+        updateEntry(entry.key, { clientPhase: "uploaded", progress: 1, serverStatus: "queued", abortController: null });
       } catch (e) {
+        if (abortController.signal.aborted) { cancelIfRemoved(); return; }
         updateEntry(entry.key, {
           clientPhase: "failed",
+          abortController: null,
           clientError:
             e instanceof PublicUploadApiError ? e.message : "Upload failed. Please retry.",
         });
@@ -232,7 +241,7 @@ export default function PublicUploadPage({
       const rejected: QueueEntry[] = [];
       files.forEach((file, i) => {
         const key = `${Date.now()}-${i}-${file.name}`;
-        const base = { key, file, itemId: null, progress: 0, serverStatus: null, serverError: null } as const;
+        const base = { key, file, itemId: null, progress: 0, serverStatus: null, serverError: null, abortController: null } as const;
         if (file.size > MAX_UPLOAD_FILE_BYTES) {
           rejected.push({ ...base, clientPhase: "failed",
             clientError: `Exceeds the ${formatBytes(MAX_UPLOAD_FILE_BYTES)} per-file limit.` });
@@ -261,6 +270,7 @@ export default function PublicUploadPage({
           ...accepted.map((file, i) => ({
             key: `${Date.now()}-err-${i}-${file.name}`, file, itemId: null, clientPhase: "failed" as const,
             progress: 0, clientError: message, serverStatus: null, serverError: null,
+            abortController: null,
           })),
         ]);
         if (e instanceof PublicUploadApiError && e.status === 403) loadLinkInfo();
@@ -275,11 +285,13 @@ export default function PublicUploadPage({
         clientError: null,
         serverStatus: null,
         serverError: null,
+        abortController: null,
       }));
       setQueue((prev) => [...prev, ...entries]);
+      startPolling(id);
       await runWithConcurrency(entries, UPLOAD_CONCURRENCY, (entry) => uploadOne(entry, id));
     },
-    [ensureBatch, uploadOne, queue, loadLinkInfo]
+    [ensureBatch, uploadOne, queue, loadLinkInfo, startPolling]
   );
 
   const retryOne = useCallback(
@@ -291,20 +303,37 @@ export default function PublicUploadPage({
     [uploadOne]
   );
 
-  const removeOne = useCallback((entry: QueueEntry) => {
-    // A failed file that's been dropped from the queue no longer blocks
-    // completion - it was never uploaded, so there's nothing server-side
-    // to clean up (no item_id was ever confirmed for it).
+  const removeOne = useCallback(async (entry: QueueEntry) => {
+    entry.abortController?.abort();
     setQueue((prev) => prev.filter((e) => e.key !== entry.key));
-  }, []);
+    const id = batchIdRef.current;
+    if (id === null || entry.itemId === null) return;
+    try {
+      await removeUploadItem(token, id, entry.itemId);
+    } catch (error) {
+      setQueue((prev) => [...prev, { ...entry, abortController: null, clientPhase: "failed",
+        clientError: error instanceof PublicUploadApiError
+          ? error.message : "This file could not be removed. Please try again." }]);
+    }
+  }, [token]);
 
   const finishAndProcess = useCallback(async () => {
     const id = batchIdRef.current;
     if (id === null) return;
-    await finalizeUploadBatch(token, id);
-    setFinalized(true);
-    startPolling(id);
-  }, [token, startPolling]);
+    const itemIds = queue.flatMap((entry) => entry.itemId === null ? [] : [entry.itemId]);
+    setSubmitError(null);
+    try {
+      await finalizeUploadBatch(token, id, itemIds);
+      setQueue((prev) => prev.map((entry) => ({ ...entry, serverStatus: "submitted" })));
+      setFinalized(true);
+      startPolling(id);
+    } catch (error) {
+      setSubmitError(error instanceof PublicUploadApiError
+        ? error.message : "The files could not be submitted. Please try again.");
+      // A conflict can mean files were sent back for another check; refresh their status.
+      if (error instanceof PublicUploadApiError && error.status === 409) startPolling(id);
+    }
+  }, [token, startPolling, queue]);
 
   const onUploadMore = useCallback(() => {
     // Start a genuinely new batch, not reopen the finalized one - the old
@@ -321,16 +350,16 @@ export default function PublicUploadPage({
     batchIdRef.current = null;
     setQueue([]);
     setFinalized(false);
+    setSubmitError(null);
   }, []);
 
   const isUploading = queue.some((e) => e.clientPhase === "uploading" || e.clientPhase === "pending");
-  const hasUnresolvedFailures = queue.some((e) => e.clientPhase === "failed");
-  // Centralized completion gate: every file must have actually succeeded -
-  // a failed file only stops blocking once it's retried to success or
-  // explicitly removed, never just because time passed.
-  const canCompleteUpload = queue.length > 0 && !isUploading && !hasUnresolvedFailures;
-  const uploadedCount = queue.filter((e) => e.clientPhase === "uploaded").length;
-  const failedCount = queue.filter((e) => e.clientPhase === "failed").length;
+  const hasUnresolvedFailures = queue.some((e) => e.clientPhase === "failed" || e.serverStatus === "failed" || e.serverStatus === "rejected");
+  const securityPending = queue.some((e) => e.clientPhase === "uploaded" && e.serverStatus !== "cleared");
+  const canCompleteUpload = queue.length > 0 && !isUploading && !securityPending && !hasUnresolvedFailures
+    && queue.every((entry) => entry.itemId !== null && entry.serverStatus === "cleared");
+  const readyCount = queue.filter((e) => e.serverStatus === "cleared").length;
+  const failedCount = queue.filter((e) => e.clientPhase === "failed" || e.serverStatus === "failed" || e.serverStatus === "rejected").length;
 
   const onConfirmDone = useCallback(async () => {
     // Re-check rather than trust the dialog having been reachable only in
@@ -500,7 +529,7 @@ export default function PublicUploadPage({
                     ref={fileInputRef}
                     type="file"
                     multiple
-                    accept={ACCEPT}
+                    accept={linkInfo && !("error" in linkInfo) ? linkInfo.supported_extensions.join(",") : undefined}
                     className="hidden"
                     onChange={(e) => {
                       addFiles(Array.from(e.target.files ?? []));
@@ -515,7 +544,11 @@ export default function PublicUploadPage({
                       <span className="font-medium">Choose files</span>
                       <span className="text-muted-foreground"> or drag them here</span>
                     </p>
-                    <p className="text-xs text-muted-foreground">PDFs, photos, spreadsheets and documents. Add as many as you need.</p>
+                    <p className="text-xs text-muted-foreground">
+                      {linkInfo && !("error" in linkInfo)
+                        ? linkInfo.supported_formats_description
+                        : "PDFs, photos, spreadsheets and documents. Add as many as you need."}
+                    </p>
                   </div>
                 </div>
               </>
@@ -525,14 +558,15 @@ export default function PublicUploadPage({
               <div className="flex flex-col gap-3">
                 <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
                   <span className="tabular-nums">
-                    {uploadedCount} of {queue.length} uploaded
+                    {readyCount} of {queue.length} ready to submit
                     {failedCount > 0 && <span className="text-destructive"> · {failedCount} failed</span>}
                   </span>
                 </div>
-                <ProgressRule value={uploadedCount} total={queue.length} className="w-full" />
+                <ProgressRule value={readyCount} total={queue.length} className="w-full" />
                 <ul className="flex max-h-96 flex-col divide-y divide-border/60 overflow-y-auto rounded-lg ring-1 ring-foreground/10">
                   {queue.map((entry) => (
-                    <QueueRow key={entry.key} entry={entry} onRetry={() => retryOne(entry)} onRemove={() => removeOne(entry)} />
+                    <QueueRow key={entry.key} entry={entry} canRemove={!finalized}
+                      onRetry={() => retryOne(entry)} onRemove={() => removeOne(entry)} />
                   ))}
                 </ul>
               </div>
@@ -544,15 +578,18 @@ export default function PublicUploadPage({
                   {isUploading
                     ? "Keep this page open until uploading finishes."
                     : hasUnresolvedFailures
-                      ? "Retry or remove the files that failed before sending."
-                      : "Everything's uploaded. Send when you're ready."}
+                      ? "Remove or replace files that couldn’t be accepted."
+                      : securityPending
+                        ? "Files are still being checked. You can wait or remove a file."
+                        : "Everything is ready. Submit when you’re satisfied with the list."}
                 </span>
                 <Button disabled={!canCompleteUpload} onClick={() => setConfirmOpen(true)}>
                   {isUploading && <Loader2 className="animate-spin" />}
-                  {isUploading ? "Uploading…" : `Send to ${firm ?? "your firm"}`}
+                  {isUploading ? "Uploading…" : `Submit to ${firm ?? "your firm"}`}
                 </Button>
               </div>
             )}
+            {submitError && <p role="alert" className="text-xs text-destructive">{submitError}</p>}
           </section>
         </div>
       )}
@@ -571,7 +608,7 @@ export default function PublicUploadPage({
             <Button variant="outline" onClick={() => setConfirmOpen(false)}>
               Go back
             </Button>
-            <Button onClick={onConfirmDone}>Send files</Button>
+            <Button onClick={onConfirmDone}>Submit files</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -582,22 +619,30 @@ export default function PublicUploadPage({
 // Words a client understands for each stage, from picking a file to it being
 // checked on the firm's side.
 function entryStatus(entry: QueueEntry): { label: string; tone: "muted" | "done" | "failed" } {
-  if (entry.clientPhase === "failed" || entry.serverStatus === "failed") return { label: "Failed", tone: "failed" };
+  if (entry.clientPhase === "failed" || entry.serverStatus === "failed" || entry.serverStatus === "rejected") {
+    return { label: "Upload failed", tone: "failed" };
+  }
   switch (entry.serverStatus) {
     case "completed":
       return { label: "Received", tone: "done" };
+    case "submitted":
     case "processing":
-      return { label: "Checking", tone: "muted" };
+      return { label: "Submitted", tone: "done" };
+    case "cleared":
+      return { label: "Ready to submit", tone: "done" };
+    case "scanning":
     case "queued":
-      return { label: "Queued", tone: "muted" };
+      return { label: "Checking file", tone: "muted" };
+    case "awaiting_upload":
+      return { label: "Uploading", tone: "muted" };
   }
   switch (entry.clientPhase) {
     case "pending":
-      return { label: "Waiting", tone: "muted" };
+      return { label: "Uploading", tone: "muted" };
     case "uploading":
-      return { label: `${Math.round(entry.progress * 100)}%`, tone: "muted" };
+      return { label: `Uploading ${Math.round(entry.progress * 100)}%`, tone: "muted" };
     default:
-      return { label: "Uploaded", tone: "done" };
+      return { label: "Checking file", tone: "muted" };
   }
 }
 
@@ -606,7 +651,9 @@ function formatFileSize(bytes: number) {
   return `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
 
-function QueueRow({ entry, onRetry, onRemove }: { entry: QueueEntry; onRetry: () => void; onRemove: () => void }) {
+function QueueRow({ entry, canRemove, onRetry, onRemove }: {
+  entry: QueueEntry; canRemove: boolean; onRetry: () => void; onRemove: () => void;
+}) {
   const status = entryStatus(entry);
   const failedLocally = entry.clientPhase === "failed";
   const error = entry.clientError ?? entry.serverError;
@@ -627,16 +674,18 @@ function QueueRow({ entry, onRetry, onRemove }: { entry: QueueEntry; onRetry: ()
           {status.tone === "done" && <Check className="size-3.5 text-success" />}
           {status.label}
         </span>
-        {failedLocally && (
-          <div className="-mr-1.5 flex shrink-0 items-center">
+        {(canRemove || failedLocally) && <div className="-mr-1.5 flex shrink-0 items-center">
+          {failedLocally && (
             <Button variant="ghost" size="icon-sm" onClick={onRetry} aria-label={`Retry ${entry.file.name}`}>
               <RotateCcw className="size-3.5" />
             </Button>
-            <Button variant="ghost" size="icon-sm" onClick={onRemove} aria-label={`Remove ${entry.file.name}`}>
-              <X className="size-3.5" />
-            </Button>
-          </div>
-        )}
+          )}
+          {canRemove && (
+              <Button variant="ghost" size="icon-sm" onClick={onRemove} aria-label={`Remove ${entry.file.name}`}>
+                <X className="size-3.5" />
+              </Button>
+          )}
+        </div>}
       </div>
       {entry.clientPhase === "uploading" && (
         <ProgressRule value={entry.progress} total={1} className="ml-7 w-auto" />
