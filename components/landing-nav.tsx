@@ -20,6 +20,7 @@ const links = [
   { href: "/#how-it-works", label: "How it works" },
   { href: "/#workflows", label: "Workflows" },
   { href: "/#for-firms", label: "For firms" },
+  { href: "/pricing", label: "Pricing" },
 ];
 
 // The wordmark's four tiles and its name, each clipped from the same image

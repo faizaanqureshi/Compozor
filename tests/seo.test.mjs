@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { publicPageMetadata, publicSitemap, SITE_URL, SITE_STRUCTURED_DATA } from "../lib/seo.ts";
 
-const publicPaths = ["/", "/waitlist", "/privacy", "/terms", "/cookies"];
+const publicPaths = ["/", "/pricing", "/waitlist", "/privacy", "/terms", "/cookies"];
 
 test("sitemap only includes canonical public pages with matching metadata", () => {
   const sitemap = publicSitemap();

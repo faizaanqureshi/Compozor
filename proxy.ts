@@ -9,6 +9,7 @@ const isPublicRoute = createRouteMatcher([
   "/waitlist",
   "/waitlist/(.*)",
   "/demo",
+  "/pricing",
   "/upload(.*)",
   "/privacy",
   "/terms",
