@@ -13,6 +13,9 @@ type Check = {
   orgId: string | null | undefined;
   attempt: number;
   completed?: boolean;
+  // Firm setup is the admin's job. A member who arrives before it is done
+  // waits rather than being shown (and failing to save) the firm form.
+  waitingForAdmin?: boolean;
   error?: string;
 };
 
@@ -52,7 +55,11 @@ export function OnboardingGate({ children }: { children: React.ReactNode }) {
           await clerk.setActive({ organization: org.clerk_org_id });
           return;
         }
-        if (!cancelled) setCheck({ userId, orgId, attempt, completed: !!org.onboarding_completed_at });
+        const completed = !!org.onboarding_completed_at;
+        if (!cancelled) setCheck({
+          userId, orgId, attempt, completed,
+          waitingForAdmin: !completed && org.current_user_role !== "admin",
+        });
       } catch (error) {
         if (!orgId && error instanceof ApiError && error.code === "select_organization") {
           // Invited staff with no firm selected: open the firm they joined.
@@ -71,7 +78,7 @@ export function OnboardingGate({ children }: { children: React.ReactNode }) {
   }, [isLoaded, isSignedIn, userId, orgId, clerk, pathname, attempt, router]);
 
   useEffect(() => {
-    if (!isSignedIn || !current || current.completed === undefined) return;
+    if (!isSignedIn || !current || current.completed === undefined || current.waitingForAdmin) return;
     const destination = onboardingDestination(current.completed, pathname, window.location.search);
     if (destination) router.replace(destination);
   }, [current, isSignedIn, pathname, router]);
@@ -81,6 +88,18 @@ export function OnboardingGate({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-6">
       <p role="alert" className="text-sm text-destructive">{current.error}</p>
       <Button onClick={() => setAttempt((value) => value + 1)}>Try again</Button>
+    </div>
+  );
+  if (current.waitingForAdmin) return (
+    <div className="flex min-h-screen flex-col items-center justify-center gap-3 p-6 text-center">
+      <h1 className="text-lg font-medium text-foreground">Your firm is still being set up</h1>
+      <p className="max-w-sm text-sm text-muted-foreground">
+        An admin at your firm needs to finish setup before you can start. Check back once they have.
+      </p>
+      <div className="mt-2 flex gap-2">
+        <Button variant="outline" onClick={() => void clerk.signOut({ redirectUrl: "/sign-in" })}>Sign out</Button>
+        <Button onClick={() => setAttempt((value) => value + 1)}>Check again</Button>
+      </div>
     </div>
   );
   if (onboardingDestination(!!current.completed, pathname, "")) return null;
