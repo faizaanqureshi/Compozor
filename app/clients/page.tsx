@@ -3,6 +3,8 @@ import { useAuth } from "@clerk/nextjs";
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { MAILBOX_RETURN_KEY } from "@/lib/mailbox-return";
 import useSWR from "swr";
 import { clientsKey, emailLogKey } from "@/lib/swr-keys";
 import {
@@ -168,6 +170,7 @@ export default function ClientsPage() {
 
   const [reminderState, setReminderState] = useState<Record<number, "sending">>({});
 
+  const router = useRouter();
   const [gmailBanner, setGmailBanner] = useState<
     { type: "success" | "error"; message: string } | null
   >(null);
@@ -187,6 +190,21 @@ export default function ClientsPage() {
     const reason = params.get("reason");
     window.history.replaceState({}, "", window.location.pathname);
 
+    // Started from Settings? Show the result there instead of here.
+    let backToSettings = false;
+    try {
+      backToSettings = sessionStorage.getItem(MAILBOX_RETURN_KEY) === "1";
+      sessionStorage.removeItem(MAILBOX_RETURN_KEY);
+    } catch { /* storage blocked: show the banner here */ }
+    const report = (type: "success" | "error", message: string) => {
+      if (backToSettings) {
+        const q = new URLSearchParams({ mailbox: type === "success" ? "connected" : "error", message });
+        router.replace(`/settings?${q}`);
+      } else {
+        setGmailBanner({ type, message });
+      }
+    };
+
     (async () => {
       if (gmailStatus === "connected") {
         try {
@@ -197,24 +215,15 @@ export default function ClientsPage() {
               )
             : connections[0];
           if (match && provider === "gmail") await watchInboxConnection(match.id);
-          setGmailBanner({
-            type: "success",
-            message: `Connected ${email ?? "your mailbox"}.`,
-          });
+          report("success", `Connected ${email ?? "your mailbox"}.`);
         } catch (e) {
-          setGmailBanner({
-            type: "error",
-            message: e instanceof ApiError ? e.message : String(e),
-          });
+          report("error", e instanceof ApiError ? e.message : String(e));
         }
       } else if (gmailStatus === "error") {
-        setGmailBanner({
-          type: "error",
-          message: reason ?? "Failed to connect mailbox.",
-        });
+        report("error", reason ?? "Failed to connect mailbox.");
       }
     })();
-  }, []);
+  }, [router]);
 
   const fetchError = clientsError
     ? clientsError instanceof ApiError

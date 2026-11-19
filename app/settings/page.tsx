@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
 import { useAuth, useClerk, useUser } from "@clerk/nextjs";
@@ -28,6 +28,7 @@ import {
   updateMyOrganization,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { MAILBOX_RETURN_KEY } from "@/lib/mailbox-return";
 import { extractPhoneDigits, formatPhoneDisplay, isValidPhoneDigits } from "@/lib/phone";
 import { PRACTICE_CATEGORIES, practiceCategoryForLabel } from "@/lib/practice-types";
 import { Button } from "@/components/ui/button";
@@ -990,6 +991,16 @@ export default function SettingsPage() {
     mutate: mutateCalendarConnections,
   } = useSWR(calendarConnectionsKey(), listCalendarConnections);
   const [connecting, setConnecting] = useState(false);
+  // Result of a mailbox connect started here, handed back by /clients.
+  const [connectNotice, setConnectNotice] = useState<{ ok: boolean; text: string } | null>(null);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get("mailbox");
+    if (!status) return;
+    setConnectNotice({ ok: status === "connected", text: params.get("message") ?? "" });
+    window.history.replaceState({}, "", `${window.location.pathname}#connections`);
+    document.getElementById("connections")?.scrollIntoView();
+  }, []);
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
   const loadError = orgFetchError ? errorMessage(orgFetchError) : null;
@@ -1029,6 +1040,9 @@ export default function SettingsPage() {
     setErrors((prev) => ({ ...prev, connections: null }));
     try {
       const { authorization_url } = await (provider === "outlook" ? getOutlookConnectUrl(mailbox) : getGmailConnectUrl(mailbox));
+      // The OAuth callback lands on /clients (which starts Gmail push);
+      // this tells it to bring the person back here afterwards.
+      try { sessionStorage.setItem(MAILBOX_RETURN_KEY, "1"); } catch { /* storage blocked: stay on /clients */ }
       window.location.href = authorization_url;
     } catch (e) {
       setErrors((prev) => ({ ...prev, connections: errorMessage(e) }));
@@ -1133,6 +1147,11 @@ export default function SettingsPage() {
             />
           </div>
           <div id="connections">
+            {connectNotice && (
+              <p role="status" className={cn("mb-3 text-sm", connectNotice.ok ? "text-muted-foreground" : "text-destructive")}>
+                {connectNotice.text}
+              </p>
+            )}
             <ConnectionsSection
               organization={current}
               canEdit={isAdmin}
