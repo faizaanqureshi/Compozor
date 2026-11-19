@@ -3,19 +3,19 @@ import test from "node:test";
 import { isCrawlablePage, isStandalonePublicPage } from "../lib/public-routes.ts";
 
 test("marketing and token-upload pages bypass app onboarding", () => {
-  for (const route of ["/", "/demo", "/waitlist", "/waitlist/confirmation", "/upload/client-token", "/sign-in", "/sign-in/factor-one", "/sign-up", "/sign-up/verify-email-address", "/privacy", "/terms", "/cookies"]) {
+  for (const route of ["/", "/demo", "/pricing", "/waitlist", "/waitlist/confirmation", "/upload/client-token", "/sign-in", "/sign-in/factor-one", "/sign-up", "/sign-up/verify-email-address", "/privacy", "/terms", "/cookies"]) {
     assert.equal(isStandalonePublicPage(route), true, route);
   }
 });
 
 test("public page matching does not exempt dashboard or lookalike routes", () => {
-  for (const route of [null, "/clients", "/workflows", "/onboarding", "/waitlist-admin", "/demo-admin", "/upload-admin", "/sign-in-admin", "/sign-up-admin"]) {
+  for (const route of [null, "/clients", "/workflows", "/onboarding", "/waitlist-admin", "/demo-admin", "/pricing-admin", "/upload-admin", "/sign-in-admin", "/sign-up-admin"]) {
     assert.equal(isStandalonePublicPage(route), false, String(route));
   }
 });
 
 test("indexed pages and crawler files skip Clerk's middleware", () => {
-  for (const route of ["/", "/waitlist", "/privacy", "/terms", "/cookies", "/robots.txt", "/sitemap.xml", "/opengraph-image"]) {
+  for (const route of ["/", "/pricing", "/waitlist", "/privacy", "/terms", "/cookies", "/robots.txt", "/sitemap.xml", "/opengraph-image"]) {
     assert.equal(isCrawlablePage(route), true, route);
   }
 });

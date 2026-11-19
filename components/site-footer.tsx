@@ -1,6 +1,7 @@
 import Link from "next/link";
 
-const legalLinks = [
+const footerLinks = [
+  { href: "/pricing", label: "Pricing" },
   { href: "/privacy", label: "Privacy Policy" },
   { href: "/terms", label: "Terms & Conditions" },
   { href: "/cookies", label: "Cookie Policy" },
@@ -14,7 +15,7 @@ export function SiteFooter() {
           © {new Date().getFullYear()} Compozor. All rights reserved.
         </p>
         <nav className="flex flex-wrap items-center justify-center gap-x-5 gap-y-1.5">
-          {legalLinks.map((link) => (
+          {footerLinks.map((link) => (
             <Link
               key={link.href}
               href={link.href}

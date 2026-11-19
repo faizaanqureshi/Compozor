@@ -12,6 +12,11 @@ export const PUBLIC_SEARCH_PAGES = {
     title: "Compozor | AI Document Collection & Workflow Automation",
     description: SITE_DESCRIPTION,
   },
+  "/pricing": {
+    title: "Pricing | Compozor",
+    description:
+      "Compozor plans for professional firms, from Solo to Enterprise. Every plan includes every feature, workflows, Ask and generous usage, billed monthly.",
+  },
   "/waitlist": {
     title: "Join the Waitlist | Compozor",
     description:
@@ -71,6 +76,7 @@ export function publicPageMetadata(
 // changes; a timestamp stamped on every build would teach search engines to ignore it.
 const PAGE_LAST_MODIFIED: Record<keyof typeof PUBLIC_SEARCH_PAGES, string> = {
   "/": "2026-09-28",
+  "/pricing": "2026-11-18",
   "/waitlist": "2026-09-28",
   "/privacy": "2026-09-28",
   "/terms": "2026-09-28",
