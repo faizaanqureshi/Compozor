@@ -2,7 +2,7 @@
 
 import { Fragment } from "react";
 import Link from "next/link";
-import { BookOpen, ClipboardList, FileText, Mail, User, Workflow } from "lucide-react";
+import { BookOpen, ClipboardList, FileText, Globe, Mail, User, Workflow } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { AskCitation } from "@/lib/ask";
 import { parseAnswer, type AnswerSegment } from "@/lib/ask-answer";
@@ -15,22 +15,29 @@ const KIND_ICON = {
   run: Workflow,
   questionnaire: ClipboardList,
   knowledge: BookOpen,
+  web: Globe,
 } as const;
 
+const CHIP =
+  "mr-px inline-flex h-5 max-w-[13rem] translate-y-[-1px] items-center gap-1 rounded-md bg-muted px-1.5 align-middle text-[0.6875rem] leading-none font-medium text-muted-foreground transition-colors hover:bg-accent/12 hover:text-accent focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:outline-none";
+
 // A source the answer relied on, inline right after the fact it supports.
-// Links to the exact place on the client's page (document, email, run).
+// Links to the exact place on the client's page (document, email, run), or
+// for a web page, opens it in a new tab (the chip shows the page title, the
+// tooltip the site it's on).
 export function AskCitationChip({ citation, onNavigate }: { citation: AskCitation; onNavigate?: () => void }) {
   const Icon = KIND_ICON[citation.kind] ?? FileText;
   const showClient = citation.kind !== "client";
+  const external = citation.kind === "web" && /^https?:\/\//.test(citation.href);
   return (
     <Tooltip>
       <TooltipTrigger
         render={
-          <Link
-            href={citation.href}
-            onClick={onNavigate}
-            className="mr-px inline-flex h-5 max-w-[13rem] translate-y-[-1px] items-center gap-1 rounded-md bg-muted px-1.5 align-middle text-[0.6875rem] leading-none font-medium text-muted-foreground transition-colors hover:bg-accent/12 hover:text-accent focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:outline-none"
-          />
+          external ? (
+            <a href={citation.href} target="_blank" rel="noopener noreferrer" className={CHIP} />
+          ) : (
+            <Link href={citation.href} onClick={onNavigate} className={CHIP} />
+          )
         }
       >
         <Icon className="size-3 shrink-0" strokeWidth={1.75} />

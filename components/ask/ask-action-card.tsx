@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import {
   BadgeCheck,
+  BookOpen,
   Check,
   FilePlus2,
   ListChecks,
@@ -34,6 +35,7 @@ import {
   type AskActionKind,
   type AskActionResult,
   type AskEmailPreview,
+  type AskKnowledgePreview,
   type AskMessage,
   type AskPackagePreview,
 } from "@/lib/ask";
@@ -55,6 +57,7 @@ const ICONS: Record<AskActionKind, LucideIcon> = {
   request_document: FilePlus2,
   create_package: Package,
   assign_package: Package,
+  add_knowledge: BookOpen,
 };
 
 // What confirming does, in one sentence, shown in the confirmation dialog.
@@ -83,6 +86,8 @@ function effect(action: AskAction): string {
         : "Creates the package. Nothing is assigned to clients yet.";
     case "assign_package":
       return "Adds the package's documents to each client's checklist.";
+    case "add_knowledge":
+      return "Saves these to Knowledge as internal-only, with their sources. You can share them with clients from Knowledge.";
     default:
       return "";
   }
@@ -91,6 +96,7 @@ function effect(action: AskAction): string {
 function resultHref(result: AskActionResult): string | null {
   if (result.package_id) return "/packages";
   if (result.workflow_id) return `/workflows/${result.workflow_id}`;
+  if (result.knowledge_entry_id) return "/knowledge";
   if (!result.client_id) return null;
   if (result.email_id) return `/clients/${result.client_id}?email=${result.email_id}#conversation`;
   if (result.run_id) return `/clients/${result.client_id}?run=${result.run_id}#workflows`;
@@ -189,7 +195,7 @@ export function AskActionCard({
       )}
 
       <Dialog open={confirming} onOpenChange={(open) => !running && setConfirming(open)}>
-        <DialogContent className={cn(isEmail || action.kind === "create_package" ? "sm:max-w-lg" : "sm:max-w-md")}>
+        <DialogContent className={cn(isEmail || action.kind === "create_package" || action.kind === "add_knowledge" ? "sm:max-w-lg" : "sm:max-w-md")}>
           <DialogHeader>
             <DialogTitle className="pr-8">{action.title}</DialogTitle>
             <DialogDescription>
@@ -222,6 +228,8 @@ export function AskActionCard({
             )
           ) : action.kind === "create_package" ? (
             <PackagePreview preview={action.preview as AskPackagePreview} full />
+          ) : action.kind === "add_knowledge" ? (
+            <KnowledgePreview preview={action.preview as AskKnowledgePreview} full />
           ) : (
             <ul className="flex max-h-64 flex-col gap-1.5 overflow-y-auto text-sm">
               {action.targets.map((t, i) => (
@@ -284,6 +292,9 @@ function ActionPreview({
   }
   if (action.kind === "create_package" && action.preview) {
     return <PackagePreview preview={action.preview as AskPackagePreview} />;
+  }
+  if (action.kind === "add_knowledge" && action.preview) {
+    return <KnowledgePreview preview={action.preview as AskKnowledgePreview} />;
   }
   const shown = action.targets.slice(0, VISIBLE_TARGETS);
   const hidden = action.targets.length - shown.length;
@@ -363,5 +374,35 @@ function PackagePreview({ preview, full }: { preview: AskPackagePreview; full?: 
         </div>
       )}
     </div>
+  );
+}
+
+// What will be saved to Knowledge: each entry's title, text and the page it
+// came from, so staff can check the source before confirming.
+function KnowledgePreview({ preview, full }: { preview: AskKnowledgePreview; full?: boolean }) {
+  return (
+    <ul
+      className={cn(
+        "flex flex-col divide-y divide-border/60 rounded-lg border border-border/60 text-sm",
+        full && "max-h-[22rem] overflow-y-auto",
+      )}
+    >
+      {preview.entries.map((entry) => (
+        <li key={entry.title} className="flex flex-col gap-1 px-3 py-2">
+          <span className="font-medium">{entry.title}</span>
+          <span className={cn("whitespace-pre-line text-muted-foreground", !full && "line-clamp-2")}>{entry.body}</span>
+          {entry.source_url && (
+            <a
+              href={entry.source_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="truncate text-xs text-accent underline-offset-4 hover:underline"
+            >
+              {entry.source_title || entry.source_url}
+            </a>
+          )}
+        </li>
+      ))}
+    </ul>
   );
 }

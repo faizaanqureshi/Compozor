@@ -3,7 +3,7 @@
 import { API_BASE_URL, ApiError, getAuthToken, json, request, responseError } from "./api";
 import { readEventStream } from "./event-stream";
 
-export type AskCitationKind = "client" | "document" | "email" | "run" | "questionnaire" | "knowledge";
+export type AskCitationKind = "client" | "document" | "email" | "run" | "questionnaire" | "knowledge" | "web";
 
 export interface AskCitation {
   key: string;
@@ -40,6 +40,7 @@ export interface AskActionResult {
   item_id?: number;
   package_id?: number;
   workflow_id?: number;
+  knowledge_entry_id?: number;
 }
 
 export interface AskEmailPreview {
@@ -56,10 +57,16 @@ export interface AskPackagePreview {
   workflow: { name: string; instructions: string } | null;
 }
 
+export interface AskKnowledgePreview {
+  entries: { title: string; body: string; source_url: string | null; source_title: string | null }[];
+  audience: "internal" | "clients";
+}
+
 export type AskActionKind =
   | "send_reminder" | "send_draft" | "compose_email" | "reply_email" | "run_workflow" | "retry_run"
   | "approve_run"
-  | "mark_received" | "waive_item" | "request_document" | "create_package" | "assign_package";
+  | "mark_received" | "waive_item" | "request_document" | "create_package" | "assign_package"
+  | "add_knowledge";
 
 export interface AskAction {
   id: string;
@@ -69,7 +76,7 @@ export interface AskAction {
   admin_only: boolean;
   confirm_label: string;
   targets: AskActionTarget[];
-  preview: (AskEmailPreview | AskPackagePreview | { documents: string[] } | Record<string, unknown>) | null;
+  preview: (AskEmailPreview | AskPackagePreview | AskKnowledgePreview | { documents: string[] } | Record<string, unknown>) | null;
   editable: ("subject" | "body")[];
   state?: "running" | "done" | "partial" | "failed" | "dismissed";
   results?: AskActionResult[];
