@@ -11,6 +11,7 @@ import {
   clientCommitmentsKey,
   clientDocumentsKey,
   clientKey,
+  teamKey,
   clientMeetingsKey,
   clientFactsKey,
   clientThreadsKey,
@@ -91,6 +92,7 @@ import {
   updateClient,
   uploadDocument,
   waiveChecklistItem,
+  getTeam,
 } from "@/lib/api";
 import { cn, formatPhoneNumber, formatShortDate } from "@/lib/utils";
 import { deepLinkElementId, readClientDeepLink, type ClientDeepLink } from "@/lib/deep-link";
@@ -122,6 +124,7 @@ import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ClientAssignee } from "@/components/client-assignee";
 import { Panel } from "@/components/panel";
 import { EmailBody } from "@/components/email-body";
 import { EmailHtmlFrame } from "@/components/email-html-frame";
@@ -636,6 +639,9 @@ function ClientDetailsCard({
   onChange: () => void;
   onDeleted: () => void;
 }) {
+  // A firm of one has no one else to assign clients to.
+  const { data: team } = useSWR(teamKey(), getTeam);
+  const showAssignee = !!client && ((team?.members.length ?? 0) > 1 || !!client.assigned_user_id);
   const packageNames = Array.from(
     new Set((checklist?.items ?? []).map((i) => i.package_name).filter((n): n is string => Boolean(n)))
   );
@@ -644,6 +650,9 @@ function ClientDetailsCard({
         ["Email", <a key="e" href={`mailto:${client.email}`} className="break-all hover:underline">{client.email}</a>],
         ["Phone", client.phone ? formatPhoneNumber(client.phone) : <span className="text-muted-foreground">—</span>],
         ["Company", client.company_name ?? <span className="text-muted-foreground">—</span>],
+        ...(showAssignee
+          ? [["Assigned to", <ClientAssignee key="a" client={client} onChanged={onChange} />] as [string, React.ReactNode]]
+          : []),
         [
           "Packages",
           packageNames.length > 0 ? (
