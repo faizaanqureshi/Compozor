@@ -23,8 +23,8 @@ export const PLANS: Plan[] = [
   {
     name: "Solo",
     price: { cad: "CA$159", usd: "US$119" },
-    size: "For one accountant",
-    teamSize: "1 person",
+    size: "1 user",
+    teamSize: "1 user",
     features: [
       "Every Compozor feature",
       "Workflows and full automation",
@@ -36,7 +36,7 @@ export const PLANS: Plan[] = [
   {
     name: "Team",
     price: { cad: "CA$399", usd: "US$299" },
-    size: "Up to 5 people",
+    size: "Up to 5 users",
     teamSize: "Up to 5",
     features: [
       "Everything in Solo",
@@ -50,7 +50,7 @@ export const PLANS: Plan[] = [
   {
     name: "Practice",
     price: { cad: "CA$799", usd: "US$599" },
-    size: "Up to 10 people",
+    size: "Up to 10 users",
     teamSize: "Up to 10",
     features: [
       "Everything in Team",
@@ -62,7 +62,7 @@ export const PLANS: Plan[] = [
   {
     name: "Firm",
     price: { cad: "CA$1,599", usd: "US$1,199" },
-    size: "Up to 20 people",
+    size: "Up to 20 users",
     teamSize: "Up to 20",
     features: [
       "Everything in Practice",
@@ -75,7 +75,7 @@ export const PLANS: Plan[] = [
   {
     name: "Enterprise",
     price: null,
-    size: "21 people or more",
+    size: "21 users or more",
     teamSize: "21+",
     features: [
       "Everything in Firm",
