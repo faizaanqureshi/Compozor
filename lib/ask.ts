@@ -41,6 +41,7 @@ export interface AskActionResult {
   package_id?: number;
   workflow_id?: number;
   knowledge_entry_id?: number;
+  status_code?: number;
 }
 
 export interface AskEmailPreview {
@@ -66,7 +67,15 @@ export type AskActionKind =
   | "send_reminder" | "send_draft" | "compose_email" | "reply_email" | "run_workflow" | "retry_run"
   | "approve_run"
   | "mark_received" | "waive_item" | "request_document" | "create_package" | "assign_package"
-  | "add_knowledge";
+  | "add_knowledge"
+  | "api_call";
+
+/** Any other change made through Compozor's own API (runs as the confirming staff member). */
+export interface AskApiCallPreview {
+  method: "POST" | "PUT" | "PATCH" | "DELETE";
+  path: string;
+  fields: { label: string; value: string }[];
+}
 
 export interface AskAction {
   id: string;
@@ -76,7 +85,7 @@ export interface AskAction {
   admin_only: boolean;
   confirm_label: string;
   targets: AskActionTarget[];
-  preview: (AskEmailPreview | AskPackagePreview | AskKnowledgePreview | { documents: string[] } | Record<string, unknown>) | null;
+  preview: (AskEmailPreview | AskPackagePreview | AskKnowledgePreview | AskApiCallPreview | { documents: string[] } | Record<string, unknown>) | null;
   editable: ("subject" | "body")[];
   state?: "running" | "done" | "partial" | "failed" | "dismissed";
   results?: AskActionResult[];

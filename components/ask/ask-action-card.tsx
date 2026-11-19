@@ -13,6 +13,7 @@ import {
   Package,
   Play,
   RotateCcw,
+  SquarePen,
   TriangleAlert,
   type LucideIcon,
 } from "lucide-react";
@@ -32,6 +33,7 @@ import { ApiError } from "@/lib/api";
 import {
   executeAskAction,
   type AskAction,
+  type AskApiCallPreview,
   type AskActionKind,
   type AskActionResult,
   type AskEmailPreview,
@@ -58,6 +60,7 @@ const ICONS: Record<AskActionKind, LucideIcon> = {
   create_package: Package,
   assign_package: Package,
   add_knowledge: BookOpen,
+  api_call: SquarePen,
 };
 
 // What confirming does, in one sentence, shown in the confirmation dialog.
@@ -88,6 +91,8 @@ function effect(action: AskAction): string {
       return "Adds the package's documents to each client's checklist.";
     case "add_knowledge":
       return "Saves these to Knowledge as internal-only, with their sources. You can share them with clients from Knowledge.";
+    case "api_call":
+      return "Runs as you, exactly as if you did it in Compozor, with the same permission checks.";
     default:
       return "";
   }
@@ -195,7 +200,7 @@ export function AskActionCard({
       )}
 
       <Dialog open={confirming} onOpenChange={(open) => !running && setConfirming(open)}>
-        <DialogContent className={cn(isEmail || action.kind === "create_package" || action.kind === "add_knowledge" ? "sm:max-w-lg" : "sm:max-w-md")}>
+        <DialogContent className={cn(isEmail || action.kind === "create_package" || action.kind === "add_knowledge" || action.kind === "api_call" ? "sm:max-w-lg" : "sm:max-w-md")}>
           <DialogHeader>
             <DialogTitle className="pr-8">{action.title}</DialogTitle>
             <DialogDescription>
@@ -230,6 +235,8 @@ export function AskActionCard({
             <PackagePreview preview={action.preview as AskPackagePreview} full />
           ) : action.kind === "add_knowledge" ? (
             <KnowledgePreview preview={action.preview as AskKnowledgePreview} full />
+          ) : action.kind === "api_call" && action.preview ? (
+            <ApiCallPreview action={action} preview={action.preview as AskApiCallPreview} full />
           ) : (
             <ul className="flex max-h-64 flex-col gap-1.5 overflow-y-auto text-sm">
               {action.targets.map((t, i) => (
@@ -295,6 +302,20 @@ function ActionPreview({
   }
   if (action.kind === "add_knowledge" && action.preview) {
     return <KnowledgePreview preview={action.preview as AskKnowledgePreview} />;
+  }
+  if (action.kind === "api_call" && action.preview) {
+    const result = results[0];
+    const href = result?.ok ? resultHref(result) : null;
+    return (
+      <div className="flex flex-col gap-2">
+        <ApiCallPreview action={action} preview={action.preview as AskApiCallPreview} />
+        {href && (
+          <Link href={href} onClick={onNavigate} className="text-xs text-accent underline-offset-4 hover:underline">
+            Open {result.client_name ?? "client"}
+          </Link>
+        )}
+      </div>
+    );
   }
   const shown = action.targets.slice(0, VISIBLE_TARGETS);
   const hidden = action.targets.length - shown.length;
@@ -404,5 +425,36 @@ function KnowledgePreview({ preview, full }: { preview: AskKnowledgePreview; ful
         </li>
       ))}
     </ul>
+  );
+}
+
+function ApiCallPreview({ action, preview, full }: { action: AskAction; preview: AskApiCallPreview; full?: boolean }) {
+  const fields = full ? preview.fields : preview.fields.slice(0, 5);
+  const names = action.targets.map((t) => t.client_name);
+  return (
+    <div className={cn("flex flex-col gap-2 text-sm", full && "max-h-[22rem] overflow-y-auto pr-1")}>
+      {names.length > 0 && (
+        <p className="text-muted-foreground">
+          For <span className="font-medium text-foreground">{names.slice(0, 3).join(", ")}</span>
+          {names.length > 3 ? ` and ${names.length - 3} more` : ""}
+        </p>
+      )}
+      {fields.length > 0 && (
+        <ul className="flex flex-col divide-y divide-border/60 rounded-lg border border-border/60">
+          {fields.map((f, i) => (
+            <li key={`${f.label}-${i}`} className="flex items-baseline justify-between gap-3 px-3 py-2">
+              <span className="shrink-0 text-muted-foreground">{f.label}</span>
+              <span className={cn("min-w-0 text-right", full ? "break-words" : "truncate")}>{f.value}</span>
+            </li>
+          ))}
+          {!full && preview.fields.length > fields.length && (
+            <li className="px-3 py-2 text-muted-foreground">and {preview.fields.length - fields.length} more</li>
+          )}
+        </ul>
+      )}
+      <p className="font-mono text-[0.6875rem] text-muted-foreground">
+        {preview.method} {preview.path}
+      </p>
+    </div>
   );
 }
