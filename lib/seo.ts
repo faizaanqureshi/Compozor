@@ -5,11 +5,11 @@ import type { Metadata, MetadataRoute } from "next";
 export const SITE_URL = "https://www.compozor.com";
 export const SITE_NAME = "Compozor";
 export const SITE_DESCRIPTION =
-  "Automate client follow-ups, collect and check documents, and turn them into reports, spreadsheets, and finished work for your professional service firm.";
+  "AI agents for professional firms. Follow up with clients from your own Gmail or Outlook, check their documents, and prepare finished work in your firm’s format.";
 
 export const PUBLIC_SEARCH_PAGES = {
   "/": {
-    title: "Compozor | AI Document Collection & Workflow Automation",
+    title: "Compozor | AI agents for professional firms",
     description: SITE_DESCRIPTION,
   },
   "/pricing": {
@@ -75,7 +75,7 @@ export function publicPageMetadata(
 // When each public page's content last changed. Update a date by hand when that page
 // changes; a timestamp stamped on every build would teach search engines to ignore it.
 const PAGE_LAST_MODIFIED: Record<keyof typeof PUBLIC_SEARCH_PAGES, string> = {
-  "/": "2026-09-28",
+  "/": "2026-11-19",
   "/pricing": "2026-11-18",
   "/waitlist": "2026-09-28",
   "/privacy": "2026-09-28",

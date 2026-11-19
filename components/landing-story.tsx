@@ -16,6 +16,10 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { LandingAgentExample } from "@/components/landing-agent-example";
 import motion from "@/components/landing-motion.module.css";
 import { LandingTransition } from "@/components/landing-transition";
+import {
+  storyExamples,
+  type StoryExample,
+} from "@/components/landing-story-examples";
 
 const steps = [
   {
@@ -23,7 +27,7 @@ const steps = [
     title: "The loop",
     heading: "The back-and-forth, handled.",
     description:
-      "Your client sends the wrong statement. Compozor catches the mismatch, explains what’s needed, and checks the replacement. Once the requirements are met, your workflow prepares the report.",
+      "Your client sends the wrong document. Compozor catches the mismatch, explains what’s needed, and checks the replacement. Once the requirements are met, your workflow prepares the work.",
     note: "You define the requirements and choose what runs automatically. Your team handles the decisions that need professional judgment.",
   },
   {
@@ -75,20 +79,22 @@ function ExampleFile({
   );
 }
 
-function CollectExample({ reply }: { reply: boolean }) {
+function CollectExample({
+  example,
+  reply,
+}: {
+  example: StoryExample;
+  reply: boolean;
+}) {
   return (
     <>
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <Mail className="size-3.5" aria-hidden />
-        Compozor → Avery · on your firm’s behalf
+        Compozor → {example.contact} · on your firm’s behalf
       </div>
-      <h4 className="mt-4 text-base">
-        A quick reminder for August
-      </h4>
+      <h4 className="mt-4 text-base">{example.request.subject}</h4>
       <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-        Hi Avery, we’re ready to prepare your monthly report.
-        Please send your August bank statement and expense
-        receipts. You can reply here or use your upload link.
+        {example.request.body}
       </p>
       {reply ? (
         <div
@@ -96,18 +102,18 @@ function CollectExample({ reply }: { reply: boolean }) {
           aria-live="polite"
         >
           <p className="text-xs text-muted-foreground">
-            Avery → Your firm
+            {example.contact} → Your firm
           </p>
-          <p className="mt-2 text-sm">
-            Here you go. Let me know if you need anything else.
-          </p>
+          <p className="mt-2 text-sm">{example.reply.text}</p>
           <div className="mt-4 flex flex-wrap gap-2">
-            <span className="rounded-md border border-border px-3 py-2 text-xs">
-              Statement_July.pdf
-            </span>
-            <span className="rounded-md border border-border px-3 py-2 text-xs">
-              8 receipts
-            </span>
+            {example.reply.files.map((file) => (
+              <span
+                key={file}
+                className="rounded-md border border-border px-3 py-2 text-xs"
+              >
+                {file}
+              </span>
+            ))}
           </div>
         </div>
       ) : (
@@ -119,7 +125,13 @@ function CollectExample({ reply }: { reply: boolean }) {
   );
 }
 
-function CheckExample({ corrected }: { corrected: boolean }) {
+function CheckExample({
+  example,
+  corrected,
+}: {
+  example: StoryExample;
+  corrected: boolean;
+}) {
   return (
     <>
       <div className="flex items-center justify-between gap-3">
@@ -137,57 +149,55 @@ function CheckExample({ corrected }: { corrected: boolean }) {
             : "A correction is needed"}
         </span>
       </div>
-      <ExampleFile
-        name="Expense receipts"
-        detail="8 files · matched to the checklist"
-        complete
-      />
-      <ExampleFile
-        name="Bank statement"
-        detail={
-          corrected
-            ? "August 2026 · correct reporting period"
-            : "Expected August 2026 · received July 2026"
-        }
-        complete={corrected}
-      />
+      {example.checks.map((check) => (
+        <ExampleFile
+          key={check.name}
+          name={check.name}
+          detail={check.fixed && corrected ? check.fixed : check.detail}
+          complete={!check.fixed || corrected}
+        />
+      ))}
       {!corrected && (
         <div
           className="mt-4 rounded-lg border border-border bg-card p-4"
           aria-live="polite"
         >
           <p className="text-xs text-muted-foreground">
-            Compozor → Avery · correction explained
+            Compozor → {example.contact} · correction explained
           </p>
-          <p className="mt-2 text-sm leading-relaxed">
-            Thanks, Avery. The statement covers July. Could you
-            send the August statement so we can prepare the
-            right report?
-          </p>
+          <p className="mt-2 text-sm leading-relaxed">{example.correction}</p>
         </div>
       )}
       {corrected && (
         <p className="mt-5 text-sm text-success" role="status">
-          Compozor checked the August statement. Both requirements
-          are satisfied; the automatic workflow can begin.
+          {example.resolved} Every requirement is satisfied, so the automatic
+          workflow can begin.
         </p>
       )}
     </>
   );
 }
 
-function PrepareExample({ report }: { report: boolean }) {
+function PrepareExample({
+  example,
+  report,
+}: {
+  example: StoryExample;
+  report: boolean;
+}) {
+  const OutputIcon =
+    example.output.kind === "workbook" ? FileSpreadsheet : FileText;
   return (
     <>
       <div className="flex items-center gap-3">
-        <FileSpreadsheet
-          className="size-5 text-marketing-forest dark:text-marketing-brass"
+        <OutputIcon
+          className="size-5 shrink-0 text-marketing-forest dark:text-marketing-brass"
           aria-hidden
         />
         <div>
-          <h4 className="text-base">Monthly expense report</h4>
+          <h4 className="text-base">{example.workflow.title}</h4>
           <p className="mt-1 text-xs text-muted-foreground">
-            Statement + receipts + your work sample
+            {example.workflow.inputs}
           </p>
         </div>
       </div>
@@ -196,7 +206,7 @@ function PrepareExample({ report }: { report: boolean }) {
           <div className="space-y-3">
             {[
               "Client information extracted",
-              "Report prepared using your sample",
+              "Prepared using your work sample",
               "Output checks and review notes attached",
             ].map((line) => (
               <p
@@ -215,27 +225,24 @@ function PrepareExample({ report }: { report: boolean }) {
             <p className="text-[0.625rem] uppercase tracking-widest text-muted-foreground">
               Illustrative output
             </p>
-            <p className="mt-2 text-lg">
-              August expense summary
-            </p>
-            <div className="mt-4 flex items-baseline justify-between border-t border-border pt-4">
+            <p className="mt-2 text-lg">{example.output.title}</p>
+            <div className="mt-4 flex items-baseline justify-between gap-4 border-t border-border pt-4">
               <span className="text-xs text-muted-foreground">
-                Total expenses
+                {example.output.metricLabel}
               </span>
               <span className="text-2xl font-light tabular-nums">
-                $1,340.00
+                {example.output.metricValue}
               </span>
             </div>
             <p className="mt-3 text-xs text-muted-foreground">
-              Workbook prepared for your team’s review
+              {example.output.note}
             </p>
           </div>
         </div>
       ) : (
         <>
           <p className="mt-6 text-sm leading-relaxed text-muted-foreground">
-            “Group expenses by category, calculate totals, and
-            prepare the monthly summary in our workbook format.”
+            “{example.workflow.instruction}”
           </p>
           <p className="mt-5 border-t border-border pt-4 text-xs text-muted-foreground">
             Start manually, or automatically after collection.
@@ -249,6 +256,9 @@ function PrepareExample({ report }: { report: boolean }) {
 export function LandingStory() {
   const sectionRef = useRef<HTMLElement>(null);
   const [step, setStep] = useState("overview");
+  const [exampleId, setExampleId] = useState(storyExamples[0].id);
+  const example =
+    storyExamples.find((item) => item.id === exampleId) ?? storyExamples[0];
   const advanceFocus = useRef(false);
   const goToStep = (next: string) => {
     advanceFocus.current = next !== step;
@@ -309,201 +319,231 @@ export function LandingStory() {
             Explore what Compozor handles along the way.
           </p>
         </div>
-        {/* Phones scroll rather than tap, so the walkthrough unrolls into a
-            sequence showing each step's outcome. Wider screens use the tabs. */}
-        <div className="mt-10 sm:hidden">
-          <div data-reveal>
-            <h3 className="text-2xl font-light tracking-tight">
-              {steps[0].heading}
-            </h3>
-            <p className="mt-4 text-base leading-relaxed text-muted-foreground">
-              {steps[0].description}
-            </p>
-          </div>
-          <ol className="mt-12 space-y-14">
-            {steps.slice(1).map((item, i) => (
-              <li key={item.id} data-reveal className="border-t border-border pt-6">
-                <p className="text-xs uppercase tracking-widest text-muted-foreground">
-                  0{i + 1} · {item.title}
-                </p>
-                <h3 className="mt-3 text-2xl font-light tracking-tight">
-                  {item.heading}
-                </h3>
-                <p className="mt-3 text-base leading-relaxed text-muted-foreground">
-                  {item.description}
-                </p>
-                <div className="mt-6 rounded-xl border border-border bg-background p-5">
-                  {item.id === "collect" && <CollectExample reply />}
-                  {item.id === "check" && <CheckExample corrected={false} />}
-                  {item.id === "prepare" && <PrepareExample report />}
-                </div>
-              </li>
-            ))}
-          </ol>
-          <p className="mt-6 text-xs leading-relaxed text-muted-foreground">
-            Fictional example with automation enabled. No emails are sent or
-            workflows run here.
-          </p>
-        </div>
         <Tabs
-          data-reveal
-          value={step}
-          onValueChange={(v) => setStep(String(v))}
-          className="mt-12 gap-10 max-sm:hidden"
+          value={example.id}
+          onValueChange={(v) => setExampleId(String(v))}
+          className="mt-10 gap-0 sm:mt-12"
         >
-          <TabsList
-            variant="line"
-            aria-label="Explore the client document process"
-            className="grid h-auto! w-full grid-cols-4 gap-0 border-b border-border p-0"
+          <div
+            data-reveal
+            className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-5"
           >
-            {steps.map((item, i) => (
-              <TabsTrigger
-                key={item.id}
-                value={item.id}
-                className="min-h-14 flex-col items-start justify-center gap-1 rounded-none px-1 py-3 text-sm sm:flex-row sm:items-center sm:justify-start sm:py-4 after:bottom-0! after:bg-marketing-forest data-active:text-marketing-forest sm:gap-4 dark:data-active:text-marketing-brass dark:after:bg-marketing-brass"
+            <p className="text-xs uppercase tracking-widest text-muted-foreground">
+              Example
+            </p>
+            <TabsList
+              aria-label="Choose an example firm"
+              className="grid h-auto! w-full grid-cols-2 gap-1 rounded-xl border border-border p-1 sm:inline-flex sm:w-auto sm:rounded-4xl"
+            >
+              {storyExamples.map((item) => (
+                <TabsTrigger
+                  key={item.id}
+                  value={item.id}
+                  className="min-h-11 rounded-lg px-4 text-xs sm:min-h-8 sm:flex-none sm:rounded-4xl"
+                >
+                  {item.label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </div>
+          <TabsContent value={example.id} className="min-w-0">
+            {/* Phones scroll rather than tap, so the walkthrough unrolls into a
+                sequence showing each step's outcome. Wider screens use the tabs. */}
+            <div className="mt-8 sm:hidden">
+              <div data-reveal>
+                <h3 className="text-2xl font-light tracking-tight">
+                  {steps[0].heading}
+                </h3>
+                <p className="mt-4 text-base leading-relaxed text-muted-foreground">
+                  {steps[0].description}
+                </p>
+              </div>
+              <ol className="mt-12 space-y-14">
+                {steps.slice(1).map((item, i) => (
+                  <li key={item.id} data-reveal className="border-t border-border pt-6">
+                    <p className="text-xs uppercase tracking-widest text-muted-foreground">
+                      0{i + 1} · {item.title}
+                    </p>
+                    <h3 className="mt-3 text-2xl font-light tracking-tight">
+                      {item.heading}
+                    </h3>
+                    <p className="mt-3 text-base leading-relaxed text-muted-foreground">
+                      {item.description}
+                    </p>
+                    <div className="mt-6 rounded-xl border border-border bg-background p-5">
+                      {item.id === "collect" && <CollectExample example={example} reply />}
+                      {item.id === "check" && <CheckExample example={example} corrected={false} />}
+                      {item.id === "prepare" && <PrepareExample example={example} report />}
+                    </div>
+                  </li>
+                ))}
+              </ol>
+              <p className="mt-6 text-xs leading-relaxed text-muted-foreground">
+                Fictional example with automation enabled. No emails are sent or
+                workflows run here.
+              </p>
+            </div>
+            <Tabs
+              data-reveal
+              value={step}
+              onValueChange={(v) => setStep(String(v))}
+              className="mt-10 gap-10 max-sm:hidden"
+            >
+              <TabsList
+                variant="line"
+                aria-label="Explore the client document process"
+                className="grid h-auto! w-full grid-cols-4 gap-0 border-b border-border p-0"
               >
-                <span className="text-[0.625rem] text-muted-foreground sm:text-xs">
-                  0{i + 1}
-                </span>
-                {item.title}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-          <LandingTransition panels>
-            {steps.map((item) => (
-              <TabsContent
-                key={item.id}
-                value={item.id}
-                tabIndex={-1}
-                data-panel={item.id}
-                className="grid scroll-mt-28 items-center gap-8 lg:min-h-[490px] lg:grid-cols-[0.8fr_1.2fr] lg:gap-20"
-              >
-                <div className="order-last max-w-md lg:order-first">
-                  <h3 className="text-2xl font-light tracking-tight sm:text-3xl">
-                    {item.heading}
-                  </h3>
-                  <p className="mt-5 text-base leading-relaxed text-muted-foreground">
-                    {item.description}
-                  </p>
-                  <p className="mt-7 border-l border-accent pl-4 text-sm leading-relaxed text-muted-foreground">
-                    {item.note}
-                  </p>
-                  {item.id === "overview" && (
-                    <Accordion className={`${motion.faq} mt-6 border-t border-border`}>
-                      <AccordionItem value="setup">
-                        <AccordionTrigger className="min-h-11 py-4 font-normal">
-                          What your firm sets up
-                        </AccordionTrigger>
-                        <AccordionContent className="pb-4 text-sm leading-relaxed text-muted-foreground">
-                          Define the documents and reporting period, attach your
-                          workflow instructions and work sample, then assign the
-                          package to a client. Enable automatic replies and
-                          workflow execution, or keep either under manual control.
-                        </AccordionContent>
-                      </AccordionItem>
-                    </Accordion>
-                  )}
-                </div>
-                <div className="min-w-0 overflow-hidden rounded-xl border border-border bg-background">
-                  <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-4 sm:px-7">
-                    <div>
-                      <p className="text-sm">Avery Williams</p>
-                      <p className="mt-1 text-[0.625rem] uppercase tracking-widest text-muted-foreground">
-                        Illustrative AI activity
+                {steps.map((item, i) => (
+                  <TabsTrigger
+                    key={item.id}
+                    value={item.id}
+                    className="min-h-14 flex-col items-start justify-center gap-1 rounded-none px-1 py-3 text-sm sm:flex-row sm:items-center sm:justify-start sm:py-4 after:bottom-0! after:bg-marketing-forest data-active:text-marketing-forest sm:gap-4 dark:data-active:text-marketing-brass dark:after:bg-marketing-brass"
+                  >
+                    <span className="text-[0.625rem] text-muted-foreground sm:text-xs">
+                      0{i + 1}
+                    </span>
+                    {item.title}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+              <LandingTransition panels>
+                {steps.map((item) => (
+                  <TabsContent
+                    key={item.id}
+                    value={item.id}
+                    tabIndex={-1}
+                    data-panel={item.id}
+                    className="grid scroll-mt-28 items-center gap-8 lg:min-h-[490px] lg:grid-cols-[0.8fr_1.2fr] lg:gap-20"
+                  >
+                    <div className="order-last max-w-md lg:order-first">
+                      <h3 className="text-2xl font-light tracking-tight sm:text-3xl">
+                        {item.heading}
+                      </h3>
+                      <p className="mt-5 text-base leading-relaxed text-muted-foreground">
+                        {item.description}
                       </p>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={restart}
-                      aria-label="Restart example"
-                    >
-                      <RotateCcw className="size-3.5" />
-                    </Button>
-                  </div>
-                  <LandingTransition changeKey={`${reply}-${corrected}-${report}`}>
-                    <div className="p-5 sm:p-7">
+                      <p className="mt-7 border-l border-accent pl-4 text-sm leading-relaxed text-muted-foreground">
+                        {item.note}
+                      </p>
                       {item.id === "overview" && (
-                        <>
-                          <LandingAgentExample />
-                          <Button
-                            variant="outline"
-                            className="mt-6 min-h-11 gap-3"
-                            onClick={() => goToStep("collect")}
-                          >
-                            Explore the conversation <ArrowRight aria-hidden />
-                          </Button>
-                        </>
-                      )}
-                      {item.id === "collect" && (
-                        <>
-                          <CollectExample reply={reply} />
-                          <Button
-                            className="mt-6 gap-3"
-                            onClick={() =>
-                              reply ? goToStep("check") : setReply(true)
-                            }
-                          >
-                            {reply
-                              ? "See the document checks"
-                              : "See the client’s reply"}
-                            <ArrowRight aria-hidden />
-                          </Button>
-                        </>
-                      )}
-                      {item.id === "check" && (
-                        <>
-                          <CheckExample corrected={corrected} />
-                          <Button
-                            className="mt-6 gap-3"
-                            onClick={() => {
-                              if (corrected) {
-                                setReport(true);
-                                goToStep("prepare");
-                              } else {
-                                setCorrected(true);
-                              }
-                            }}
-                          >
-                            {corrected
-                              ? "See the workflow result"
-                              : "See the corrected upload"}
-                            <ArrowRight aria-hidden />
-                          </Button>
-                        </>
-                      )}
-                      {item.id === "prepare" && (
-                        <>
-                          <PrepareExample report={report} />
-                          {report ? (
-                            <Button
-                              nativeButton={false}
-                              render={<a href="#workflows" />}
-                              variant="outline"
-                              className="mt-6 gap-3"
-                            >
-                              Explore work samples <ArrowRight aria-hidden />
-                            </Button>
-                          ) : (
-                            <Button
-                              className="mt-6 gap-3"
-                              onClick={() => setReport(true)}
-                            >
-                              Preview completed work <ArrowRight aria-hidden />
-                            </Button>
-                          )}
-                        </>
+                        <Accordion className={`${motion.faq} mt-6 border-t border-border`}>
+                          <AccordionItem value="setup">
+                            <AccordionTrigger className="min-h-11 py-4 font-normal">
+                              What your firm sets up
+                            </AccordionTrigger>
+                            <AccordionContent className="pb-4 text-sm leading-relaxed text-muted-foreground">
+                              Define the documents and reporting period, attach your
+                              workflow instructions and work sample, then assign the
+                              package to a client. Enable automatic replies and
+                              workflow execution, or keep either under manual control.
+                            </AccordionContent>
+                          </AccordionItem>
+                        </Accordion>
                       )}
                     </div>
-                  </LandingTransition>
-                  <div className="border-t border-border px-5 py-3 text-[0.625rem] leading-relaxed text-muted-foreground sm:px-7">
-                    Fictional example with automation enabled. Buttons explore
-                    the preview; no emails are sent or workflows run here.
-                  </div>
-                </div>
-              </TabsContent>
-            ))}
-          </LandingTransition>
+                    <div className="min-w-0 overflow-hidden rounded-xl border border-border bg-background">
+                      <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-4 sm:px-7">
+                        <div>
+                          <p className="text-sm">{example.client}</p>
+                          <p className="mt-1 text-[0.625rem] uppercase tracking-widest text-muted-foreground">
+                            Illustrative AI activity
+                          </p>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={restart}
+                          aria-label="Restart example"
+                        >
+                          <RotateCcw className="size-3.5" />
+                        </Button>
+                      </div>
+                      <LandingTransition changeKey={`${example.id}-${reply}-${corrected}-${report}`}>
+                        <div className="p-5 sm:p-7">
+                          {item.id === "overview" && (
+                            <>
+                              <LandingAgentExample example={example} />
+                              <Button
+                                variant="outline"
+                                className="mt-6 min-h-11 gap-3"
+                                onClick={() => goToStep("collect")}
+                              >
+                                Explore the conversation <ArrowRight aria-hidden />
+                              </Button>
+                            </>
+                          )}
+                          {item.id === "collect" && (
+                            <>
+                              <CollectExample example={example} reply={reply} />
+                              <Button
+                                className="mt-6 gap-3"
+                                onClick={() =>
+                                  reply ? goToStep("check") : setReply(true)
+                                }
+                              >
+                                {reply
+                                  ? "See the document checks"
+                                  : "See the client’s reply"}
+                                <ArrowRight aria-hidden />
+                              </Button>
+                            </>
+                          )}
+                          {item.id === "check" && (
+                            <>
+                              <CheckExample example={example} corrected={corrected} />
+                              <Button
+                                className="mt-6 gap-3"
+                                onClick={() => {
+                                  if (corrected) {
+                                    setReport(true);
+                                    goToStep("prepare");
+                                  } else {
+                                    setCorrected(true);
+                                  }
+                                }}
+                              >
+                                {corrected
+                                  ? "See the workflow result"
+                                  : "See the corrected upload"}
+                                <ArrowRight aria-hidden />
+                              </Button>
+                            </>
+                          )}
+                          {item.id === "prepare" && (
+                            <>
+                              <PrepareExample example={example} report={report} />
+                              {report ? (
+                                <Button
+                                  nativeButton={false}
+                                  render={<a href="#workflows" />}
+                                  variant="outline"
+                                  className="mt-6 gap-3"
+                                >
+                                  Explore work samples <ArrowRight aria-hidden />
+                                </Button>
+                              ) : (
+                                <Button
+                                  className="mt-6 gap-3"
+                                  onClick={() => setReport(true)}
+                                >
+                                  Preview completed work <ArrowRight aria-hidden />
+                                </Button>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </LandingTransition>
+                      <div className="border-t border-border px-5 py-3 text-[0.625rem] leading-relaxed text-muted-foreground sm:px-7">
+                        Fictional example with automation enabled. Buttons explore
+                        the preview; no emails are sent or workflows run here.
+                      </div>
+                    </div>
+                  </TabsContent>
+                ))}
+              </LandingTransition>
+            </Tabs>
+          </TabsContent>
         </Tabs>
       </div>
     </section>

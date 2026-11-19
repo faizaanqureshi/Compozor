@@ -24,6 +24,10 @@ export function LandingHero() {
             documents against your requirements, and run your workflows to
             prepare work in your firm’s format.
           </p>
+          <p className="mt-4 text-base leading-relaxed text-pretty text-foreground/90">
+            Replies go out from your own Gmail or Outlook. Your clients don’t
+            need an account or an app.
+          </p>
           <MarketingActions primaryOnly className="mt-7" />
           <p className="mt-4 hidden text-xs text-muted-foreground sm:block">
             Review replies or enable automatic follow-through. Early access.
