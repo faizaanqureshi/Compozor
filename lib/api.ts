@@ -1399,6 +1399,9 @@ export interface WorkflowRun {
   outputs: WorkflowRunOutput[];
   draft_outputs?: WorkflowRunOutput[];
   started_at: string | null;
+  // When this run first started, across automatic retries (started_at is the
+  // latest attempt). Missing from older APIs; fall back to started_at.
+  run_started_at?: string | null;
   completed_at: string | null;
   created_at: string;
   // Staff approved this result: only approved results are described to the client.

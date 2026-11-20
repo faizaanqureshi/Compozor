@@ -47,17 +47,23 @@ function formatDate(timestamp: string) {
   </>;
 }
 
+// Automatic retries overwrite started_at; the run's clock starts at its first attempt.
+function runStart(run: WorkflowRun) {
+  return run.run_started_at ?? run.started_at;
+}
+
 function RunDate({ run, className }: { run: WorkflowRun; className?: string }) {
-  const timestamp = run.started_at ?? run.created_at;
+  const timestamp = runStart(run) ?? run.created_at;
   return <time dateTime={timestamp} title={new Date(timestamp).toLocaleString()} className={cn("tabular-nums", className)}>
     {formatDate(timestamp)}
   </time>;
 }
 
 function runDuration(run: WorkflowRun, now: number) {
-  if (!run.started_at) return null;
+  const start = runStart(run);
+  if (!start) return null;
   const end = run.status === "running" ? now : run.completed_at ? Date.parse(run.completed_at) : null;
-  return end === null ? null : formatDuration(end - Date.parse(run.started_at));
+  return end === null ? null : formatDuration(end - Date.parse(start));
 }
 
 function fileCount(run: WorkflowRun) {
@@ -72,7 +78,7 @@ function RunFacts({ run, starting, now }: { run: WorkflowRun; starting?: boolean
   const files = fileCount(run);
   const facts: { label: string; value: React.ReactNode }[] = [
     { label: "Status", value: <RunStatus status={run.status} starting={starting} /> },
-    { label: run.started_at ? "Started" : "Created", value: <RunDate run={run} /> },
+    { label: runStart(run) ? "Started" : "Created", value: <RunDate run={run} /> },
     { label: run.status === "running" ? "Elapsed" : "Duration", value: duration ?? <span className="text-muted-foreground">—</span> },
     { label: "Output", value: files ?? <span className="text-muted-foreground">{run.status === "running" ? "In progress" : "None"}</span> },
   ];
