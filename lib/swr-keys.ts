@@ -10,6 +10,7 @@ export const emailLogKey = (status?: EmailStatus, resolved?: boolean) =>
   ["email-log", status ?? "all", resolved ?? "any"] as const;
 
 export const organizationKey = () => ["organization"] as const;
+export const usageKey = () => ["organization-usage"] as const;
 
 export const teamKey = () => ["team"] as const;
 
