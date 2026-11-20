@@ -10,6 +10,7 @@ import { OutlookIcon } from "@/components/icons/outlook";
 import { Panel } from "@/components/panel";
 import { FirmFontsSection } from "@/components/firm-fonts-section";
 import { TeamSection } from "@/components/team-section";
+import { PlanUsageSection } from "@/components/plan-usage-section";
 import { calendarConnectionsKey, inboxConnectionsKey, organizationKey } from "@/lib/swr-keys";
 import {
   ApiError,
@@ -47,12 +48,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-type SectionId = "profile" | "firm" | "team" | "sign-off" | "automation" | "connections" | "fonts";
+type SectionId = "profile" | "firm" | "team" | "plan" | "sign-off" | "automation" | "connections" | "fonts";
 
 const SECTIONS: { id: SectionId; label: string }[] = [
   { id: "profile", label: "Profile" },
   { id: "firm", label: "Firm" },
   { id: "team", label: "Team" },
+  // Billing details: admins only (see the section below).
+  { id: "plan", label: "Plan & usage" },
   { id: "sign-off", label: "Email sign-off" },
   { id: "automation", label: "Automation" },
   { id: "connections", label: "Connections" },
@@ -1085,7 +1088,7 @@ export default function SettingsPage() {
         {/* Section index beside the content on wide screens. */}
         <nav aria-label="Settings sections" className="hidden xl:block">
           <ul className="sticky top-10 flex flex-col gap-0.5 border-l border-border">
-            {SECTIONS.map((s) => (
+            {SECTIONS.filter((s) => s.id !== "plan" || isAdmin).map((s) => (
               <li key={s.id}>
                 <a
                   href={`#${s.id}`}
@@ -1122,6 +1125,11 @@ export default function SettingsPage() {
           <div id="team">
             {current ? <TeamSection firmName={current.name} isAdmin={isAdmin} /> : null}
           </div>
+          {isAdmin && (
+            <div id="plan">
+              <PlanUsageSection />
+            </div>
+          )}
           <div id="sign-off">
             <SignOffSection
               key={`sign-off-${org?.id ?? "loading"}`}

@@ -165,6 +165,30 @@ export interface Organization {
   // The signed-in staff member's role in this firm. Admins manage billing,
   // mailboxes, firm-wide settings and the team; members do everything else.
   current_user_role: TeamRole;
+  // Billing: plan key (null until Compozor sets one), currency, and the
+  // optional hourly rate that prices time saved on Plan & usage.
+  plan?: string | null;
+  billing_currency?: "CAD" | "USD";
+  hourly_rate?: string | null;
+}
+
+// Plan & usage (admins). Decimals arrive as strings to keep cents exact.
+export interface UsageReport {
+  period_start: string;
+  period_end: string;
+  currency: "CAD" | "USD";
+  plan: { key: string; name: string; monthly_price: string | null } | null;
+  // Share of the plan's included usage used; null without a priced plan.
+  usage: { percent_used: number; projected_percent: number; extra_usage_amount: string } | null;
+  // False until payments are connected: extra usage is shown, never charged.
+  billing_active: boolean;
+  active_clients: number;
+  time_saved: {
+    items: { key: string; label: string; count: number; minutes_each: number; minutes: number }[];
+    hours: string;
+    hourly_rate: string | null;
+    value: string | null;
+  };
 }
 
 export type TeamRole = "admin" | "member";
@@ -570,6 +594,8 @@ export interface ClientUsageBreakdownOut {
 
 export const getMyOrganization = () => request<Organization>("/organizations/me");
 
+export const getMyUsage = () => request<UsageReport>("/organizations/me/usage");
+
 export const updateMyOrganization = (input: {
   name?: string;
   automation_level?: AutomationLevel;
@@ -583,6 +609,7 @@ export const updateMyOrganization = (input: {
   timezone?: string;
   onboarding_completed?: boolean;
   notify_client_on_run_approval?: boolean;
+  hourly_rate?: number | null;
 }) => request<Organization>("/organizations/me", json("PATCH", input));
 
 export const deleteMyOrganization = () =>
