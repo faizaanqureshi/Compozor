@@ -106,7 +106,7 @@ export const COMPARISON_ROWS: { label: string; from: number }[] = [
 ];
 
 export const PRICING_FOOTNOTES: Record<PricingCurrency, string> = {
-  cad: "Prices in Canadian dollars, billed monthly. HST extra.",
+  cad: "Prices in Canadian dollars, billed monthly.",
   usd: "Prices in US dollars, billed monthly. Taxes extra where applicable.",
 };
 

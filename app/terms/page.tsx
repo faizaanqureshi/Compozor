@@ -6,7 +6,7 @@ export const metadata = publicPageMetadata("/terms");
 
 export default function TermsPage() {
   return (
-    <LegalPageShell title="Terms &amp; Conditions" lastUpdated="September 28, 2026">
+    <LegalPageShell title="Terms &amp; Conditions" lastUpdated="November 23, 2026">
       <LegalSection heading="1. Acceptance of these terms">
         <p>
           These Terms &amp; Conditions (&quot;Terms&quot;) govern access to
@@ -123,13 +123,50 @@ export default function TermsPage() {
         </p>
       </LegalSection>
 
-      <LegalSection heading="8. Fees">
+      <LegalSection heading="8. Plans, billing &amp; cancellation">
         <p>
-          Compozor is currently offered to early customers under terms
-          communicated directly to them. If and when paid plans are
-          introduced generally, pricing and billing terms will be presented
-          separately and no charge will be made without your agreement to
-          those terms.
+          <strong>Free trial.</strong> A new firm gets a 14-day free trial
+          with no payment details required, for up to 5 people and with
+          limited usage for workflows. One trial is available per person and
+          per firm. If the trial ends without a paid plan, the service stops
+          working for your firm (including workflows, emails and reminders)
+          until a plan is chosen. Your data is kept.
+        </p>
+        <p>
+          <strong>Subscriptions.</strong> Paid plans are billed monthly in
+          advance, in Canadian or US dollars, through our payment provider,
+          Stripe. They renew automatically each month until cancelled. Each
+          plan allows the number of people shown on our pricing page.
+        </p>
+        <p>
+          <strong>Included and extra usage.</strong> Each plan includes an
+          amount of usage every billing month. When it is used up, workflows
+          pause until the next billing month unless you turn on extra usage.
+          Extra usage is billed on your next invoice at the rate shown in
+          Settings, up to any monthly limit you set.
+        </p>
+        <p>
+          <strong>Changing plans.</strong> Upgrades take effect immediately:
+          you are charged for the new plan, less a credit for the unused part
+          of your current one, and a new billing month starts. Downgrades
+          take effect at the end of the current billing month.
+        </p>
+        <p>
+          <strong>Cancellation and refunds.</strong> You can cancel anytime in
+          Settings. Your plan continues until the end of the billing month
+          you have paid for and then ends. We do not give refunds or credits
+          for partial months or unused usage, except where the law requires
+          it.
+        </p>
+        <p>
+          <strong>Failed payments.</strong> If a payment fails, we will retry
+          it and let you know. If it still can&apos;t be collected, your plan may
+          be cancelled and the service will stop until a plan is chosen.
+        </p>
+        <p>
+          <strong>Price changes and taxes.</strong> We will give at least 30
+          days&apos; notice before a price change applies to you. Prices exclude
+          taxes; we charge applicable sales taxes where we are required to.
         </p>
       </LegalSection>
 
