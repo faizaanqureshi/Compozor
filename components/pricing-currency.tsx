@@ -1,6 +1,9 @@
 "use client";
 
 import { createContext, useContext, useSyncExternalStore, type ReactNode } from "react";
+import Link from "next/link";
+import { saveChosenPlan } from "@/lib/chosen-plan";
+import type { PlanKey } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -95,4 +98,19 @@ export function PlanPrice({ price }: { price: Record<PricingCurrency, string> })
 
 export function PricingFootnote({ className }: { className?: string }) {
   return <p className={className}>{PRICING_FOOTNOTES[useContext(PricingCurrencyContext)]}</p>;
+}
+
+/** A plan's "Start free trial" link: remembers the plan and currency for the end of onboarding. */
+export function ChosenPlanLink({ plan, href, ...props }: { plan: PlanKey; href: string } & Omit<React.ComponentProps<typeof Link>, "href">) {
+  const currency = useContext(PricingCurrencyContext);
+  return (
+    <Link
+      href={href}
+      {...props}
+      onClick={(event) => {
+        saveChosenPlan({ plan, currency: currency === "usd" ? "USD" : "CAD" });
+        props.onClick?.(event);
+      }}
+    />
+  );
 }

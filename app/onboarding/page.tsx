@@ -16,6 +16,7 @@ import {
   getOutlookConnectUrl,
   getMyOrganization,
   listInboxConnections,
+  startCheckout,
   updateMyOrganization,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -29,6 +30,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { mailboxResult, withoutMailboxResult } from "@/lib/onboarding";
 import { startProductTour } from "@/components/product-tour";
+import { ChosenPlanOffer } from "@/components/chosen-plan-offer";
+import { type ChosenPlan, clearChosenPlan, readChosenPlan } from "@/lib/chosen-plan";
 
 // Same names as Settings, so the choice made here is recognisable later.
 const automationOptions: { value: AutomationLevel; label: string; description: string; recommended?: boolean }[] = [
@@ -163,6 +166,8 @@ export default function OnboardingPage() {
     useState<AutomationLevel>("no_automation");
   const [finishing, setFinishing] = useState(false);
   const [finishError, setFinishError] = useState<string | null>(null);
+  // The plan clicked on the pricing page: offered as one click to pay at the end.
+  const [offer, setOffer] = useState<ChosenPlan | null>(null);
 
   const load = () => {
     Promise.all([getMyOrganization(), listInboxConnections()])
@@ -251,7 +256,7 @@ export default function OnboardingPage() {
     }
   };
 
-  const onFinish = async () => {
+  const onFinish = async (payFor?: ChosenPlan) => {
     setFinishing(true);
     setFinishError(null);
     try {
@@ -259,6 +264,12 @@ export default function OnboardingPage() {
         automation_level: automationLevel,
         onboarding_completed: true,
       });
+      clearChosenPlan();
+      if (payFor) {
+        // Stripe Checkout, then back to Plan & usage with the plan active.
+        window.location.assign((await startCheckout(payFor.plan, payFor.currency)).url);
+        return;
+      }
       if (user) startProductTour(user.id);
       router.replace("/clients");
     } catch (e) {
@@ -267,12 +278,26 @@ export default function OnboardingPage() {
     }
   };
 
+  const finishOrOffer = () => {
+    const chosen = readChosenPlan();
+    if (chosen) setOffer(chosen);
+    else void onFinish();
+  };
+
   const stepIndex = step ? STEPS.findIndex((s) => s.key === step) : 0;
   const meta = STEPS[stepIndex];
 
   return (
     <div className="fixed inset-0 isolate overflow-y-auto bg-background">
       <AuroraBackground />
+      <ChosenPlanOffer
+        offer={offer}
+        busy={finishing}
+        error={finishError}
+        onClose={() => setOffer(null)}
+        onTrial={() => void onFinish()}
+        onPay={(choice) => void onFinish(choice)}
+      />
       <div className="relative mx-auto flex min-h-full w-full max-w-6xl flex-col px-6 py-8 sm:px-10 sm:py-10">
         <header className="flex items-center justify-between gap-4">
           <Image src="/compozor-wordmark.png" alt="Compozor" width={789} height={140} priority className="h-5.5 w-auto" />
@@ -556,7 +581,7 @@ export default function OnboardingPage() {
 
                 <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-5">
                   <span className="text-xs text-muted-foreground">You can change this anytime in Settings.</span>
-                  <Button onClick={onFinish} disabled={finishing}>
+                  <Button onClick={finishOrOffer} disabled={finishing}>
                     {finishing && <Loader2 className="animate-spin" />}
                     {finishing ? "Finishing up…" : "Finish setup"}
                   </Button>
