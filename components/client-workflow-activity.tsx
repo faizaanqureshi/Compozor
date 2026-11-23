@@ -5,12 +5,33 @@ import useSWR from "swr";
 import { Check, Download, FileText, Loader2, Upload } from "lucide-react";
 import { ApiError, getClientWorkflowRun, uploadCorrectedOutput, type LearningResult, type WorkflowRun } from "@/lib/api";
 import { formatDuration } from "@/lib/agent-activity";
+import { runReason } from "@/lib/run-reason";
 import { cn } from "@/lib/utils";
 import { runTimeline, useNow, WorkflowRunTimeline } from "@/components/workflow-run-timeline";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { RulesFollowed, RunReview } from "@/components/run-review";
 import { useAskScope } from "@/components/ask/ask-panel-context";
+
+// Shown while a run is waiting or working, so nobody sits watching it.
+const EXPECTED_TIME = "Runs usually take 5 to 20 minutes. You can leave this page; it keeps going.";
+
+// The run's stop reason, with any raw server error explained in plain words.
+function ReviewReason({ reason, neutral }: { reason: string; neutral: boolean }) {
+  const { text, technical } = runReason(reason);
+  return (
+    <div className={cn("flex max-w-3xl flex-col gap-1 border-l pl-3 text-[0.8125rem] leading-relaxed",
+      neutral ? "border-border text-muted-foreground" : "border-destructive/40 text-destructive")}>
+      <p>{text}</p>
+      {technical && (
+        <details className="text-xs text-muted-foreground">
+          <summary className="w-fit cursor-pointer list-none hover:text-foreground [&::-webkit-details-marker]:hidden">Technical details</summary>
+          <p className="mt-1 break-words">{technical}</p>
+        </details>
+      )}
+    </div>
+  );
+}
 
 const labels: Record<WorkflowRun["status"], string> = {
   queued: "Ready to run", running: "Running", completed: "Completed",
@@ -225,7 +246,7 @@ function RunContents({ run, loadDetails = false, starting, review }: {
 
   if (run.status === "queued" && !hasTrace) {
     return <p className="text-[0.8125rem] leading-relaxed text-muted-foreground">
-      {starting ? "Waiting for a worker to pick this run up. Progress appears here as soon as it starts." : "This run hasn't started yet."}
+      {starting ? `Starting shortly. Progress appears here as soon as it begins. ${EXPECTED_TIME}` : "This run hasn't started yet."}
     </p>;
   }
 
@@ -238,13 +259,10 @@ function RunContents({ run, loadDetails = false, starting, review }: {
           {currentFor && <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{currentFor}</span>}
         </p>
       )}
+      {running && <p className="text-xs text-muted-foreground">{EXPECTED_TIME}</p>}
       {run.summary && <p className="max-w-3xl text-pretty text-[0.8125rem] leading-relaxed text-foreground/80">{run.summary}</p>}
-      {run.review_reason && (
-        // An outage (provider/backend) is not a problem with the client's work: keep it neutral.
-        detail?.can_retry || run.status === "queued"
-          ? <p className="max-w-3xl border-l border-border pl-3 text-[0.8125rem] leading-relaxed text-muted-foreground">{run.review_reason}</p>
-          : <p className="max-w-3xl border-l border-destructive/40 pl-3 text-[0.8125rem] leading-relaxed text-destructive">{run.review_reason}</p>
-      )}
+      {/* An outage (provider/backend) is not a problem with the client's work: keep it neutral. */}
+      {run.review_reason && <ReviewReason reason={run.review_reason} neutral={Boolean(detail?.can_retry) || run.status === "queued"} />}
       {detail?.rules_applied?.length ? <RulesFollowed rules={detail.rules_applied} /> : null}
       <OutputFiles run={run} draftOutputs={detail?.draft_outputs ?? run.draft_outputs ?? []}
         correcting={correcting} onCorrect={reviewable ? onCorrect : undefined} />
@@ -354,7 +372,7 @@ export function ClientWorkflowActivity({ workflowId, name, archived, runs, actio
             {hasLatest && latest.status === "running" && runDuration(latest, now) && <span className="tabular-nums">{runDuration(latest, now)}</span>}
             {!hasLatest && !archived && readiness && <span>{readiness.split(" · ")[0].replace(/\.$/, "")}</span>}
             {archived ? <span>Workflow deleted</span> : !(assigned ?? latest?.workflow_assignment_id != null) && <span>Not assigned</span>}
-            {executionMode && <><span aria-hidden className="text-muted-foreground/40">·</span><span>{executionMode === "manual" ? "Manual" : "Automatic"}</span></>}
+            {executionMode && <><span aria-hidden className="text-muted-foreground/40">·</span><span>{executionMode === "manual" ? "On demand" : "Automatically"}</span></>}
             <span aria-hidden className="text-muted-foreground/40">·</span>
             <span className="tabular-nums">{runs.length} run{runs.length === 1 ? "" : "s"}</span>
           </span>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, Loader2, Minus, X } from "lucide-react";
+import { Check, Loader2, Minus, RotateCcw, X } from "lucide-react";
 import { buildRunTimeline, formatDuration, formatOffset, splitAttempts, type TimelineEntry, type TraceStep } from "@/lib/agent-activity";
 import { cn } from "@/lib/utils";
 
@@ -17,12 +17,14 @@ export function useNow(live: boolean) {
   return now;
 }
 
-export function runTimeline(run: { tool_trajectory: (Omit<TraceStep, "round"> & { round?: number })[] | null; started_at: string | null; completed_at: string | null }, running: boolean) {
+export function runTimeline(run: { tool_trajectory: (Omit<TraceStep, "round"> & { round?: number })[] | null; started_at: string | null; completed_at: string | null; status?: string }, running: boolean) {
   const trace = (run.tool_trajectory ?? []).map((step, i) => ({ ...step, round: step.round ?? i + 1 }));
   const { current, previous } = splitAttempts(trace, run.started_at);
+  const completed = run.status === "completed";
   return {
-    entries: buildRunTimeline(current, { startedAt: run.started_at, completedAt: run.completed_at, running }),
-    earlier: buildRunTimeline(previous, { running: false }),
+    entries: buildRunTimeline(current, { startedAt: run.started_at, completedAt: run.completed_at, running, completed }),
+    // An earlier attempt was resumed, so it stopped rather than failed for good.
+    earlier: buildRunTimeline(previous, { running: false, completed }),
   };
 }
 
@@ -31,13 +33,14 @@ function Marker({ entry, nested }: { entry: TimelineEntry; nested?: boolean }) {
   if (nested && entry.state === "done") return <span className="size-1 rounded-full bg-muted-foreground/50" />;
   if (entry.kind === "gap") return <span className="size-1.5 rounded-full border border-muted-foreground/60 bg-card" />;
   if (entry.state === "failed") return <X className="size-3 text-destructive" />;
+  if (entry.state === "repaired") return <RotateCcw className="size-3 text-muted-foreground" />;
   if (entry.state === "stopped") return <Minus className="size-3 text-muted-foreground" />;
   return <Check className="size-3 text-muted-foreground" />;
 }
 
 function Row({ entry, origin, span, now, nested = false, operations }: {
   entry: TimelineEntry; origin?: number; span: number; now: number; nested?: boolean;
-  // The toggle for a model step's Python operations, when it has any.
+  // The toggle for a model step's data-processing steps, when it has any.
   operations?: { count: number; open: boolean; toggle: () => void };
 }) {
   const end = entry.end ?? (entry.state === "running" ? now : undefined);
@@ -60,7 +63,7 @@ function Row({ entry, origin, span, now, nested = false, operations }: {
         {operations && (
           <button type="button" onClick={operations.toggle} aria-expanded={operations.open}
             className="mt-1 text-xs text-muted-foreground transition-colors hover:text-foreground">
-            {operations.open ? "Hide" : "Show"} {operations.count} Python operation{operations.count === 1 ? "" : "s"}
+            {operations.open ? "Hide" : "Show"} {operations.count} data step{operations.count === 1 ? "" : "s"}
           </button>
         )}
         {entry.state === "failed" && entry.details.length > 0 ? (
@@ -96,7 +99,7 @@ function Row({ entry, origin, span, now, nested = false, operations }: {
 }
 
 function TimelineList({ entries, origin, span, now }: { entries: TimelineEntry[]; origin?: number; span: number; now: number }) {
-  // Python operations stay visible while their step runs, then fold away.
+  // Data-processing steps stay visible while their step runs, then fold away.
   const [toggled, setToggled] = useState<string[]>([]);
   return (
     <ol className="relative before:absolute before:inset-y-4 before:left-2 before:w-px before:bg-border sm:before:left-[calc(2.75rem+0.75rem+0.5rem)]">

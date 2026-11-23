@@ -13,7 +13,9 @@ test('failed or truncated completion results are not displayed as completed', ()
 
 test('JSON document listings and reads get accurate readable summaries', () => {
   assert.equal(summarizeToolStep({ tool: 'list_client_documents', round: 1, result: '[{"id":1,"filename":"source.pdf"}]' }), 'Found 1 document on file');
-  assert.equal(summarizeToolStep({ tool: 'read_document', round: 2, result: '{"document_id":1,"units":[{"text":"truncated' }), 'Read a section of document 1');
+  assert.equal(summarizeToolStep({ tool: 'read_document', round: 2, result: '{"document_id":1,"units":[{"text":"truncated' }), 'Read a section of a document');
+  assert.equal(summarizeToolStep({ tool: 'read_document', round: 2, result: '{"document_id":1,"filename":"T4.pdf","units":[' }), 'Read a section of "T4.pdf"');
+  assert.equal(summarizeToolStep({ tool: 'inspect_work_sample', round: 2, result: '{"filename":"sample.docx","fields":[' }), 'Inspected work sample');
 });
 
 test('automatic repair redirection does not claim staff review is needed', () => {
@@ -151,7 +153,7 @@ test('run timeline keeps model time and accounts for untraced gaps', async () =>
   assert.deepEqual(rows.map(r => r.kind), ['gap', 'step', 'step', 'gap', 'step', 'gap']);
   assert.equal(rows[2].title, 'Built monthly totals');
   assert.equal(rows[2].end - rows[2].start, 193000);
-  assert.match(rows[2].details.at(-1), /2 Python operations/);
+  assert.match(rows[2].details.at(-1), /2 data-processing steps/);
   assert.equal(rows[0].end - rows[0].start, 20000);
   assert.equal(rows.at(-1).end - rows.at(-1).start, 10000);
 
@@ -178,7 +180,7 @@ test('streamed Python operations keep their own timing under the model step', as
   assert.equal(row.title, 'Build monthly totals; Draw charts');
   assert.deepEqual(row.children.map(c => [c.title, (c.end - c.start) / 1000]), [['Build monthly totals', 40], ['Draw charts', 15]]);
   assert.equal(row.end - row.start, 126000);
-  assert.match(row.details.at(-1), /Python ran for 55s across 2 operations/);
+  assert.match(row.details.at(-1), /Data processing took 55s across 2 steps/);
 
   const live = buildRunTimeline([{ ...trace[0], result: undefined, completed_at: undefined }, op(30, 70, 'Build monthly totals'),
     { tool: 'code_interpreter', round: 1, started_at: at(80) }], { startedAt: at(0), running: true });
@@ -192,4 +194,25 @@ test('a failed step is named in the run timeline', async () => {
   const titles = buildRunTimeline([failed('record_progress'), failed('custom_tool'),
     { ...failed('finish_workflow'), activity: { summary: 'Output needs correction', details: ['Totals differ'], failed: true } }], { running: false }).map(r => r.title);
   assert.deepEqual(titles, ['Saving progress needs correction', 'Needs correction: custom tool', 'Output needs correction']);
+});
+
+test('failures the agent recovered from are not shown as failures', async () => {
+  const { buildRunTimeline } = await import('../lib/agent-activity.ts');
+  const failed = { tool: 'finish_workflow', round: 3, result: '{"error":"x"}', activity: { summary: 'Output needs correction', details: ['Totals differ'], failed: true } };
+  const passed = { tool: 'finish_workflow', round: 4, result: '{"status":"completed"}' };
+  const recovered = buildRunTimeline([failed, passed], { running: false });
+  assert.equal(recovered[0].state, 'repaired');
+  assert.equal(recovered[0].title, 'Caught an issue and kept working');
+  assert.deepEqual(recovered[0].details, ['Totals differ']);
+  assert.equal(buildRunTimeline([failed], { running: false, completed: true })[0].title, 'Caught an issue and fixed it');
+  assert.equal(buildRunTimeline([passed, failed], { running: false })[1].state, 'failed');  // Stopped on it.
+});
+
+test('raw server errors are explained in plain words', async () => {
+  const { runReason, SERVER_ERROR_MESSAGE } = await import('../lib/run-reason.ts');
+  for (const raw of ["KeyError: 'totals'", "TypeError: 'NoneType' object is not subscriptable", 'Traceback (most recent call last):']) {
+    assert.deepEqual(runReason(raw), { text: SERVER_ERROR_MESSAGE, technical: raw });
+  }
+  const written = "The T4's employer name differs from the payroll summary.";
+  assert.deepEqual(runReason(written), { text: written });
 });

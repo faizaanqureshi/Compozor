@@ -12,6 +12,7 @@ import {
 import { cn, formatShortDate } from "@/lib/utils";
 import Link from "next/link";
 import { Panel } from "@/components/panel";
+import { AssignClientsDialog } from "@/components/assign-clients-dialog";
 import { StatStrip, type StatStripItem } from "@/components/stat-strip";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -53,12 +54,23 @@ export function WorkflowLibrary({
   clients,
   error,
   onRefresh,
+  assignWorkflowId,
+  onAssignClosed,
 }: {
   workflows: Workflow[] | null;
   clients: ClientWithChecklistSummary[] | undefined;
   error: string | null;
   onRefresh: () => void;
+  // Opens client selection for this workflow (set right after creating one).
+  assignWorkflowId?: number;
+  onAssignClosed?: () => void;
 }) {
+  const [assigningId, setAssigningId] = useState<number | null>(null);
+  const assigning = (workflows ?? []).find((w) => w.id === (assigningId ?? assignWorkflowId)) ?? null;
+  const closeAssign = () => {
+    setAssigningId(null);
+    onAssignClosed?.();
+  };
   // Per-workflow assignment and run state, from the client list the app
   // already caches (each client carries its workflows' latest run status).
   const { byWorkflow, totals, clientsWithWorkflows } = useMemo(() => {
@@ -119,7 +131,7 @@ export function WorkflowLibrary({
             Workflows
           </h1>
           <p className="max-w-xl text-sm text-pretty text-muted-foreground">
-            Define the work once, then run it for every client it applies to. Assign workflows from the Clients page.
+            Define the work once, then choose the clients it runs for.
           </p>
         </div>
         <div className="self-start sm:self-auto">
@@ -172,17 +184,32 @@ export function WorkflowLibrary({
                   workflow={workflow}
                   mix={byWorkflow.get(workflow.id) ?? emptyMix()}
                   onChange={onRefresh}
+                  onAssign={() => setAssigningId(workflow.id)}
                 />
               ))}
             </ul>
           </div>
         )}
       </Panel>
+      {assigning && (
+        <AssignClientsDialog
+          workflow={assigning}
+          clients={clients}
+          open
+          onOpenChange={(open) => !open && closeAssign()}
+          onAssigned={onRefresh}
+        />
+      )}
     </div>
   );
 }
 
-function WorkflowRow({ workflow, mix, onChange }: { workflow: Workflow; mix: RunMix; onChange: () => void }) {
+function WorkflowRow({ workflow, mix, onChange, onAssign }: {
+  workflow: Workflow;
+  mix: RunMix;
+  onChange: () => void;
+  onAssign: () => void;
+}) {
   const [archiving, setArchiving] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -232,7 +259,7 @@ function WorkflowRow({ workflow, mix, onChange }: { workflow: Workflow; mix: Run
       </span>
 
       <div className="max-md:col-span-2">
-        <RunMixSummary mix={mix} />
+        <RunMixSummary mix={mix} onAssign={onAssign} />
       </div>
 
       <span
@@ -292,8 +319,17 @@ function RowMenu({ name, onArchive }: { name: string; onArchive: () => void }) {
 
 // Assigned clients split by where their latest run stands: a thin segmented
 // rule, then the counts in words.
-function RunMixSummary({ mix }: { mix: RunMix }) {
-  if (mix.assigned === 0) return <span className="text-sm text-muted-foreground">Not assigned</span>;
+function RunMixSummary({ mix, onAssign }: { mix: RunMix; onAssign: () => void }) {
+  if (mix.assigned === 0) {
+    return (
+      <span className="flex flex-col items-start gap-0.5 text-sm">
+        <span className="text-muted-foreground">Not assigned</span>
+        <button type="button" onClick={onAssign} className="text-xs text-foreground underline-offset-4 hover:underline">
+          Choose clients
+        </button>
+      </span>
+    );
+  }
   const parts = BUCKETS.filter((b) => mix[b.key] > 0);
   return (
     <div className="flex flex-col gap-1.5">

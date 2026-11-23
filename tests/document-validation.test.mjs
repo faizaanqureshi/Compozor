@@ -9,7 +9,7 @@ test("each document keeps its own result regardless of newer uploads", () => {
 });
 test("unfinished validation is explicit and carries its reason", () => {
   const result = documentValidation({ validation_status: "needs_review", validation_reasons: ["Wrong year", null, 5] });
-  assert.equal(result.label, "Unable to validate");
+  assert.equal(result.label, "Needs a check");
   assert.deepEqual(result.reasons, ["Wrong year"]);
   assert.equal(documentValidation({ validation_status: "processing" }).label, "Validating");
   assert.equal(documentValidation(null).label, "Not validated");
@@ -18,5 +18,5 @@ test("unfinished validation is explicit and carries its reason", () => {
 test("an old accepted file cannot claim a changed requirement is collected", () => {
   const result = documentValidation({ validation_status: "accepted" }, false);
   assert.equal(result.status, "needs_review");
-  assert.match(result.reasons[0], /current request/);
+  assert.match(result.reasons[0], /request this file was matched to has changed/);
 });

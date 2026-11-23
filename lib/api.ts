@@ -1328,6 +1328,8 @@ export interface Workflow {
   organization_id: number;
   name: string;
   instructions: string;
+  // Staff's one-sentence description of what it produces; null on older workflows.
+  outcome?: string | null;
   execution_mode: WorkflowExecutionMode;
   archived_at: string | null;
   created_at: string;
@@ -1457,13 +1459,14 @@ export const getWorkflow = (workflowId: number) =>
 export const createWorkflow = (input: {
   name: string;
   instructions: string;
+  outcome?: string | null;
   execution_mode?: WorkflowExecutionMode;
   work_sample_ids?: number[];
 }) => request<Workflow>("/workflows", json("POST", input));
 
 export const updateWorkflow = (
   workflowId: number,
-  input: { name?: string; instructions?: string; execution_mode?: WorkflowExecutionMode; work_sample_ids?: number[] }
+  input: { name?: string; instructions?: string; outcome?: string | null; execution_mode?: WorkflowExecutionMode; work_sample_ids?: number[] }
 ) => request<Workflow>(`/workflows/${workflowId}`, json("PATCH", input));
 
 export const archiveWorkflow = (workflowId: number) =>

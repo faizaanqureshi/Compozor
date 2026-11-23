@@ -101,6 +101,8 @@ export function RunReview({ run, clientName, result, onResult, onChange }: {
   const [error, setError] = useState<string | null>(null);
   const approved = Boolean(run.approved_at);
   const completed = run.status === "completed";
+  // A run that stopped for review with a draft can be accepted as the final result.
+  const acceptable = run.status === "needs_review" && (run.draft_outputs?.length ?? 0) > 0;
 
   const toggleApproval = async () => {
     setApproving(true);
@@ -148,6 +150,12 @@ export function RunReview({ run, clientName, result, onResult, onChange }: {
             {approving ? <Loader2 className="animate-spin" /> : <Check />}Approve
           </Button>
         ))}
+        {acceptable && (
+          <Button variant="outline" size="sm" onClick={toggleApproval} disabled={approving}
+            title="Use this draft as the final result. Read the notes above first.">
+            {approving ? <Loader2 className="animate-spin" /> : <Check />}Accept draft
+          </Button>
+        )}
         {!noteOpen && (
           <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => setNoteOpen(true)}>
             Teach a rule

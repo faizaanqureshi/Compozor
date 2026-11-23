@@ -79,7 +79,6 @@ import {
   renameDocument,
   revalidateDocument,
   resolveClientCommitment,
-  rerunWorkflowRun,
   runQueuedWorkflowRun,
   sendChecklistItemReminder,
   sendChecklistReminder,
@@ -99,7 +98,7 @@ import { deepLinkElementId, readClientDeepLink, type ClientDeepLink } from "@/li
 import { useAskScope } from "@/components/ask/ask-panel-context";
 import { AskClientButton } from "@/components/ask/ask-client-button";
 import { computeTier, relativeDays, startOfDay, TIER_META } from "@/lib/checklist-urgency";
-import { ResumeWorkflowDialog } from "@/components/resume-workflow-dialog";
+import { RunAgainMenu } from "@/components/run-again-menu";
 import { AgentActivityDisclosure } from "@/components/agent-activity-disclosure";
 import { ClientWorkflowActivity } from "@/components/client-workflow-activity";
 import { AssignWorkflowDialog } from "@/components/assign-workflow-dialog";
@@ -2515,20 +2514,6 @@ function WorkflowRunsCard({
     }
   };
 
-  const onRerun = async (runId: number) => {
-    setRunningId(runId);
-    setError(null);
-    try {
-      await rerunWorkflowRun(clientId, runId);
-      requestStart(runId);
-      onChange();
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : String(e));
-    } finally {
-      setRunningId(null);
-    }
-  };
-
   const [startingId, setStartingId] = useState<number | null>(null);
   const onStart = async (assignmentId: number) => {
     setStartingId(assignmentId);
@@ -2620,22 +2605,13 @@ function WorkflowRunsCard({
                         Run now
                       </Button>
                     )}
-                    {!awaitingFirstRun && !isLive && latest?.can_resume && <ResumeWorkflowDialog run={latest} onResumed={onChange} />}
                     {!awaitingFirstRun && !isLive &&
                       !group.workflowArchived &&
                       latest &&
                       (latest.status === "completed" ||
                         latest.status === "needs_review" ||
                         latest.status === "failed") && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => onRerun(latest.id)}
-                        disabled={runningId === latest.id}
-                      >
-                        {runningId === latest.id ? <Loader2 className="animate-spin" /> : <RotateCcw />}
-                        Rerun
-                      </Button>
+                      <RunAgainMenu run={latest} onStarted={() => { requestStart(latest.id); onChange(); }} />
                     )}
                     {!isLive && group.assignment && (
                       <RemoveWorkflowButton

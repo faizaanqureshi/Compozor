@@ -12,13 +12,13 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import {
-  ApiError, cancelQuestionnaireAssignment, getQuestionnaireSubmissions,
+  ApiError, cancelQuestionnaireAssignment, getClient, getQuestionnaireSubmissions,
   listClientQuestionnaireAssignments, listQuestionnaireReviewProposals, listQuestionnaireTemplates,
   listQuestionnaireVersions, resolveQuestionnaireReviewProposal, supersedeQuestionnaireAssignment,
   type QuestionnaireAssignment, type QuestionnaireAssignmentDetail, type QuestionnaireReviewProposal,
   type QuestionnaireVersion,
 } from "@/lib/api";
-import { clientQuestionnaireReviewsKey, clientQuestionnairesKey, questionnairesKey } from "@/lib/swr-keys";
+import { clientKey, clientQuestionnaireReviewsKey, clientQuestionnairesKey, questionnairesKey } from "@/lib/swr-keys";
 import { QuestionnaireContext, formatAnswer, type QuestionDefinition, type QuestionnaireDefinition, type Scope } from "@/lib/questionnaire-logic";
 
 export function ClientQuestionnairesCard({ clientId, clientName }: { clientId: number; clientName?: string }) {
@@ -41,10 +41,46 @@ export function ClientQuestionnairesCard({ clientId, clientName }: { clientId: n
   </>;
 }
 
+// What a questionnaire answer would change on the checklist, in staff terms.
+const REVIEW_COPY: Record<string, { title: string; body: (doc: string) => string; keep: string }> = {
+  withdraw: { title: "No longer needed?", body: (doc) => `The latest answers mean ${doc} isn't needed any more.`, keep: "Keep requesting it" },
+  reactivate: { title: "Needed again?", body: (doc) => `The latest answers mean ${doc} is needed again, but your team removed it.`, keep: "Keep it removed" },
+  legacy_overlap: { title: "Possible duplicate", body: (doc) => `The answers ask for ${doc}, which may already be on the checklist.`, keep: "Keep both" },
+  material_change: { title: "Request changed", body: (doc) => `The latest answers change what's asked for ${doc}.`, keep: "Keep current" },
+};
+
 function ReviewRow({ review, clientId, onResolved }: { review: QuestionnaireReviewProposal; clientId: number; onResolved: () => void }) {
   const [error, setError] = useState<string | null>(null); const details = review.details as { expected?: { doc_type_needed?: string }; desired?: { doc_type_needed?: string }; candidate_item_ids?: number[] };
+  // Same cache as the client page, so the existing requests are named, not numbered.
+  const { data: client } = useSWR(review.kind === "legacy_overlap" ? clientKey(clientId) : null, () => getClient(clientId));
   const resolve = async (action: "keep" | "withdraw" | "reactivate" | "map_existing", target?: number) => { try { await resolveQuestionnaireReviewProposal(clientId, review.id, action, target); onResolved(); } catch (e) { setError(e instanceof ApiError ? e.message : String(e)); } };
-  return <div className="rounded-lg border p-3"><p className="text-sm font-medium">{review.kind.replaceAll("_", " ")}: {details.expected?.doc_type_needed ?? "document requirement"}</p>{details.desired?.doc_type_needed && <p className="text-xs text-muted-foreground">Proposed: {details.desired.doc_type_needed}</p>}<div className="mt-2 flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => void resolve("keep")}>Keep current</Button>{review.kind === "withdraw" && <Button size="sm" onClick={() => void resolve("withdraw")}>Withdraw</Button>}{review.kind === "reactivate" && <Button size="sm" onClick={() => void resolve("reactivate")}>Reactivate</Button>}{review.kind === "legacy_overlap" && details.candidate_item_ids?.map((id) => <Button key={id} size="sm" onClick={() => void resolve("map_existing", id)}>Map to item #{id}</Button>)}</div>{error && <p className="mt-2 text-xs text-destructive">{error}</p>}</div>;
+  const doc = details.expected?.doc_type_needed ?? "this document";
+  const copy = REVIEW_COPY[review.kind] ?? { title: "Checklist change", body: () => "The latest answers change this request.", keep: "Keep current" };
+  const candidates = details.candidate_item_ids ?? [];
+  const candidateName = (id: number) => {
+    const item = client?.checklist_items.find((i) => i.id === id);
+    return item ? (item.description ? `${item.doc_type_needed} (${item.description})` : item.doc_type_needed) : "existing request";
+  };
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border p-3">
+      <div className="flex flex-col gap-0.5">
+        <p className="text-sm font-medium">{copy.title}</p>
+        <p className="text-xs leading-relaxed text-muted-foreground">{copy.body(doc)}</p>
+        {details.desired?.doc_type_needed && <p className="text-xs text-muted-foreground">Proposed: {details.desired.doc_type_needed}</p>}
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" variant="outline" onClick={() => void resolve("keep")}>{copy.keep}</Button>
+        {review.kind === "withdraw" && <Button size="sm" onClick={() => void resolve("withdraw")}>Stop requesting it</Button>}
+        {review.kind === "reactivate" && <Button size="sm" onClick={() => void resolve("reactivate")}>Request it again</Button>}
+        {review.kind === "legacy_overlap" && candidates.map((id) => (
+          <Button key={id} size="sm" onClick={() => void resolve("map_existing", id)}>
+            {candidates.length === 1 ? "Use the existing request" : `Use ${candidateName(id)}`}
+          </Button>
+        ))}
+      </div>
+      {error && <p className="text-xs text-destructive">{error}</p>}
+    </div>
+  );
 }
 
 // Defaults ("client", "unspecified") are internal and not worth showing.

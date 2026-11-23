@@ -1327,7 +1327,9 @@ function AttachmentTile({ doc }: { doc: DocumentOut }) {
 function AutomationDetail({ entry, children }: { entry: EmailLogEntry; children: React.ReactNode }) {
   const lines = [
     entry.automation_level_at_decision && (entry.autosent ? "Sent automatically" : "Held for staff review"),
-    entry.autosend_confidence !== null && `Confidence ${entry.autosend_confidence.toFixed(2)}${entry.autosend_threshold !== null ? ` (threshold ${entry.autosend_threshold.toFixed(2)})` : ""}`,
+    // In words, not raw scores: whether the reply was certain enough to send on its own.
+    !entry.autosent && entry.autosend_confidence !== null && entry.autosend_threshold !== null &&
+      entry.autosend_confidence < entry.autosend_threshold && "Not certain enough to send on its own",
     entry.safety_checks && (entry.safety_checks.passed ? "Safety review passed" : "Safety review: staff review required"),
     entry.safety_checks?.reason,
   ].filter(Boolean) as string[];

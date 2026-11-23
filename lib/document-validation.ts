@@ -6,14 +6,14 @@ export function documentValidation(metadata: unknown, collected = true) {
     mismatch: "Incorrect · Replacement needed",
     supplementary: "Other document",
     processing: "Validating",
-    needs_review: "Unable to validate",
+    needs_review: "Needs a check",
   };
   let reasons = Array.isArray(value.validation_reasons)
     ? value.validation_reasons.filter((reason): reason is string => typeof reason === "string")
     : [];
   if (status === "accepted" && !collected) {
     status = "needs_review";
-    reasons = ["This file no longer satisfies a collected requirement. Validate it against the current request."];
+    reasons = ["The request this file was matched to has changed. Check it still fits what you asked for."];
   }
   return { status, label: labels[status] ?? "Not validated", reasons };
 }
