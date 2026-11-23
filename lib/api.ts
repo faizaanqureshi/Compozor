@@ -170,6 +170,10 @@ export interface Organization {
   plan?: string | null;
   billing_currency?: "CAD" | "USD";
   hourly_rate?: string | null;
+  // "trial" (free trial), "active" (on a plan) or "locked" (trial over, no
+  // plan: nothing runs until an admin chooses a plan).
+  access?: "active" | "trial" | "locked";
+  trial_ends_at?: string | null;
 }
 
 export type PlanKey = "solo" | "team" | "practice" | "firm";
@@ -191,6 +195,11 @@ export interface UsageReport {
   extra_usage: { enabled: boolean; limit: string | null; available: boolean };
   // Set when new workflow runs can't start (no plan, or included usage used up).
   workflows_paused_reason: string | null;
+  access: "active" | "trial" | "locked";
+  // The free trial while there's no plan: its end and how much of its workflow usage is used.
+  trial: { ends_at: string; percent_used: number } | null;
+  // Limits the firm is near or at, most urgent first (also emailed to admins).
+  alerts: { key: string; headline: string; detail: string }[];
   available_plans: { key: PlanKey; name: string; monthly_price: Record<"CAD" | "USD", string> }[];
   active_clients: number;
   time_saved: {

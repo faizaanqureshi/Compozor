@@ -55,6 +55,22 @@ function Row({ label, description, children }: { label: string; description?: Re
   );
 }
 
+function TrialMeter({ percent }: { percent: number }) {
+  const full = percent >= 100;
+  return (
+    <div className="flex max-w-md flex-col gap-2.5">
+      <span className="text-foreground">
+        <span className="tabular-nums">{Math.round(percent)}%</span> used
+      </span>
+      <span className="block h-1.5 overflow-hidden rounded-full bg-muted" role="meter" aria-label="Trial usage used"
+        aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(percent)}>
+        <span className={cn("block h-full rounded-full", full || percent >= 80 ? "bg-warning" : "bg-primary")}
+          style={{ width: `${Math.min(100, percent)}%` }} />
+      </span>
+    </div>
+  );
+}
+
 function UsageMeter({ report }: { report: UsageReport }) {
   const usage = report.usage!;
   const over = usage.percent_used > 100;
@@ -100,12 +116,15 @@ function UsageMeter({ report }: { report: UsageReport }) {
   );
 }
 
+const shortDate = (iso: string) =>
+  new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
 const resetDate = (report: UsageReport) =>
   new Date(report.period_end).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 
 // The API's reason points to this page; here, say what to do on it.
 function pausedMessage(report: UsageReport) {
-  if (!report.plan) return "Workflows are paused until you choose a plan.";
+  if (!report.plan) return "Workflows are paused: your trial's workflow usage is used up. Choose a plan to keep running them.";
   if (report.extra_usage.enabled) return `Workflows are paused: this month's extra usage limit is reached. Raise the limit below, or wait until ${resetDate(report)}.`;
   if (report.extra_usage.available) return `Workflows are paused: included usage is used up. Turn on extra usage below, or wait until it resets on ${resetDate(report)}.`;
   return `Workflows are paused: included usage is used up until ${resetDate(report)}.`;
@@ -131,7 +150,13 @@ function PlanPicker({ report }: { report: UsageReport }) {
   return (
     <div className="flex max-w-xl flex-col gap-3">
       <div className="flex items-center justify-between gap-4">
-        <span className="text-muted-foreground">Choose a plan to start running workflows.</span>
+        <span className="text-muted-foreground">
+          {report.access === "trial" && report.trial
+            ? `You're on a free trial until ${shortDate(report.trial.ends_at)}. Choose a plan anytime.`
+            : report.access === "locked"
+              ? "Choose a plan to turn Compozor back on."
+              : "Choose a plan to start running workflows."}
+        </span>
         <div className="flex shrink-0 rounded-md ring-1 ring-border" role="group" aria-label="Currency">
           {(["CAD", "USD"] as const).map((code) => (
             <button
@@ -596,7 +621,7 @@ export function PlanUsageSection() {
               <Loader2 className="size-3.5 animate-spin" />
               Payment received. Setting up your plan…
             </p>
-          ) : report.workflows_paused_reason && (
+          ) : report.access !== "locked" && report.workflows_paused_reason && (
             <p role="status" className="mb-4 rounded-lg bg-warning/20 px-4 py-3 text-sm text-warning-foreground">
               {pausedMessage(report)}
             </p>
@@ -604,6 +629,11 @@ export function PlanUsageSection() {
           <Row label="Plan">
             <PlanRowValue report={report} />
           </Row>
+          {report.access === "trial" && report.trial && (
+            <Row label="Trial usage" description="Your trial includes usage for workflows. When it's used up, workflows pause until you choose a plan.">
+              <TrialMeter percent={report.trial.percent_used} />
+            </Row>
+          )}
           {report.usage && (
             <Row label="Included usage" description="Every plan includes usage each month. When it runs out, workflows pause until it resets, unless extra usage is on.">
               <UsageMeter report={report} />

@@ -13,7 +13,7 @@ import {
 } from "@/components/pricing-currency";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { COMPARISON_ROWS, PLANS, defaultPricingCurrency, type Plan } from "@/lib/pricing";
+import { COMPARISON_ROWS, PLANS, TRIAL_LINE, defaultPricingCurrency, type Plan } from "@/lib/pricing";
 import { publicPageMetadata } from "@/lib/seo";
 import { cn } from "@/lib/utils";
 
@@ -73,6 +73,7 @@ export default async function PricingPage() {
                   and Ask. Bigger plans add room for your people and more
                   hands-on help.
                 </p>
+                <p className="mt-4 text-sm text-muted-foreground">{TRIAL_LINE}</p>
                 <CurrencySwitch className="mt-8" />
               </header>
 
