@@ -358,7 +358,8 @@ export function TeamSection({ firmName, isAdmin }: { firmName: string; isAdmin: 
               <p className="text-xs text-muted-foreground">Only firm admins can invite people or change roles.</p>
             ) : full ? (
               <p className="text-xs text-muted-foreground">
-                All {team.seat_limit} seats are in use. Remove someone or revoke an invitation to invite more.
+                All {team.seat_limit} seats are in use. Remove someone, revoke an invitation, or{" "}
+                <a href="#plan" className="underline underline-offset-4">upgrade your plan</a> to invite more.
               </p>
             ) : null}
           </div>

@@ -39,8 +39,8 @@ test("plans show the approved prices in both currencies", () => {
   });
   assert.equal(PLANS.filter((plan) => plan.recommended).map((plan) => plan.name).join(), "Team");
   assert.equal(PLANS.at(-1).cta.href, "mailto:hello@compozor.com");
-  for (const plan of PLANS.slice(0, -1)) assert.equal(plan.cta.href, "/waitlist");
+  for (const plan of PLANS.slice(0, -1)) assert.equal(plan.cta.href, "/sign-up");
   for (const row of COMPARISON_ROWS) assert.ok(row.from >= 0 && row.from < PLANS.length, row.label);
-  assert.match(PRICING_FOOTNOTES.cad, /Canadian dollars.*HST extra/);
+  assert.match(PRICING_FOOTNOTES.cad, /Canadian dollars/);
   assert.match(PRICING_FOOTNOTES.usd, /US dollars/);
 });

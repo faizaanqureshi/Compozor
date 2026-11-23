@@ -16,8 +16,10 @@ export interface Plan {
   recommended?: boolean;
 }
 
-// The site is in Clerk waitlist mode: starting a plan means joining it.
-const START_HREF = "/waitlist";
+// Every plan starts with the 14-day free trial (no card); the plan itself is
+// chosen in Settings, under Plan & usage.
+const START_HREF = "/sign-up";
+export const TRIAL_LINE = "Every plan starts with a 14-day free trial. No card needed.";
 
 export const PLANS: Plan[] = [
   {
@@ -31,7 +33,7 @@ export const PLANS: Plan[] = [
       "Ask, with web search and Knowledge",
       "Generous usage included",
     ],
-    cta: { label: "Start with Solo", href: START_HREF },
+    cta: { label: "Start free trial", href: START_HREF },
   },
   {
     name: "Team",
@@ -44,7 +46,7 @@ export const PLANS: Plan[] = [
       "Assign clients to staff",
       "Admin and staff roles",
     ],
-    cta: { label: "Start with Team", href: START_HREF },
+    cta: { label: "Start free trial", href: START_HREF },
     recommended: true,
   },
   {
@@ -57,7 +59,7 @@ export const PLANS: Plan[] = [
       "We set you up and import your clients",
       "Priority support",
     ],
-    cta: { label: "Start with Practice", href: START_HREF },
+    cta: { label: "Start free trial", href: START_HREF },
   },
   {
     name: "Firm",
@@ -70,7 +72,7 @@ export const PLANS: Plan[] = [
       "Audit history export",
       "Early access to new features",
     ],
-    cta: { label: "Start with Firm", href: START_HREF },
+    cta: { label: "Start free trial", href: START_HREF },
   },
   {
     name: "Enterprise",
@@ -104,7 +106,7 @@ export const COMPARISON_ROWS: { label: string; from: number }[] = [
 ];
 
 export const PRICING_FOOTNOTES: Record<PricingCurrency, string> = {
-  cad: "Prices in Canadian dollars, billed monthly. HST extra.",
+  cad: "Prices in Canadian dollars, billed monthly.",
   usd: "Prices in US dollars, billed monthly. Taxes extra where applicable.",
 };
 

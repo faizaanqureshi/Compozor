@@ -39,7 +39,7 @@ export function LandingFaq() {
           ],
           [
             "How can my firm get access?",
-            "Book a demo to walk through your firm’s process, or join the waitlist. We invite firms as early access opens. Existing users can continue to sign in.",
+            "Start a 14-day free trial, no card needed, or book a demo to walk through your firm’s process first.",
           ],
         ].map(([question, answer], i) => (
           <AccordionItem key={question} value={i}>

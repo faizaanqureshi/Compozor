@@ -6,6 +6,7 @@ import { AuroraBackground } from "@/components/aurora-background";
 import { LandingNav } from "@/components/landing-nav";
 import { SiteFooter } from "@/components/site-footer";
 import {
+  ChosenPlanLink,
   CurrencySwitch,
   PlanPrice,
   PricingCurrencyProvider,
@@ -13,7 +14,8 @@ import {
 } from "@/components/pricing-currency";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { COMPARISON_ROWS, PLANS, defaultPricingCurrency, type Plan } from "@/lib/pricing";
+import { COMPARISON_ROWS, PLANS, TRIAL_LINE, defaultPricingCurrency, type Plan } from "@/lib/pricing";
+import type { PlanKey } from "@/lib/api";
 import { publicPageMetadata } from "@/lib/seo";
 import { cn } from "@/lib/utils";
 
@@ -73,6 +75,7 @@ export default async function PricingPage() {
                   and Ask. Bigger plans add room for your people and more
                   hands-on help.
                 </p>
+                <p className="mt-4 text-sm text-muted-foreground">{TRIAL_LINE}</p>
                 <CurrencySwitch className="mt-8" />
               </header>
 
@@ -173,7 +176,15 @@ function PlanCard({ plan }: { plan: Plan }) {
       </ul>
       <Button
         nativeButton={false}
-        render={isLink ? <Link href={plan.cta.href} /> : <a href={plan.cta.href} />}
+        render={
+          !isLink ? (
+            <a href={plan.cta.href} />
+          ) : plan.price ? (
+            <ChosenPlanLink plan={plan.name.toLowerCase() as PlanKey} href={plan.cta.href} />
+          ) : (
+            <Link href={plan.cta.href} />
+          )
+        }
         variant={solid ? "default" : "outline"}
         size="lg"
         className={cn(

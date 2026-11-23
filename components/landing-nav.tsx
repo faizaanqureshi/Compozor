@@ -174,12 +174,12 @@ export function LandingNav() {
                 </Button>
                 <Button
                   nativeButton={false}
-                  render={<Link href="/waitlist" onClick={closeMenu} />}
+                  render={<Link href="/sign-up" onClick={closeMenu} />}
                   variant="outline"
                   size="lg"
                   className="h-12 text-base"
                 >
-                  Join the waitlist
+                  Start free trial
                 </Button>
                 <Show when="signed-out">
                   <Link

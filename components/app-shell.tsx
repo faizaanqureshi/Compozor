@@ -8,6 +8,7 @@ import { MobileTopBar } from "@/components/mobile-top-bar";
 import { DashboardBackground } from "@/components/dashboard-background";
 import { MobileNavProvider } from "@/components/mobile-nav-context";
 import { OnboardingGate } from "@/components/onboarding-gate";
+import { AccessGate, UsageNotice } from "@/components/access-gate";
 import { ProductTour } from "@/components/product-tour";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AskPanel } from "@/components/ask/ask-panel";
@@ -38,6 +39,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               // animated wrapper below.
               children
             ) : (
+              <AccessGate>
               <div className="flex min-h-full flex-1">
                 <Nav />
                 <div className="relative isolate flex min-w-0 flex-1 flex-col overflow-x-hidden">
@@ -46,6 +48,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     <DashboardBackground />
                     {/* One identical entrance for every page, keyed so it replays per navigation. */}
                     <div key={pathname} className="animate-blur-in-sm">
+                      <UsageNotice />
                       {children}
                     </div>
                   </main>
@@ -53,6 +56,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 {/* Ask follows you across pages; docked beside the page on wide screens. */}
                 <AskPanel />
               </div>
+              </AccessGate>
             )}
             <ProductTour key={`${userId}:${pathname}`} />
           </OnboardingGate>

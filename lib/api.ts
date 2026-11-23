@@ -170,7 +170,13 @@ export interface Organization {
   plan?: string | null;
   billing_currency?: "CAD" | "USD";
   hourly_rate?: string | null;
+  // "trial" (free trial), "active" (on a plan) or "locked" (trial over, no
+  // plan: nothing runs until an admin chooses a plan).
+  access?: "active" | "trial" | "locked";
+  trial_ends_at?: string | null;
 }
+
+export type PlanKey = "solo" | "team" | "practice" | "firm";
 
 // Plan & usage (admins). Decimals arrive as strings to keep cents exact.
 export interface UsageReport {
@@ -180,8 +186,21 @@ export interface UsageReport {
   plan: { key: string; name: string; monthly_price: string | null } | null;
   // Share of the plan's included usage used; null without a priced plan.
   usage: { percent_used: number; projected_percent: number; extra_usage_amount: string } | null;
-  // False until payments are connected: extra usage is shown, never charged.
+  // True while a Stripe subscription is active: extra usage can be charged.
   billing_active: boolean;
+  subscription_status: string | null;
+  // The plan ends at period_end (cancelled), or switches to scheduled_plan then.
+  cancel_at_period_end: boolean;
+  scheduled_plan: { key: string; name: string; monthly_price: string | null } | null;
+  extra_usage: { enabled: boolean; limit: string | null; available: boolean };
+  // Set when new workflow runs can't start (no plan, or included usage used up).
+  workflows_paused_reason: string | null;
+  access: "active" | "trial" | "locked";
+  // The free trial while there's no plan: its end and how much of its workflow usage is used.
+  trial: { ends_at: string; percent_used: number } | null;
+  // Limits the firm is near or at, most urgent first (also emailed to admins).
+  alerts: { key: string; headline: string; detail: string }[];
+  available_plans: { key: PlanKey; name: string; monthly_price: Record<"CAD" | "USD", string> }[];
   active_clients: number;
   time_saved: {
     items: { key: string; label: string; count: number; minutes_each: number; minutes: number }[];
@@ -595,6 +614,20 @@ export interface ClientUsageBreakdownOut {
 export const getMyOrganization = () => request<Organization>("/organizations/me");
 
 export const getMyUsage = () => request<UsageReport>("/organizations/me/usage");
+
+// Stripe-hosted pages: the browser is sent to the returned URL.
+export const startCheckout = (plan: PlanKey, currency: "CAD" | "USD") =>
+  request<{ url: string }>("/billing/checkout", json("POST", { plan, currency }));
+// Back from Checkout: Compozor asks Stripe for the subscription directly, so a
+// late webhook never leaves a paid firm waiting.
+export const syncBilling = () => request<UsageReport>("/billing/sync", { method: "POST" });
+export const openBillingPortal = () => request<{ url: string }>("/billing/portal", { method: "POST" });
+// Upgrades start now; downgrades and cancelling take effect at the period's end.
+// Choosing the current plan undoes a pending downgrade or cancellation.
+export const changePlan = (plan: PlanKey) => request<UsageReport>("/billing/plan", json("POST", { plan }));
+export const cancelPlan = () => request<UsageReport>("/billing/cancel", { method: "POST" });
+export const setExtraUsage = (enabled: boolean, limit: number | null) =>
+  request<UsageReport>("/billing/extra-usage", json("PUT", { enabled, limit }));
 
 export const updateMyOrganization = (input: {
   name?: string;
