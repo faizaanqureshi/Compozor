@@ -618,6 +618,9 @@ export const getMyUsage = () => request<UsageReport>("/organizations/me/usage");
 // Stripe-hosted pages: the browser is sent to the returned URL.
 export const startCheckout = (plan: PlanKey, currency: "CAD" | "USD") =>
   request<{ url: string }>("/billing/checkout", json("POST", { plan, currency }));
+// Back from Checkout: Compozor asks Stripe for the subscription directly, so a
+// late webhook never leaves a paid firm waiting.
+export const syncBilling = () => request<UsageReport>("/billing/sync", { method: "POST" });
 export const openBillingPortal = () => request<{ url: string }>("/billing/portal", { method: "POST" });
 // Upgrades start now; downgrades and cancelling take effect at the period's end.
 // Choosing the current plan undoes a pending downgrade or cancellation.

@@ -25,6 +25,7 @@ import {
   changePlan,
   getMyUsage,
   openBillingPortal,
+  syncBilling,
   setExtraUsage,
   startCheckout,
   updateMyOrganization,
@@ -587,8 +588,8 @@ function TimeSaved({ report }: { report: UsageReport }) {
 }
 
 export function PlanUsageSection() {
-  // Back from Stripe Checkout: the subscription arrives by webhook a moment
-  // later, so check again every couple of seconds until it shows (up to 30s).
+  // Back from Stripe Checkout: ask Stripe for the subscription (rather than
+  // only waiting for its webhook), every couple of seconds until it shows (up to 30s).
   // (Read once on the client; nothing it affects renders before the report loads.)
   const [awaitingCheckout, setAwaitingCheckout] = useState(
     () => typeof window !== "undefined" && new URLSearchParams(window.location.search).get("billing") === "success"
@@ -598,7 +599,7 @@ export function PlanUsageSection() {
     const stop = setTimeout(() => setAwaitingCheckout(false), 30000);
     return () => clearTimeout(stop);
   }, [awaitingCheckout]);
-  const { data: report, error } = useSWR(usageKey(), getMyUsage, {
+  const { data: report, error } = useSWR(usageKey(), awaitingCheckout ? syncBilling : getMyUsage, {
     refreshInterval: (latest) => (awaitingCheckout && !latest?.billing_active ? 2000 : 0),
   });
   const finishingCheckout = awaitingCheckout && report && !report.billing_active;
