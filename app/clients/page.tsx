@@ -1009,10 +1009,10 @@ function WorkflowStatusCell({
   );
 }
 
-// Hover reveals an unassign "x" in place of the status label, so removing
-// a workflow from a client is possible right from the table row without
-// opening the client's own page - kept compact (swap, not grow) so
-// hovering one row doesn't reflow its neighbors.
+// Hover reveals an unassign "x" next to the status label, so removing a
+// workflow from a client is possible right from the table row without
+// opening the client's own page. The "x" always holds its space, so hovering
+// one row doesn't reflow its neighbors, and the status stays readable.
 function WorkflowStatusBadge({
   clientId,
   workflowStatus,
@@ -1024,14 +1024,18 @@ function WorkflowStatusBadge({
 }) {
   const [removing, setRemoving] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const onRemove = async () => {
     setRemoving(true);
+    setError(null);
     try {
       await unassignWorkflowFromClient(workflowStatus.workflow_id, clientId);
       setConfirming(false);
       onRemoved();
-    } catch {
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e));
+    } finally {
       setRemoving(false);
     }
   };
@@ -1044,7 +1048,7 @@ function WorkflowStatusBadge({
       <span className="max-w-40 truncate text-foreground/80" title={workflowStatus.workflow_name}>
         {workflowStatus.workflow_name}
       </span>
-      <span className="shrink-0 text-xs text-muted-foreground group-hover/wf:hidden">
+      <span className="shrink-0 text-xs text-muted-foreground">
         {workflowStatusLabel(workflowStatus.status)}
       </span>
       <button
@@ -1055,7 +1059,7 @@ function WorkflowStatusBadge({
           setConfirming(true);
         }}
         title={`Remove ${workflowStatus.workflow_name}`}
-        className="hidden shrink-0 rounded-full p-0.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive group-hover/wf:inline-flex"
+        className="inline-flex shrink-0 rounded-full p-0.5 text-muted-foreground opacity-0 transition-colors group-hover/wf:opacity-100 hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100"
       >
         <XIcon className="size-3" />
       </button>
@@ -1065,6 +1069,7 @@ function WorkflowStatusBadge({
         kind="workflow"
         itemName={workflowStatus.workflow_name}
         removing={removing}
+        error={error}
         onConfirm={onRemove}
       />
     </span>
@@ -1105,14 +1110,18 @@ function PackageStatusBadge({
 }) {
   const [removing, setRemoving] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const onRemove = async () => {
     setRemoving(true);
+    setError(null);
     try {
       await unassignPackageFromClient(pkg.package_id, clientId);
       setConfirming(false);
       onRemoved();
-    } catch {
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e));
+    } finally {
       setRemoving(false);
     }
   };
@@ -1135,7 +1144,7 @@ function PackageStatusBadge({
           setConfirming(true);
         }}
         title={`Remove ${pkg.package_name}`}
-        className="hidden shrink-0 rounded-full p-0.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive group-hover/pkg:inline-flex"
+        className="inline-flex shrink-0 rounded-full p-0.5 text-muted-foreground opacity-0 transition-colors group-hover/pkg:opacity-100 hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100"
       >
         <XIcon className="size-3" />
       </button>
@@ -1145,6 +1154,7 @@ function PackageStatusBadge({
         kind="package"
         itemName={pkg.package_name}
         removing={removing}
+        error={error}
         onConfirm={onRemove}
       />
     </span>
@@ -1160,6 +1170,7 @@ function RemoveAssignmentDialog({
   kind,
   itemName,
   removing,
+  error,
   onConfirm,
 }: {
   open: boolean;
@@ -1167,6 +1178,7 @@ function RemoveAssignmentDialog({
   kind: "package" | "workflow";
   itemName: string;
   removing: boolean;
+  error: string | null;
   onConfirm: () => void;
 }) {
   return (
@@ -1176,6 +1188,7 @@ function RemoveAssignmentDialog({
           <DialogTitle className="pr-8">Delete “{itemName}”?</DialogTitle>
           <DialogDescription>This removes the {kind} from this client.</DialogDescription>
         </DialogHeader>
+        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         <DialogFooter>
           <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} disabled={removing}>
             Cancel

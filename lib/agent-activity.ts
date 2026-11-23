@@ -177,8 +177,10 @@ export function summarizeToolStep(step: TraceStep): string {
   }
 
   if (step.tool === "read_document") {
-    const documentId = step.result.match(/"document_id"\s*:\s*(\d+)/)?.[1];
-    if (documentId) return `Read a section of document ${documentId}`;
+    if (/"document_id"\s*:/.test(step.result)) {
+      const filename = step.result.match(/"filename"\s*:\s*"((?:\\.|[^"\\])*)"/)?.[1];
+      return filename ? `Read a section of "${filename}"` : "Read a section of a document";
+    }
     const match = step.result.match(/^Loaded document \d+ \((.+)\) - attached below\.$/);
     const description = match?.[1] ?? step.result;
     return `Read "${description}"`;
@@ -200,6 +202,8 @@ export function summarizeToolStep(step: TraceStep): string {
     return step.result;
   }
 
+  // Structured results are engine data, not something staff need to read.
+  if (/^\s*[[{]/.test(step.result)) return humanizeToolName(step.tool);
   const trimmed = step.result.length > 140 ? `${step.result.slice(0, 140)}…` : step.result;
   return `${humanizeToolName(step.tool)} — ${trimmed}`;
 }
@@ -241,7 +245,9 @@ export function splitAttempts(trajectory: TraceStep[], startedAt?: string | null
 
 // Workflow run timeline ------------------------------------------------------
 
-export type TimelineState = "done" | "running" | "failed" | "stopped";
+// "repaired": a check failed and the agent fixed it or carried on, which is
+// routine self-correction rather than a problem for staff.
+export type TimelineState = "done" | "running" | "failed" | "stopped" | "repaired";
 
 // One row of a workflow run's timeline. "gap" rows account for time the
 // trace has no event for (loading sources, saving files between steps), so
@@ -337,14 +343,14 @@ function finishExecution(row: Row) {
     row.title = row.summary.summary;
     row.details = [...row.summary.details];
   } else if (row.state === "done") {
-    row.title = `Ran ${plural(operations.length, "Python operation")} on the documents`;
+    row.title = `Processed the documents in ${plural(operations.length, "step")}`;
   }
   if (!timed.length) {
     row.children = undefined;
-    if (row.state !== "running") row.details.push(`Includes reasoning and ${plural(operations.length, "Python operation")} in the sandbox.`);
+    if (row.state !== "running") row.details.push(`Includes reading the sources and ${plural(operations.length, "data-processing step")}.`);
   } else if (row.state !== "running") {
     const python = timed.reduce((total, op) => total + ((op.end ?? op.start ?? 0) - (op.start ?? 0)), 0);
-    row.details.push(`Python ran for ${formatDuration(python)} across ${plural(operations.length, "operation")}; the rest was the model reading sources and deciding what to do.`);
+    row.details.push(`Data processing took ${formatDuration(python)} across ${plural(operations.length, "step")}; the rest was spent reading sources and deciding what to do.`);
   }
 }
 
@@ -353,8 +359,10 @@ function finishExecution(row: Row) {
  * Each round's model call is kept, since it is where most time goes, with
  * that round's Python operations nested under it.
  */
-export function buildRunTimeline(trajectory: TraceStep[], { startedAt, completedAt, running }: {
+export function buildRunTimeline(trajectory: TraceStep[], { startedAt, completedAt, running, completed = false }: {
   startedAt?: string | null; completedAt?: string | null; running: boolean;
+  // The run finished with its checks passed, so every failure along the way was fixed.
+  completed?: boolean;
 }): TimelineEntry[] {
   const rows: Row[] = [];
   let execution: Row | undefined;
@@ -367,7 +375,7 @@ export function buildRunTimeline(trajectory: TraceStep[], { startedAt, completed
       } else {
         const op = stepEntry(step, index, running);
         op.key = `${execution.key}-op-${index}`;
-        op.title = step.activity?.summary ?? (op.state === "running" ? "Running Python on the working files" : "Ran Python on the working files");
+        op.title = step.activity?.summary ?? (op.state === "running" ? "Processing the working files" : "Processed the working files");
         op.details = [];
         (execution.children ??= []).push(op);
         if (execution.end !== undefined) execution.end = latest(execution.end, op.end);
@@ -385,6 +393,8 @@ export function buildRunTimeline(trajectory: TraceStep[], { startedAt, completed
     rows.push(row);
   });
   rows.forEach(finishExecution);
+  markRepaired(rows, completed);
+  rows.forEach(row => row.children && markRepaired(row.children, completed || row.state === "done"));
 
   const entries: TimelineEntry[] = [];
   const start = time(startedAt);
@@ -406,6 +416,19 @@ export function buildRunTimeline(trajectory: TraceStep[], { startedAt, completed
     entries.push(gap("gap-final", "Saved outputs and finished the run", cursor, end));
   }
   return entries;
+}
+
+// A failed check followed by more work is self-correction, not a failure:
+// only a failure the run stopped on stays red.
+function markRepaired(entries: TimelineEntry[], completed: boolean) {
+  entries.forEach((entry, index) => {
+    if (entry.state !== "failed") return;
+    const later = entries.slice(index + 1).some(next => next.state === "done" || next.state === "running" || next.state === "repaired");
+    if (!completed && !later) return;
+    if (!entry.details.length) entry.details = [entry.title];
+    entry.title = completed ? "Caught an issue and fixed it" : "Caught an issue and kept working";
+    entry.state = "repaired";
+  });
 }
 
 export function formatDuration(ms: number): string {
