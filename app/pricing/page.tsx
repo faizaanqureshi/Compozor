@@ -23,19 +23,19 @@ export const metadata = publicPageMetadata("/pricing");
 
 const NOTES = [
   [
-    "Usage is included.",
-    "Every plan comes with generous usage for reminders, replies, workflows and Ask. Most firms never go past it.",
+    "A month of work is included.",
+    "Each plan includes a monthly amount of work: reading documents, chasing clients, running workflows and answering in Ask. Bigger plans include more. You can see how much is used in Settings, and we email you at 80%.",
   ],
   [
-    "No surprise bills.",
-    "If your firm goes beyond its included usage, the extra is billed at the end of the month. You get a heads-up first, and you can set a monthly cap.",
+    "You decide what happens after that.",
+    "When the included work runs out, workflows pause until next month. Or turn on extra usage: it’s added to your next bill at the same rate as your plan, up to a monthly limit you set.",
   ],
 ];
 
 const FAQS = [
   [
     "What happens when we add a sixth person?",
-    "You move to the next plan from your next bill. Everyone keeps their mailbox, clients and history.",
+    "Upgrade in Settings and it takes effect right away: you pay the new plan, less credit for the unused part of your current one. Everyone keeps their mailbox, clients and history.",
   ],
   [
     "What counts as usage?",
@@ -43,7 +43,15 @@ const FAQS = [
   ],
   [
     "Can we cancel anytime?",
-    "Yes. Plans are month to month, and you can download any client’s documents whenever you like.",
+    "Yes. Plans are month to month; your plan runs to the end of the month you’ve paid for. You can download any client’s documents whenever you like.",
+  ],
+  [
+    "What happens when the free trial ends?",
+    "Choose a plan anytime during the 14 days. If the trial ends without one, Compozor stops working for your firm until you do. Your clients and documents are kept.",
+  ],
+  [
+    "We have hundreds of clients and a small team.",
+    "Talk to us about Enterprise. For practices with many clients and few staff, we price by the number of clients rather than people.",
   ],
 ];
 
@@ -67,13 +75,13 @@ export default async function PricingPage() {
                   Pricing
                 </p>
                 <h1 className="mt-5 text-5xl leading-[1.05] font-light tracking-tight text-balance sm:text-6xl xl:text-7xl [font-family:var(--font-display)]">
-                  Every plan is all of Compozor.
+                  Your AI employee, sized to your team.
                 </h1>
                 <p className="mt-6 max-w-2xl text-lg leading-relaxed text-pretty text-foreground/90">
-                  Pick the plan that fits your team. Each one includes every
-                  feature, from client chasing and document checks to workflows
-                  and Ask. Bigger plans add room for your people and more
-                  hands-on help.
+                  Every plan is the whole of Compozor: it requests documents,
+                  checks them, chases what’s missing and prepares the work,
+                  every period. Plans differ by the size of your team, the work
+                  included each month, and how much hands-on help you get.
                 </p>
                 <p className="mt-4 text-sm text-muted-foreground">{TRIAL_LINE}</p>
                 <CurrencySwitch className="mt-8" />

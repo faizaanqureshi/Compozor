@@ -45,7 +45,7 @@ test("website structured data refers to the declared organization", () => {
 
 test("homepage metadata leads with the professional-firms positioning", () => {
   const metadata = publicPageMetadata("/");
-  assert.equal(metadata.title.absolute, "Compozor | AI agents for professional firms");
+  assert.equal(metadata.title.absolute, "Compozor | An AI employee for professional firms");
   assert.match(metadata.description, /professional firms/);
   assert.ok(metadata.description.length <= 160);
   assert.equal(metadata.openGraph.title, metadata.title.absolute);

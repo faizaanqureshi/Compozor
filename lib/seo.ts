@@ -5,17 +5,17 @@ import type { Metadata, MetadataRoute } from "next";
 export const SITE_URL = "https://www.compozor.com";
 export const SITE_NAME = "Compozor";
 export const SITE_DESCRIPTION =
-  "AI agents for professional firms. Follow up with clients from your own Gmail or Outlook, check their documents, and prepare finished work in your firm’s format.";
+  "An AI employee for professional firms: it requests client documents, checks them, chases what’s missing and prepares the work, every period.";
 
 export const PUBLIC_SEARCH_PAGES = {
   "/": {
-    title: "Compozor | AI agents for professional firms",
+    title: "Compozor | An AI employee for professional firms",
     description: SITE_DESCRIPTION,
   },
   "/pricing": {
     title: "Pricing | Compozor",
     description:
-      "Compozor plans for professional firms, from Solo to Enterprise. Every plan includes every feature, workflows, Ask and generous usage, billed monthly.",
+      "Compozor plans for professional firms, from Solo to Enterprise. Every plan is the whole AI employee, with a month of work included. 14-day free trial, no card needed.",
   },
   "/waitlist": {
     title: "Join the Waitlist | Compozor",
