@@ -24,6 +24,8 @@ export const workflowsKey = () => ["workflows"] as const;
 export const workflowRulesKey = (workflowId: number) => ["workflow-rules", workflowId] as const;
 
 export const packagesKey = () => ["packages"] as const;
+export const servicesKey = () => ["services"] as const;
+export const clientServicesKey = (clientId: number) => ["client-services", clientId] as const;
 export const knowledgeKey = (includeArchived = false) => ["knowledge", includeArchived] as const;
 export const questionnairesKey = (includeArchived = false) => ["questionnaires", includeArchived] as const;
 

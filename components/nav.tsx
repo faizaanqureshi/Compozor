@@ -16,6 +16,7 @@ import {
   MessageCircleQuestion,
   Package,
   ClipboardList,
+  Repeat,
   Settings,
   Users,
   Workflow,
@@ -42,6 +43,7 @@ import { FirmSwitcher } from "@/components/firm-switcher";
 const links = [
   { href: "/clients", label: "Clients", icon: Users, tourId: "clients" },
   { href: "/ask", label: "Ask", icon: MessageCircleQuestion, tourId: "ask" },
+  { href: "/services", label: "Services", icon: Repeat, tourId: "services" },
   { href: "/workflows", label: "Workflows", icon: Workflow, tourId: "workflows" },
   { href: "/packages", label: "Packages", icon: Package, tourId: "packages" },
   { href: "/questionnaires", label: "Questionnaires", icon: ClipboardList, tourId: "questionnaires" },

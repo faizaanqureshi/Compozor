@@ -13,6 +13,7 @@ import {
   Download,
   Loader2,
   Package as PackageIcon,
+  Repeat as ServiceIcon,
   Plus,
   Search,
   Trash2,
@@ -65,6 +66,7 @@ import { PackageFormDialog } from "@/components/package-form-dialog";
 import { AssignWorkflowDialog } from "@/components/assign-workflow-dialog";
 import { AssignQuestionnaireDialog } from "@/components/assign-questionnaire-dialog";
 import { AssignPackageDialog } from "@/components/assign-package-dialog";
+import { AssignServiceDialog } from "@/components/assign-service-dialog";
 import { PurgeConfirmDialog } from "@/components/purge-confirm-dialog";
 import { Panel, panelTableHead } from "@/components/panel";
 import { ProgressRule, StatStrip, type StatStripItem } from "@/components/stat-strip";
@@ -703,6 +705,19 @@ export default function ClientsPage() {
                   <Button variant="secondary" size="sm">
                     <PackageIcon />
                     Assign package
+                  </Button>
+                }
+              />
+              <AssignServiceDialog
+                clientIds={Array.from(selectedIds)}
+                onAssigned={() => {
+                  setSelectedIds(new Set());
+                  mutateClients();
+                }}
+                trigger={
+                  <Button variant="secondary" size="sm">
+                    <ServiceIcon />
+                    Assign service
                   </Button>
                 }
               />

@@ -1569,6 +1569,80 @@ export interface PackageAssignmentWithClient {
   created_at: string;
 }
 
+// Services: recurring work (a package of documents + workflows + how often +
+// when it's due), set up once and assigned to clients. Each period of an
+// assigned service runs as a cycle.
+export type ServiceCadence = "one_off" | "yearly" | "quarterly" | "monthly";
+export type ServiceDueRule = "fixed_date" | "after_period_end";
+
+export interface ServicePeriod {
+  key: string;
+  label: string;
+  start: string;
+  end: string;
+  opens_on: string;
+  due_on: string;
+}
+
+export interface ServiceInput {
+  name: string;
+  description?: string | null;
+  package_id: number | null;
+  workflow_ids: number[];
+  cadence: ServiceCadence;
+  due_rule: ServiceDueRule;
+  due_month?: number | null;
+  due_day?: number | null;
+  due_months_after?: number;
+  due_days_after?: number;
+  opens_days_after_period_end: number;
+  year_end_month: number;
+  year_end_day: number;
+  run_automatically: boolean;
+}
+
+export interface Service extends ServiceInput {
+  id: number;
+  description: string | null;
+  due_month: number | null;
+  due_day: number | null;
+  due_months_after: number;
+  due_days_after: number;
+  package_name: string | null;
+  workflow_names: string[];
+  archived_at: string | null;
+  created_at: string;
+  client_count: number;
+  // The period a client assigned today would start with.
+  next_period: ServicePeriod | null;
+}
+
+export interface ClientService {
+  id: number;
+  service_id: number;
+  service_name: string;
+  client_id: number;
+  client_name: string;
+  year_end_month: number | null;
+  year_end_day: number | null;
+  paused_at: string | null;
+  created_at: string;
+}
+
+export const listServices = () => request<Service[]>("/services");
+export const createService = (input: ServiceInput) => request<Service>("/services", json("POST", input));
+export const updateService = (serviceId: number, input: ServiceInput) =>
+  request<Service>(`/services/${serviceId}`, json("PUT", input));
+export const archiveService = (serviceId: number) => request<void>(`/services/${serviceId}`, { method: "DELETE" });
+export const listServiceClients = (serviceId: number) => request<ClientService[]>(`/services/${serviceId}/clients`);
+export const listClientServices = (clientId: number) => request<ClientService[]>(`/services/for-client/${clientId}`);
+export const assignService = (
+  serviceId: number,
+  input: { client_ids: number[]; year_end_month?: number | null; year_end_day?: number | null; open_now?: boolean }
+) => request<ClientService[]>(`/services/${serviceId}/clients`, json("POST", input));
+export const removeService = (serviceId: number, clientId: number) =>
+  request<void>(`/services/${serviceId}/clients/${clientId}`, { method: "DELETE" });
+
 export const listPackages = () => request<PackageWithAssignmentCount[]>("/packages");
 
 export const getPackage = (packageId: number) => request<Package>(`/packages/${packageId}`);

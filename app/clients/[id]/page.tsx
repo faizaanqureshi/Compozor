@@ -125,6 +125,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ClientAssignee } from "@/components/client-assignee";
 import { Panel } from "@/components/panel";
+import { ClientServicesCard } from "@/components/client-services-card";
 import { EmailBody } from "@/components/email-body";
 import { EmailHtmlFrame } from "@/components/email-html-frame";
 import { StateLabel, messageState, threadMessagesState } from "@/components/email-state-label";
@@ -349,6 +350,8 @@ export default function ClientDetailPage({
 
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_22rem] 2xl:grid-cols-[minmax(0,1fr)_24rem]">
         <div className="flex min-w-0 flex-col gap-6">
+          <ClientServicesCard clientId={clientId} onChange={refresh} />
+
           <ChecklistCard
             clientId={clientId}
             checklist={checklist}
