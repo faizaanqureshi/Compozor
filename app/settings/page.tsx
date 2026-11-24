@@ -677,8 +677,8 @@ function AutomationSection({
           </SettingRow>
 
           <SettingRow
-            label="Tell clients when work is approved"
-            description="When you approve a workflow result, email the client that it's done. Follows your sending level above: a draft for you to send unless drafts send themselves."
+            label="Send approved work to the client"
+            description="When you approve a workflow result, it appears in the client's secure portal and they're emailed a link to review it. They can mark it as looking good or ask you a question. The email follows your sending level above."
           >
             <label className="flex w-fit cursor-pointer items-center gap-3">
               <Switch

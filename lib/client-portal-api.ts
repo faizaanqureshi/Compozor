@@ -24,6 +24,8 @@ export interface PortalReadiness {
 
 export interface PortalBootstrap extends PortalReadiness {
   verification_required_for_questionnaires: boolean;
+  // Approved work waits in the portal; opening it needs verification.
+  has_delivered_work?: boolean;
 }
 
 export interface PortalQuestionnaireSummary {
@@ -42,6 +44,16 @@ export interface PortalQuestionnaireSummary {
   submission_count: number;
 }
 
+// Approved work from the firm, "Ready for you".
+export interface PortalDelivery {
+  run_id: number;
+  title: string;
+  delivered_at: string;
+  files: { id: number; filename: string }[];
+  reviewed_at: string | null;
+  questioned_at: string | null;
+}
+
 export interface PortalState {
   client_name: string;
   organization_name: string;
@@ -49,6 +61,7 @@ export interface PortalState {
   questionnaires: PortalQuestionnaireSummary[];
   checklist: PublicChecklist;
   session_expires_at: string;
+  delivered?: PortalDelivery[];
 }
 
 export interface PortalQuestionnaireDetail {
@@ -190,6 +203,16 @@ export const submitPortalQuestionnaire = (
     body: { answers, expected_revision: expectedRevision },
     headers: { "Idempotency-Key": idempotencyKey },
   });
+
+// A one-minute download link, issued only inside a verified session.
+export const getDeliveredFileLink = (token: string, runId: number, fileId: number) =>
+  portalRequest<{ url: string }>(token, `/delivered/${runId}/files/${fileId}/link`, { method: "POST" });
+
+export const markDeliveredReviewed = (token: string, runId: number) =>
+  portalRequest<PortalState>(token, `/delivered/${runId}/review`, { method: "POST" });
+
+export const askAboutDelivered = (token: string, runId: number, text: string) =>
+  portalRequest<PortalState>(token, `/delivered/${runId}/question`, { method: "POST", body: { text } });
 
 // The firm has to act; retrying cannot help.
 export const VERIFICATION_UNAVAILABLE_CODES = new Set(["mailbox_unavailable", "no_email_on_file"]);

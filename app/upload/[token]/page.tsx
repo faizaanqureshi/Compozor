@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PortalQuestionnaires } from "@/components/portal-questionnaires";
+import { PortalDelivered } from "@/components/portal-delivered";
 import { ProgressRule } from "@/components/stat-strip";
 import type { PortalReadiness, PortalState } from "@/lib/client-portal-api";
 import { portalView } from "@/lib/portal-view";
@@ -96,6 +97,10 @@ export default function PublicUploadPage({
   const [readiness, setReadiness] = useState<PortalReadiness | null>(null);
   // A questionnaire is open and takes the full width.
   const [questionnaireOpen, setQuestionnaireOpen] = useState(false);
+  // Approved work from the firm waits here; verified in its own section.
+  const [hasDelivered, setHasDelivered] = useState(false);
+  // Bumped when that section verifies, so the questionnaires reload with the session.
+  const [portalSession, setPortalSession] = useState(0);
   const [checklist, setChecklist] = useState<PublicChecklist | null>(null);
   const [queue, setQueue] = useState<QueueEntry[]>([]);
   const [finalized, setFinalized] = useState(false);
@@ -110,6 +115,7 @@ export default function PublicUploadPage({
       .then((info) => {
         setLinkInfo(info);
         setReadiness(info.portal ?? null);
+        setHasDelivered(Boolean(info.portal?.has_delivered_work));
       })
       .catch((e) =>
         setLinkInfo({
@@ -398,9 +404,22 @@ export default function PublicUploadPage({
         )}
       </div>
 
+      {loaded && hasDelivered && !questionnaireOpen && (
+        <div className="min-w-0">
+          <PortalDelivered
+            token={token}
+            organizationName={firm ?? undefined}
+            onState={onPortalState}
+            onVerified={() => setPortalSession((n) => n + 1)}
+            onLinkInvalid={onLinkInvalid}
+          />
+        </div>
+      )}
+
       {loaded && view.showQuestionnaires && (
         <div className={cn("min-w-0", !questionnairesFirst && "order-last")}>
           <PortalQuestionnaires
+            key={portalSession}
             token={token}
             questionnaireState={questionnaireState}
             organizationName={firm ?? undefined}
