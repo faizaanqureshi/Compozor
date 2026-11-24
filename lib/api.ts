@@ -596,6 +596,27 @@ export const getMyOrganization = () => request<Organization>("/organizations/me"
 
 export const getMyUsage = () => request<UsageReport>("/organizations/me/usage");
 
+// Today: what Compozor did yesterday (firm time), what needs a person, what's due this week.
+export interface DailySummary {
+  day: string;
+  yesterday: string;
+  done: { key: string; label: string; count: number }[];
+  needs_you: {
+    runs: { total: number; items: { run_id: number; client_id: number; client_name: string; workflow_name: string; status: string }[] };
+    drafts: { total: number; items: { email_id: number; client_id: number; client_name: string; subject: string | null }[] };
+    escalations: { total: number; items: { email_id: number; client_id: number; client_name: string; subject: string | null }[] };
+    unmatched_emails: number;
+  };
+  needs_you_total: number;
+  due_this_week: {
+    documents: { total: number; items: { client_id: number; client_name: string; outstanding: number; due: string; overdue: boolean }[] };
+    promises: { total: number; items: { client_id: number; client_name: string; expected_by: string; description: string }[] };
+  };
+  empty: boolean;
+}
+
+export const getDailySummary = () => request<DailySummary>("/organizations/me/daily-summary");
+
 export const updateMyOrganization = (input: {
   name?: string;
   automation_level?: AutomationLevel;

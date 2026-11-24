@@ -17,6 +17,7 @@ import {
   Package,
   ClipboardList,
   Settings,
+  Sun,
   Users,
   Workflow,
   X,
@@ -40,6 +41,7 @@ import { useAskPanel } from "@/components/ask/ask-panel-context";
 import { FirmSwitcher } from "@/components/firm-switcher";
 
 const links = [
+  { href: "/today", label: "Today", icon: Sun, tourId: "today" },
   { href: "/clients", label: "Clients", icon: Users, tourId: "clients" },
   { href: "/ask", label: "Ask", icon: MessageCircleQuestion, tourId: "ask" },
   { href: "/workflows", label: "Workflows", icon: Workflow, tourId: "workflows" },

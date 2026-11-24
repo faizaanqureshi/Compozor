@@ -11,6 +11,7 @@ export const emailLogKey = (status?: EmailStatus, resolved?: boolean) =>
 
 export const organizationKey = () => ["organization"] as const;
 export const usageKey = () => ["organization-usage"] as const;
+export const dailySummaryKey = () => ["daily-summary"] as const;
 
 export const teamKey = () => ["team"] as const;
 
