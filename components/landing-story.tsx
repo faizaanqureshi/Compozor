@@ -27,7 +27,7 @@ const steps = [
     title: "The loop",
     heading: "The back-and-forth, handled.",
     description:
-      "Your client sends the wrong document. Compozor catches the mismatch, explains what’s needed, and checks the replacement. Once the requirements are met, your workflow prepares the work.",
+      "Your client sends the wrong document. Compozor catches the mismatch, explains what’s needed, and checks the replacement. Once the requirements are met, your workflow prepares the work. After your team approves it, the work goes back to the client and next period is scheduled.",
     note: "You define the requirements and choose what runs automatically. Your team handles the decisions that need professional judgment.",
   },
   {
@@ -35,7 +35,7 @@ const steps = [
     title: "Collect",
     heading: "The follow-up, followed through.",
     description:
-      "Compozor keeps the conversation moving: requesting missing documents, following up on your schedule, and answering routine client questions in your firm’s voice.",
+      "Each period starts on its own: Compozor sends the request, follows up on your schedule, and answers routine client questions in your firm’s voice.",
     note: "Clients reply to your email or use a secure upload link. No new account needed.",
   },
   {
@@ -52,7 +52,7 @@ const steps = [
     heading: "Complete files become finished work.",
     description:
       "Your instructions turn client documents into reports, spreadsheets, letters, and presentations. Work samples guide the format. Output checks and review notes stay with the result.",
-    note: "Run a workflow yourself, or let it start when collection is complete.",
+    note: "It starts when collection is complete, or whenever you run it. Approved work is delivered to the client’s portal.",
   },
 ];
 
@@ -306,7 +306,7 @@ export function LandingStory() {
         <div data-reveal="focus" className="flex flex-col justify-between gap-6 md:flex-row md:items-end">
           <div>
             <p className="text-xs uppercase tracking-widest text-marketing-forest dark:text-marketing-brass">
-              AI that follows the work through
+              How your AI employee works
             </p>
             <h2 className="mt-5 max-w-2xl text-4xl leading-tight font-light tracking-tight sm:text-5xl [font-family:var(--font-display)]">
               From the first request
@@ -315,8 +315,8 @@ export function LandingStory() {
             </h2>
           </div>
           <p className="max-w-xs text-sm leading-relaxed text-muted-foreground max-sm:hidden">
-            One connected process, from client conversation to prepared work.
-            Explore what Compozor handles along the way.
+            Set up a service once, like a personal tax return due April 30.
+            Each period, Compozor runs it from request to prepared work.
           </p>
         </div>
         <Tabs

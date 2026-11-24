@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { LandingAskPreview } from "@/components/landing-ask-preview";
+import { LandingDailySummary } from "@/components/landing-daily-summary";
 import { LandingPractices } from "@/components/landing-practices";
 import { LandingWorkSample } from "@/components/landing-work-sample";
 import { MarketingActions } from "@/components/marketing-actions";
@@ -137,7 +138,12 @@ export function LandingSections() {
         eyebrow="Trust & control"
         title={<>Automation,<br />on your terms.</>}
         copy="Keep the decisions that need your judgment. Let Compozor take care of the follow-through."
+        aside={<LandingDailySummary />}
         items={[
+          [
+            "A summary every morning",
+            "What Compozor did yesterday, what needs your team, and what’s due this week, in one short email.",
+          ],
           [
             "You choose what runs",
             "Drafted emails wait for your approval until you turn on automatic sending. Workflows run when you start them, or when a client’s checklist is complete.",
@@ -211,7 +217,7 @@ export function LandingClosing() {
           </p>
           <MarketingActions inverse className="mt-8" />
           <p className="mt-4 text-xs text-sidebar-foreground/75">
-            30-minute walkthrough · Early access by invitation
+            30-minute walkthrough · or start a 14-day free trial
           </p>
           <p className="mt-8 border-t border-sidebar-foreground/15 pt-6 text-sm text-sidebar-foreground/90">
             Every plan is all of Compozor.{" "}

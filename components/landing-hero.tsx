@@ -8,21 +8,21 @@ export function LandingHero() {
         <div>
           <p className="mb-6 flex items-center gap-2 text-[0.6875rem] sm:mb-6 sm:gap-3 sm:text-xs uppercase tracking-widest text-marketing-forest dark:text-marketing-brass">
             <span className="h-px w-5 shrink-0 sm:w-7 bg-accent" aria-hidden />
-            AI agents for professional firms
+            An AI employee for your firm
           </p>
           <h1 className="text-[3.25rem] leading-[1.02] font-light tracking-tight text-balance sm:text-7xl sm:leading-[1.06] xl:text-[5.25rem] [font-family:var(--font-display)]">
-            Less chasing.
+            Set it up once.
             <br />
             <span className="text-marketing-forest dark:text-marketing-brass">
-              More work delivered.
+              It follows through.
             </span>
           </h1>
         </div>
         <div className="mt-1 max-w-md sm:mt-0 lg:pb-1">
           <p className="text-lg leading-relaxed text-pretty text-foreground/90">
-            Compozor’s AI agents handle the client back-and-forth, check
-            documents against your requirements, and run your workflows to
-            prepare work in your firm’s format.
+            Compozor requests documents from your clients, checks them, chases
+            what’s missing and prepares the first draft of the work, then does
+            it all again next period. Your team reviews and approves.
           </p>
           <p className="mt-4 text-base leading-relaxed text-pretty text-foreground/90">
             Replies go out from your own Gmail or Outlook. Your clients don’t
@@ -30,13 +30,13 @@ export function LandingHero() {
           </p>
           <MarketingActions primaryOnly className="mt-7" />
           <p className="mt-4 hidden text-xs text-muted-foreground sm:block">
-            Review replies or enable automatic follow-through. Early access.
+            14-day free trial, no card needed. You choose what runs on its own.
           </p>
           <a
             href="#how-it-works"
             className="mt-6 hidden min-h-11 sm:inline-flex rounded-sm py-1 text-sm underline decoration-accent underline-offset-4 transition-colors hover:text-marketing-forest focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring dark:hover:text-marketing-brass"
           >
-            See the agent follow through
+            See how it works
           </a>
         </div>
       </div>

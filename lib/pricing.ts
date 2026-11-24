@@ -31,7 +31,7 @@ export const PLANS: Plan[] = [
       "Every Compozor feature",
       "Workflows and full automation",
       "Ask, with web search and Knowledge",
-      "Generous usage included",
+      "A month of work included",
     ],
     cta: { label: "Start free trial", href: START_HREF },
   },
@@ -77,11 +77,11 @@ export const PLANS: Plan[] = [
   {
     name: "Enterprise",
     price: null,
-    size: "21 users or more",
+    size: "21+ users, or many clients",
     teamSize: "21+",
     features: [
       "Everything in Firm",
-      "Limits set to your practice",
+      "Priced by your number of clients",
       "Pay by invoice",
       "A dedicated contact",
     ],
@@ -95,14 +95,14 @@ export const COMPARISON_ROWS: { label: string; from: number }[] = [
   { label: "Workflows and full automation", from: 0 },
   { label: "Ask, with web search and Knowledge", from: 0 },
   { label: "Client portal, reminders, questionnaires", from: 0 },
-  { label: "Generous usage included", from: 0 },
+  { label: "A month of work included", from: 0 },
   { label: "A mailbox per person, client assignment, roles", from: 1 },
   { label: "Done-for-you setup and client import", from: 2 },
   { label: "Priority support", from: 2 },
   { label: "Your branding on portal and documents", from: 3 },
   { label: "Audit history export", from: 3 },
   { label: "Early access to new features", from: 3 },
-  { label: "Custom limits, invoicing, dedicated contact", from: 4 },
+  { label: "Client-based pricing, invoicing, dedicated contact", from: 4 },
 ];
 
 export const PRICING_FOOTNOTES: Record<PricingCurrency, string> = {
