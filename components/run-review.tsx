@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Check, Loader2, X } from "lucide-react";
 import {
   addWorkflowRunNote, ApiError, approveWorkflowRun,
-  type AppliedRule, type LearningResult, type WorkflowRule, type WorkflowRun,
+  type AppliedRule, type LearningResult, type RunDelivery, type WorkflowRule, type WorkflowRun,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { RuleSuggestion } from "@/components/rule-suggestion";
@@ -86,6 +86,23 @@ export function RuleSuggestions({ proposals, clientName, oneOffs, source, onSett
   );
 }
 
+const DELIVERY_WORDS: Record<string, string> = {
+  sent: "sent to client",
+  viewed: "client opened it",
+  approved: "client says it looks good",
+  question: "client asked a question",
+};
+
+/** Where approved work stands with the client, after "Approved". */
+function DeliveryStatus({ delivery }: { delivery?: RunDelivery }) {
+  if (!delivery || delivery.status === "not_sent") return null;
+  return (
+    <span className="text-muted-foreground">
+      · <span className={delivery.status === "question" ? "font-medium text-foreground" : undefined}>{DELIVERY_WORDS[delivery.status]}</span>
+    </span>
+  );
+}
+
 /** Approve, or teach the workflow with a note. Corrected files are uploaded from each output row. */
 export function RunReview({ run, clientName, result, onResult, onChange }: {
   run: WorkflowRun; clientName: string;
@@ -140,13 +157,14 @@ export function RunReview({ run, clientName, result, onResult, onChange }: {
     <div className="flex min-w-0 flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2">
         {completed && (approved ? (
-          <span className="inline-flex items-center gap-1.5 text-[0.8125rem] text-foreground/85">
+          <span className="inline-flex flex-wrap items-center gap-1.5 text-[0.8125rem] text-foreground/85">
             <Check className="size-3.5 text-success" aria-hidden />Approved
+            <DeliveryStatus delivery={run.delivery} />
             <Button variant="ghost" size="xs" className="text-muted-foreground" onClick={toggleApproval} disabled={approving}>Undo</Button>
           </span>
         ) : (
           <Button variant="outline" size="sm" onClick={toggleApproval} disabled={approving}
-            title="Lets the assistant tell the client this is done, with its summary">
+            title="Marks this as final. If Settings has 'Send approved work to the client' on, it goes to their portal with an email.">
             {approving ? <Loader2 className="animate-spin" /> : <Check />}Approve
           </Button>
         ))}
@@ -162,6 +180,12 @@ export function RunReview({ run, clientName, result, onResult, onChange }: {
           </Button>
         )}
       </div>
+      {approved && run.delivery?.status === "question" && run.delivery.question && (
+        <p className="max-w-2xl text-sm text-pretty text-foreground/85">
+          <span className="text-muted-foreground">The client asked: </span>&ldquo;{run.delivery.question}&rdquo;{" "}
+          <span className="text-muted-foreground">It&apos;s in their messages to reply to.</span>
+        </p>
+      )}
       {noteOpen && (
         <form onSubmit={sendNote} className="flex max-w-2xl flex-col gap-2">
           <Textarea autoFocus rows={2} maxLength={2000} value={note} onChange={e => setNote(e.target.value)}

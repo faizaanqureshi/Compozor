@@ -1406,6 +1406,15 @@ export interface LearningResult {
   changes_found: number | null;
 }
 
+export interface RunDelivery {
+  status: "not_sent" | "sent" | "viewed" | "approved" | "question";
+  delivered_at: string | null;
+  viewed_at: string | null;
+  reviewed_at: string | null;
+  questioned_at: string | null;
+  question: string | null;
+}
+
 export interface WorkflowRun {
   details_loaded?: boolean;
   execution_plan: { objective: string; steps: string[]; criteria: { id: string; requirement: string }[] } | null;
@@ -1435,6 +1444,8 @@ export interface WorkflowRun {
   created_at: string;
   // Staff approved this result: only approved results are described to the client.
   approved_at?: string | null;
+  // Approved work sent to the client's portal and what they did with it.
+  delivery?: RunDelivery;
   rules_applied?: AppliedRule[];
   rule_proposals?: WorkflowRule[];
 }
